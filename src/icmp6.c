@@ -23,18 +23,50 @@ void icmp6_init(struct l3ctx *ctx) {
 	ICMP6_FILTER_SETPASS(ND_NEIGHBOR_ADVERT, &filter);
 	setsockopt(fd, IPPROTO_ICMPV6, ICMP6_FILTER, &filter, sizeof(filter));
 
-  setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, ctx->clientif, strnlen(ctx->clientif, IFNAMSIZ-1));
-
-	struct ifreq req;
-	memset (&req, 0, sizeof (req));
-
-	strncpy (req.ifr_name, ctx->clientif, IFNAMSIZ-1);
-
-	ioctl (fd, SIOCGIFHWADDR, &req);
-
-  memcpy(ctx->icmp6mac, req.ifr_hwaddr.sa_data, 6);
-
   ctx->icmp6fd = fd;
+
+	icmp6_setup_interface(ctx);
+}
+
+void icmp6_setup_interface(struct l3ctx *ctx) {
+	ctx->icmp6ok = false;
+
+	int rc = setsockopt(ctx->icmp6fd, SOL_SOCKET, SO_BINDTODEVICE, ctx->clientif, strnlen(ctx->clientif, IFNAMSIZ-1));
+
+	printf("Setting up icmp6 interface: %i\n", rc);
+
+	if (rc < 0)
+		return;
+
+	struct ifreq req = {};
+	strncpy(req.ifr_name, ctx->clientif, IFNAMSIZ-1);
+	ioctl(ctx->icmp6fd, SIOCGIFHWADDR, &req);
+	memcpy(ctx->icmp6mac, req.ifr_hwaddr.sa_data, 6);
+
+	ctx->icmp6ok = true;
+}
+
+void icmp6_interface_changed(struct l3ctx *ctx, int type, const struct ifinfomsg *msg) {
+	char ifname[IFNAMSIZ];
+
+	if (if_indextoname(msg->ifi_index, ifname) == NULL)
+		return;
+
+	if (strcmp(ifname, ctx->clientif) != 0)
+		return;
+
+	printf("icmp6 interface change detected\n");
+
+	switch (type) {
+    case RTM_NEWLINK:
+    case RTM_SETLINK:
+			icmp6_setup_interface(ctx);
+      break;
+
+    case RTM_DELLINK:
+			ctx->icmp6ok = false;
+      break;
+  }
 }
 
 struct __attribute__((__packed__)) sol_packet {

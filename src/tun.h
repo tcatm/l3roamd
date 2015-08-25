@@ -27,6 +27,6 @@
 #include "l3roamd.h"
 #include <stdint.h>
 
-extern void tun_open(struct tun_iface *iface, const char *ifname, uint16_t mtu, const char *dev_name);
-extern void tun_handle_in(struct l3ctx *ctx, int fd);
-extern void tun_handle_out(struct l3ctx *ctx, int fd);
+void tun_open(struct tun_iface *iface, const char *ifname, uint16_t mtu, const char *dev_name);
+void tun_handle_in(struct l3ctx *ctx, int fd);
+void tun_handle_out(struct l3ctx *ctx, int fd);

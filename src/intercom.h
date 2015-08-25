@@ -1,8 +1,14 @@
 #pragma once
 
-#include "l3roamd.h"
+#include "vector.h"
 
 #include <stdint.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <arpa/inet.h>
+#include <net/if.h>
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
 
 enum {INTERCOM_SEEK, INTERCOM_CLIENT};
 
@@ -19,13 +25,24 @@ typedef struct __attribute__((__packed__)) {
 } intercom_packet_seek;
 
 typedef struct {
-  struct sockaddr_in6 *groupaddr;
+  bool ok;
+  unsigned int ifindex;
+  char *ifname;
+} intercom_if;
+
+typedef struct {
+  int fd;
+  struct sockaddr_in6 groupaddr;
   VECTOR(intercom_packet_hdr) recent_packets;
+  VECTOR(intercom_if) interfaces;
 } intercom_ctx;
 
-void intercom_recently_seen_add(intercom_ctx *ctx, intercom_packet_hdr *hdr);
-void intercom_send_packet(intercom_ctx *ctx, int fd, uint8_t *packet, ssize_t packet_len);
-void intercom_seek(struct l3ctx *ctx, const struct in6_addr *address);
+struct l3ctx l3ctx;
 
-extern void intercom_init(struct l3ctx *ctx, const char *ifname);
-extern void intercom_handle_in(struct l3ctx *ctx, int fd);
+void intercom_recently_seen_add(intercom_ctx *ctx, intercom_packet_hdr *hdr);
+void intercom_send_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len);
+void intercom_seek(intercom_ctx *ctx, const struct in6_addr *address);
+void intercom_init(intercom_ctx *ctx);
+void intercom_handle_in(intercom_ctx *ctx, struct l3ctx *l3ctx, int fd);
+void intercom_add_interface(intercom_ctx *ctx, char *ifname);
+void intercom_update_interfaces(intercom_ctx *ctx);

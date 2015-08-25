@@ -32,6 +32,25 @@ void print_route(struct kernel_route *route) {
       addr_prefix, route->plen, addr_gw, route->metric, ifname);
 }
 
+void rtnl_handle_link(struct l3ctx *ctx, const struct nlmsghdr *nh) {
+  const struct ifinfomsg *msg = NLMSG_DATA(nh);
+  switch (nh->nlmsg_type) {
+    case RTM_NEWLINK:
+      printf("new link %i\n", msg->ifi_index);
+      break;
+
+    case RTM_SETLINK:
+      printf("set link %i\n", msg->ifi_index);
+      break;
+
+    case RTM_DELLINK:
+      printf("del link %i\n", msg->ifi_index);
+      break;
+  }
+
+  interfaces_changed(ctx, nh->nlmsg_type, msg);
+}
+
 void filter_kernel_routes(struct l3ctx *ctx, const struct nlmsghdr *nh) {
   int rc;
 
@@ -83,6 +102,11 @@ void rtnl_handle_msg(struct l3ctx *ctx, const struct nlmsghdr *nh) {
     case RTM_DELNEIGH:
       puts("DEL NEIGH");
       break;
+    case RTM_NEWLINK:
+	  case RTM_DELLINK:
+	  case RTM_SETLINK:
+		  rtnl_handle_link(ctx, nh);
+      break;
     default:
       return;
   }
@@ -95,7 +119,7 @@ void rtnl_init(struct l3ctx *ctx) {
 
   struct sockaddr_nl snl = {
     .nl_family = AF_NETLINK,
-    .nl_groups = RTMGRP_IPV6_ROUTE | RTMGRP_NEIGH,
+    .nl_groups = RTMGRP_IPV6_ROUTE | RTMGRP_NEIGH | RTMGRP_LINK,
   };
 
   if (bind(ctx->rtnl_sock, (struct sockaddr *)&snl, sizeof(snl)) < 0)

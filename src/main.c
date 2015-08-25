@@ -41,6 +41,7 @@
 #include <unistd.h>
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
+#include <fcntl.h>
 
 struct ip_entry *find_entry(struct l3ctx *ctx, const struct in6_addr *k) {
   for (int i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
@@ -72,7 +73,7 @@ void establish_route(struct l3ctx *ctx, const struct in6_addr *addr) {
 
   icmp6_send_solicitation(ctx, addr);
 
-  intercom_seek(ctx, addr);
+  intercom_seek(&ctx->intercom_ctx, addr);
 }
 
 bool process_timer_entry(struct l3ctx *ctx, struct timespec now, const struct in6_addr *addr, struct ip_entry *entry) {
@@ -263,9 +264,9 @@ void loop(struct l3ctx *ctx) {
   if (s == -1)
     exit_error("epoll_ctl");
 
-  event.data.fd = ctx->intercomfd;
+  event.data.fd = ctx->intercom_ctx.fd;
   event.events = EPOLLIN | EPOLLET;
-  s = epoll_ctl(efd, EPOLL_CTL_ADD, ctx->intercomfd, &event);
+  s = epoll_ctl(efd, EPOLL_CTL_ADD, ctx->intercom_ctx.fd, &event);
   if (s == -1)
     exit_error("epoll_ctl");
 
@@ -290,9 +291,9 @@ void loop(struct l3ctx *ctx) {
       } else if (ctx->icmp6fd == events[i].data.fd) {
         if (events[i].events & EPOLLIN)
           icmp6_handle_in(ctx, events[i].data.fd);
-      } else if (ctx->intercomfd == events[i].data.fd) {
+      } else if (ctx->intercom_ctx.fd == events[i].data.fd) {
         if (events[i].events & EPOLLIN)
-          intercom_handle_in(ctx, events[i].data.fd);
+          intercom_handle_in(&ctx->intercom_ctx, ctx, events[i].data.fd);
       } else if (ctx->timerfd == events[i].data.fd) {
         handle_timer(ctx);
       }
@@ -302,15 +303,91 @@ void loop(struct l3ctx *ctx) {
   free(events);
 }
 
+void usage() {
+  puts("Usage: l3roamd [-h] -p <prefix> -i <clientif> -m <meshif> ... -t <export table>");
+  puts("  -p <prefix>       clientprefix"); // TODO mehrfache angabe sollte möglich sein
+  puts("  -i <clientif>     client interface");
+  puts("  -m <meshif>       mesh interface. may be specified multiple times");
+  puts("  -t <export table> export routes to this table");
+  puts("  -h                this help\n");
+}
+
+bool parse_prefix(struct prefix *prefix, const char *str) {
+  char *saveptr;
+  char *tmp = strdupa(str);
+
+  char *ptr = strtok_r(tmp, "/", &saveptr);
+
+  if (ptr == NULL)
+    return false;
+
+  if (!inet_pton(AF_INET6, ptr, &prefix->prefix))
+    return false;
+
+  ptr = strtok_r(NULL, "/", &saveptr);
+
+  if (ptr == NULL)
+    return false;
+
+  prefix->plen = atoi(ptr);
+
+  if (prefix->plen < 0 || prefix->plen > 128)
+    return false;
+
+  return true;
+}
+
+static void init_random(void) {
+	unsigned int seed;
+	int fd = open("/dev/urandom", O_RDONLY);
+	if (fd < 0)
+		exit_errno("can't open /dev/urandom");
+
+	if (read(fd, &seed, sizeof(seed)) != sizeof(seed))
+		exit_errno("can't read from /dev/urandom");
+
+	close(fd);
+
+	srandom(seed);
+}
+
+void interfaces_changed(struct l3ctx *ctx, int type, const struct ifinfomsg *msg) {
+  printf("interfaces changed\n");
+  intercom_update_interfaces(&ctx->intercom_ctx);
+  icmp6_interface_changed(ctx, type, msg);
+}
+
 int main(int argc, char *argv[]) {
   struct l3ctx ctx = {};
 
-  inet_pton(AF_INET6, "2001:67c:2d50:41::", &(ctx.clientprefix.prefix));
-  ctx.clientprefix.plen = 64;
+  init_random();
 
-  ctx.export_table = 11; // TODO konfigurierbar machen!
+  intercom_init(&ctx.intercom_ctx);
 
-  ctx.clientif = "br-client";
+  int c;
+  while ((c = getopt(argc, argv, "hp:i:m:t:")) != -1)
+    switch (c) {
+      case 'h':
+        usage();
+        exit(EXIT_SUCCESS);
+      case 'p':
+        if (!parse_prefix(&ctx.clientprefix, optarg))
+          exit_error("Can not parse prefix");
+
+        printf("plen %i\n", ctx.clientprefix.plen);
+        break;
+      case 'i':
+        ctx.clientif = strdupa(optarg);
+        break;
+      case 'm':
+        intercom_add_interface(&ctx.intercom_ctx, strdupa(optarg));
+        break;
+      case 't':
+        ctx.export_table = atoi(optarg);
+        break;
+      default:
+        fprintf(stderr, "Invalid parameter %c ignored.\n", c);
+    }
 
   ctx.timerfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
 
@@ -321,8 +398,6 @@ int main(int argc, char *argv[]) {
   rtnl_init(&ctx);
 
   icmp6_init(&ctx);
-
-  intercom_init(&ctx, "mesh0");
 
   loop(&ctx);
 

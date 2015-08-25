@@ -2,6 +2,7 @@
 
 #include "vector.h"
 #include "linkedlist.h"
+#include "intercom.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -54,20 +55,21 @@ struct l3ctx {
   struct tun_iface tun;
   int rtnl_sock;
   int icmp6fd;
-  int intercomfd;
+  bool icmp6ok;
   const char *clientif;
   uint8_t icmp6mac[6];
   int export_table;
   VECTOR(struct entry) addrs;
   LinkedList output_queue;
   struct prefix clientprefix;
-  void *intercom_ctx;
+  intercom_ctx intercom_ctx;
 };
 
 void schedule(struct l3ctx *ctx);
 void handle_packet(struct l3ctx *ctx, uint8_t packet[], ssize_t packet_len);
 void neighbour_discovered(struct l3ctx *ctx, struct in6_addr *addr, uint8_t mac[6]);
-extern void delete_entry(struct l3ctx *ctx, const struct in6_addr *k);
-extern void drain_output_queue(struct l3ctx *ctx);
-extern struct ip_entry *find_entry(struct l3ctx *ctx, const struct in6_addr *k);
-extern void establish_route(struct l3ctx *ctx, const struct in6_addr *addr);
+void delete_entry(struct l3ctx *ctx, const struct in6_addr *k);
+void drain_output_queue(struct l3ctx *ctx);
+struct ip_entry *find_entry(struct l3ctx *ctx, const struct in6_addr *k);
+void establish_route(struct l3ctx *ctx, const struct in6_addr *addr);
+void interfaces_changed(struct l3ctx *ctx, int type, const struct ifinfomsg *msg);
