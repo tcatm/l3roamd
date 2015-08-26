@@ -115,7 +115,11 @@ printf("icmp\n");
 	if (packet.hdr.nd_na_hdr.icmp6_code != 0)
 		return;
 
-	neighbour_discovered(ctx, &packet.hdr.nd_na_target, packet.hw_addr);
+	char str[INET6_ADDRSTRLEN];
+	inet_ntop(AF_INET6, &packet.hdr.nd_na_target, str, INET6_ADDRSTRLEN);
+	printf("Neighbor Advertisement: %s\n", str);
+
+  clientmgr_add_address(&ctx->clientmgr_ctx, ctx, &packet.hdr.nd_na_target, packet.hw_addr);
 }
 
 void icmp6_send_solicitation(struct l3ctx *ctx, const struct in6_addr *addr) {

@@ -229,7 +229,7 @@ void insert_route(struct l3ctx *ctx, const struct kernel_route *route) {
     },
     .rt = {
       .rtm_family = AF_INET6,
-      .rtm_table = ctx->export_table,
+      .rtm_table = route->table,
       .rtm_protocol = 158,
       .rtm_scope = RT_SCOPE_UNIVERSE,
       .rtm_type = RTN_UNICAST,
@@ -243,6 +243,61 @@ void insert_route(struct l3ctx *ctx, const struct kernel_route *route) {
   req.rt.rtm_dst_len = route->plen;
   rtnl_addattr(&req.nl, sizeof(req), RTA_DST, (void*)route->prefix, sizeof(struct in6_addr));
   rtnl_addattr(&req.nl, sizeof(req), RTA_OIF, (void*)&route->ifindex, sizeof(unsigned int));
+
+  iov.iov_len = req.nl.nlmsg_len;
+
+  if (sendmsg(ctx->rtnl_sock, &msg, 0) < 0)
+    perror("nl_sendmsg");
+}
+
+void remove_route(struct l3ctx *ctx, const struct kernel_route *route) {
+  struct req {
+    struct nlmsghdr nl;
+    struct rtmsg rt;
+    char buf[1024];
+  } req = {
+    .nl = {
+      .nlmsg_type = RTM_NEWROUTE,
+      .nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_REPLACE,
+      .nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg)),
+    },
+    .rt = {
+      .rtm_family = AF_INET6,
+      .rtm_table = route->table,
+      .rtm_type = RTN_THROW,
+    },
+  };
+
+  struct sockaddr_nl nladdr = { .nl_family = AF_NETLINK };
+  struct iovec iov = { &req, 0 };
+  struct msghdr msg = { &nladdr, sizeof(nladdr), &iov, 1, NULL, 0, 0 };
+
+  req.rt.rtm_dst_len = route->plen;
+  rtnl_addattr(&req.nl, sizeof(req), RTA_DST, (void*)route->prefix, sizeof(struct in6_addr));
+
+  iov.iov_len = req.nl.nlmsg_len;
+
+  if (sendmsg(ctx->rtnl_sock, &msg, 0) < 0)
+    perror("nl_sendmsg");
+
+  req = (struct req) {
+    .nl = {
+      .nlmsg_type = RTM_DELROUTE,
+      .nlmsg_flags = NLM_F_REQUEST,
+      .nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg)),
+    },
+    .rt = {
+      .rtm_family = AF_INET6,
+      .rtm_table = route->table,
+    },
+  };
+
+  nladdr = (struct sockaddr_nl) { .nl_family = AF_NETLINK };
+  iov = (struct iovec) { &req, 0 };
+  msg = (struct msghdr) { &nladdr, sizeof(nladdr), &iov, 1, NULL, 0, 0 };
+
+  req.rt.rtm_dst_len = route->plen;
+  rtnl_addattr(&req.nl, sizeof(req), RTA_DST, (void*)route->prefix, sizeof(struct in6_addr));
 
   iov.iov_len = req.nl.nlmsg_len;
 

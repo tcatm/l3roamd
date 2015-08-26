@@ -3,6 +3,8 @@
 #include "vector.h"
 #include "linkedlist.h"
 #include "intercom.h"
+#include "wifistations.h"
+#include "clientmgr.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -10,18 +12,6 @@
 #include <net/if.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
-
-struct kernel_route {
-    unsigned char prefix[16];
-    int plen;
-    unsigned char src_prefix[16];
-    int src_plen; /* no source prefix <=> src_plen == 0 */
-    int metric;
-    unsigned int ifindex;
-    int proto;
-    unsigned char gw[16];
-    unsigned int table;
-};
 
 struct tun_iface {
   int fd;
@@ -45,11 +35,6 @@ struct entry {
   struct ip_entry *v;
 };
 
-struct prefix {
-  struct in6_addr prefix;
-  int plen;
-};
-
 struct l3ctx {
   int timerfd;
   struct tun_iface tun;
@@ -58,16 +43,15 @@ struct l3ctx {
   bool icmp6ok;
   const char *clientif;
   uint8_t icmp6mac[6];
-  int export_table;
-  VECTOR(struct entry) addrs;
   LinkedList output_queue;
-  struct prefix clientprefix;
   intercom_ctx intercom_ctx;
+  wifistations_ctx wifistations_ctx;
+  clientmgr_ctx clientmgr_ctx;
+  VECTOR(struct entry) addrs;
 };
 
 void schedule(struct l3ctx *ctx);
 void handle_packet(struct l3ctx *ctx, uint8_t packet[], ssize_t packet_len);
-void neighbour_discovered(struct l3ctx *ctx, struct in6_addr *addr, uint8_t mac[6]);
 void delete_entry(struct l3ctx *ctx, const struct in6_addr *k);
 void drain_output_queue(struct l3ctx *ctx);
 struct ip_entry *find_entry(struct l3ctx *ctx, const struct in6_addr *k);

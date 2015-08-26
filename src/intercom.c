@@ -3,6 +3,7 @@
 #include "l3roamd.h"
 #include "icmp6.h"
 
+#include <time.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <arpa/inet.h>
@@ -143,8 +144,7 @@ bool intercom_recently_seen(intercom_ctx *ctx, intercom_packet_hdr *hdr) {
   for (int i = 0; i < VECTOR_LEN(ctx->recent_packets); i++) {
     intercom_packet_hdr *ref_hdr = &VECTOR_INDEX(ctx->recent_packets, i);
 
-    if (ref_hdr->nonce == hdr->nonce && ref_hdr->type == hdr->type &&
-        memcmp(ref_hdr->sender, hdr->sender, 16) == 0)
+    if (ref_hdr->nonce == hdr->nonce && ref_hdr->type == hdr->type)
         return true;
   }
   return false;
@@ -161,22 +161,65 @@ void intercom_handle_seek(struct l3ctx *ctx, intercom_packet_seek *packet) {
   icmp6_send_solicitation(ctx, (const struct in6_addr *)packet->address);
 }
 
+void intercom_handle_claim(struct l3ctx *ctx, intercom_packet_claim *packet) {
+  struct timespec now;
+  clock_gettime(CLOCK_MONOTONIC, &now);
+
+  struct client client = {
+    .ours = false,
+    .lastseen = (struct timespec) {
+      .tv_sec = now.tv_sec - packet->lastseen,
+      .tv_nsec = 0
+    }
+  };
+
+  memcpy(client.mac, &packet->mac, sizeof(uint8_t) * 6);
+
+  struct client_ip ip;
+
+  intercom_packet_claim_entry *entry = (intercom_packet_claim_entry*)((uint8_t*)(packet) +  sizeof(intercom_packet_claim));
+
+  for (int i = 0; i < packet->num_addresses; i++) {
+    memcpy(&ip.address.s6_addr, &entry->address, sizeof(uint8_t) * 16);
+
+    ip.lastseen = (struct timespec) {
+      .tv_sec = now.tv_sec - entry->lastseen,
+      .tv_nsec = 0,
+    };
+
+    VECTOR_ADD(client.addresses, ip);
+
+    entry++;
+  }
+
+  clientmgr_handle_claim(&ctx->clientmgr_ctx, ctx, &client);
+}
+
 void intercom_handle_packet(intercom_ctx *ctx, struct l3ctx *l3ctx, uint8_t *packet, ssize_t packet_len) {
   intercom_packet_hdr *hdr = (intercom_packet_hdr*) packet;
 
+  printf("Packet nonce %u -> ", hdr->nonce);
+
+  if (intercom_recently_seen(ctx, hdr)) {
+    printf("dropped\n");
+    return;
+  }
+  printf("accepted\n");
+
+  intercom_recently_seen_add(ctx, hdr);
+
   if (hdr->type == INTERCOM_SEEK)
-    intercom_handle_seek(l3ctx, (intercom_packet_seek*) packet);
+    intercom_handle_seek(l3ctx, (intercom_packet_seek*)packet);
+
+  if (hdr->type == INTERCOM_CLAIM)
+    intercom_handle_claim(l3ctx, (intercom_packet_claim*)packet);
 
   hdr->ttl--;
 
   if (hdr->ttl > 0) {
-    if (!intercom_recently_seen(ctx, hdr)) {
-      printf("intercom: forwarding packet\n");
-      intercom_send_packet(ctx, packet, packet_len);
-    }
+    printf("intercom: forwarding packet\n");
+    intercom_send_packet(ctx, packet, packet_len);
   }
-
-  intercom_recently_seen_add(ctx, hdr);
 }
 
 void intercom_handle_in(intercom_ctx *ctx, struct l3ctx *l3ctx, int fd) {
@@ -201,4 +244,41 @@ void intercom_handle_in(intercom_ctx *ctx, struct l3ctx *l3ctx, int fd) {
 
     intercom_handle_packet(ctx, l3ctx, buf, count);
   }
+}
+
+// Claim at most 32 addresses per client
+#define CLAIM_MAX 32
+
+void intercom_claim(intercom_ctx *ctx, struct client *client) {
+  struct timespec now;
+  clock_gettime(CLOCK_MONOTONIC, &now);
+
+  intercom_packet_claim *packet = malloc(sizeof(intercom_packet_claim) + CLAIM_MAX * sizeof(intercom_packet_claim_entry));
+  int i;
+
+  uint32_t nonce = rand();
+
+  packet->hdr = (intercom_packet_hdr) {
+    .type = INTERCOM_CLAIM,
+    .nonce = nonce,
+    .ttl = 255,
+  };
+
+  memcpy(&packet->mac, client->mac, sizeof(uint8_t) * 6);
+  packet->lastseen = now.tv_sec - client->lastseen.tv_sec;
+
+  intercom_packet_claim_entry *entry = (intercom_packet_claim_entry*)((uint8_t*)(packet) + sizeof(intercom_packet_claim));
+
+  for (i = 0; i < VECTOR_LEN(client->addresses) && i < CLAIM_MAX; i++) {
+    struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
+    entry->lastseen = now.tv_sec - ip->lastseen.tv_sec;
+    memcpy(&entry->address, ip->address.s6_addr, sizeof(uint8_t) * 16);
+    entry++;
+  }
+
+  packet->num_addresses = i;
+
+  ssize_t packet_len = sizeof(intercom_packet_claim) + i * sizeof(intercom_packet_claim_entry);
+  intercom_recently_seen_add(ctx, &packet->hdr);
+  intercom_send_packet(ctx, (uint8_t*)packet, packet_len);
 }

@@ -10,12 +10,11 @@
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 
-enum {INTERCOM_SEEK, INTERCOM_CLIENT};
+enum {INTERCOM_SEEK, INTERCOM_CLAIM};
 
 typedef struct __attribute__((__packed__)) {
   uint8_t ttl;
   uint32_t nonce;
-  uint8_t sender[16];
   uint8_t type;
 } intercom_packet_hdr;
 
@@ -23,6 +22,18 @@ typedef struct __attribute__((__packed__)) {
   intercom_packet_hdr hdr;
   uint8_t address[16];
 } intercom_packet_seek;
+
+typedef struct __attribute__((__packed__)) {
+  intercom_packet_hdr hdr;
+  uint8_t num_addresses;
+  uint8_t mac[6];
+  uint32_t lastseen;
+} intercom_packet_claim;
+
+typedef struct __attribute__((__packed__)) {
+  uint8_t address[16];
+  uint32_t lastseen; // relative in seconds
+} intercom_packet_claim_entry;
 
 typedef struct {
   bool ok;
@@ -37,7 +48,8 @@ typedef struct {
   VECTOR(intercom_if) interfaces;
 } intercom_ctx;
 
-struct l3ctx l3ctx;
+struct l3ctx;
+struct client;
 
 void intercom_recently_seen_add(intercom_ctx *ctx, intercom_packet_hdr *hdr);
 void intercom_send_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len);
@@ -46,3 +58,4 @@ void intercom_init(intercom_ctx *ctx);
 void intercom_handle_in(intercom_ctx *ctx, struct l3ctx *l3ctx, int fd);
 void intercom_add_interface(intercom_ctx *ctx, char *ifname);
 void intercom_update_interfaces(intercom_ctx *ctx);
+void intercom_claim(intercom_ctx *ctx, struct client *client);

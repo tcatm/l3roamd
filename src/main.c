@@ -137,46 +137,6 @@ void schedule(struct l3ctx *ctx) {
   timerfd_settime(ctx->timerfd, TFD_TIMER_ABSTIME, &t, NULL);
 }
 
-bool prefix_contains(const struct prefix *prefix, struct in6_addr *addr) {
-  int plen = prefix->plen;
-
-  for (int i = 0; i < 16; i++) {
-    int mask = ~((1<<(8 - (plen > 8 ? 8 : plen))) - 1);
-
-    if ((addr->s6_addr[i] & mask) != prefix->prefix.s6_addr[i])
-      return false;
-
-    plen -= 8;
-
-    if (plen < 0)
-      plen = 0;
-  }
-  return true;
-}
-
-void neighbour_discovered(struct l3ctx *ctx, struct in6_addr *addr, uint8_t mac[6]) {
-  char target[INET6_ADDRSTRLEN];
-  inet_ntop(AF_INET6, addr, target, INET6_ADDRSTRLEN);
-
-  if (!prefix_contains(&ctx->clientprefix, addr))
-    return;
-
-  printf("Target address of neighbor solicitation: %s\n", target);
-
-  // TODO add route
-  // TODO client merken
-
-  struct kernel_route route = {
-    .plen = 128,
-    .proto = 23,
-    .ifindex = if_nametoindex(ctx->clientif)
-  };
-
-  memcpy(route.prefix, addr->s6_addr, 16);
-
-  insert_route(ctx, &route);
-}
-
 void handle_packet(struct l3ctx *ctx, uint8_t packet[], ssize_t packet_len) {
   struct in6_addr dst;
   memcpy(&dst, packet + 24, 16);
@@ -231,7 +191,7 @@ void loop(struct l3ctx *ctx) {
   int s;
   int efd;
   int maxevents = 64;
-  struct epoll_event event;
+  struct epoll_event event = {};
   struct epoll_event *events;
 
   efd = epoll_create1(0);
@@ -270,6 +230,12 @@ void loop(struct l3ctx *ctx) {
   if (s == -1)
     exit_error("epoll_ctl");
 
+  event.data.fd = ctx->wifistations_ctx.fd;
+  event.events = EPOLLIN;
+  s = epoll_ctl(efd, EPOLL_CTL_ADD, ctx->wifistations_ctx.fd, &event);
+  if (s == -1)
+    exit_error("epoll_ctl");
+
   /* Buffer where events are returned */
   events = calloc(maxevents, sizeof event);
 
@@ -296,6 +262,8 @@ void loop(struct l3ctx *ctx) {
           intercom_handle_in(&ctx->intercom_ctx, ctx, events[i].data.fd);
       } else if (ctx->timerfd == events[i].data.fd) {
         handle_timer(ctx);
+      } else if (ctx->wifistations_ctx.fd == events[i].data.fd) {
+        wifistations_handle_in(&ctx->wifistations_ctx);
       }
     }
   }
@@ -315,13 +283,14 @@ void usage() {
 bool parse_prefix(struct prefix *prefix, const char *str) {
   char *saveptr;
   char *tmp = strdupa(str);
-
   char *ptr = strtok_r(tmp, "/", &saveptr);
 
   if (ptr == NULL)
     return false;
 
-  if (!inet_pton(AF_INET6, ptr, &prefix->prefix))
+  int rc = inet_pton(AF_INET6, ptr, &prefix->prefix);
+
+  if (rc != 1)
     return false;
 
   ptr = strtok_r(NULL, "/", &saveptr);
@@ -371,10 +340,10 @@ int main(int argc, char *argv[]) {
         usage();
         exit(EXIT_SUCCESS);
       case 'p':
-        if (!parse_prefix(&ctx.clientprefix, optarg))
+        if (!parse_prefix(&ctx.clientmgr_ctx.prefix, optarg))
           exit_error("Can not parse prefix");
 
-        printf("plen %i\n", ctx.clientprefix.plen);
+        printf("plen %i\n", ctx.clientmgr_ctx.prefix.plen);
         break;
       case 'i':
         ctx.clientif = strdupa(optarg);
@@ -383,7 +352,7 @@ int main(int argc, char *argv[]) {
         intercom_add_interface(&ctx.intercom_ctx, strdupa(optarg));
         break;
       case 't':
-        ctx.export_table = atoi(optarg);
+        ctx.clientmgr_ctx.export_table = atoi(optarg);
         break;
       default:
         fprintf(stderr, "Invalid parameter %c ignored.\n", c);
@@ -398,6 +367,8 @@ int main(int argc, char *argv[]) {
   rtnl_init(&ctx);
 
   icmp6_init(&ctx);
+
+  wifistations_init(&ctx.wifistations_ctx, &ctx);
 
   loop(&ctx);
 
