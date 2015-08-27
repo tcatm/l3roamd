@@ -115,6 +115,11 @@ printf("icmp\n");
 	if (packet.hdr.nd_na_hdr.icmp6_code != 0)
 		return;
 
+  // only handle when it is a response to a solicitation
+	// and override bit is set (i.e. a MAC is supplied)
+	if ((packet.hdr.nd_na_hdr.icmp6_dataun.icmp6_un_data8[0] & 0x60) != 0x60)
+		return;
+
 	char str[INET6_ADDRSTRLEN];
 	inet_ntop(AF_INET6, &packet.hdr.nd_na_target, str, INET6_ADDRSTRLEN);
 	printf("Neighbor Advertisement: %s\n", str);

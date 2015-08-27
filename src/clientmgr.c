@@ -172,7 +172,7 @@ void clientmgr_update_client_routes(struct l3ctx *ctx, unsigned int table, struc
 
     memcpy(route.prefix, e->address.s6_addr, 16);
 
-    insert_route(ctx, &route);
+    insert_route(ctx, &route, client->mac);
   }
 }
 

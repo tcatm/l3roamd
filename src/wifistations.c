@@ -54,6 +54,7 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
   struct nlattr *tb[8];
   char macbuf[6*3];
 
+
   // TODO filtern auf interfaces, die uns interessieren
   // TODO liste von interfaces pflegen (netlink)
 
@@ -66,6 +67,10 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
 
   if_indextoname(nla_get_u32(tb[NL80211_ATTR_IFINDEX]), ifname);
   printf("%s: ", ifname);
+
+	// TODO warum kann das NULL sein?
+		if (gnlh == NULL)
+			return 0;
 
   switch (gnlh->cmd) {
     case NL80211_CMD_NEW_STATION:

@@ -96,12 +96,6 @@ void rtnl_handle_msg(struct l3ctx *ctx, const struct nlmsghdr *nh) {
     case RTM_DELROUTE:
       filter_kernel_routes(ctx, nh);
       break;
-    case RTM_NEWNEIGH:
-      puts("NEW NEIGH");
-      break;
-    case RTM_DELNEIGH:
-      puts("DEL NEIGH");
-      break;
     case RTM_NEWLINK:
 	  case RTM_DELLINK:
 	  case RTM_SETLINK:
@@ -119,7 +113,7 @@ void rtnl_init(struct l3ctx *ctx) {
 
   struct sockaddr_nl snl = {
     .nl_family = AF_NETLINK,
-    .nl_groups = RTMGRP_IPV6_ROUTE | RTMGRP_NEIGH | RTMGRP_LINK,
+    .nl_groups = RTMGRP_IPV6_ROUTE | RTMGRP_LINK,
   };
 
   if (bind(ctx->rtnl_sock, (struct sockaddr *)&snl, sizeof(snl)) < 0)
@@ -216,12 +210,20 @@ void rtnl_handle_in(struct l3ctx *ctx, int fd) {
   }
 }
 
-void insert_route(struct l3ctx *ctx, const struct kernel_route *route) {
-  struct {
-    struct nlmsghdr nl;
-    struct rtmsg rt;
-    char buf[1024];
-  } req = {
+struct nlrtreq {
+  struct nlmsghdr nl;
+  struct rtmsg rt;
+  char buf[1024];
+};
+
+struct nlneighreq {
+  struct nlmsghdr nl;
+  struct ndmsg nd;
+  char buf[1024];
+};
+
+void insert_route(struct l3ctx *ctx, const struct kernel_route *route, uint8_t *mac) {
+  struct nlrtreq req = {
     .nl = {
       .nlmsg_type = RTM_NEWROUTE,
       .nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_REPLACE,
@@ -248,29 +250,55 @@ void insert_route(struct l3ctx *ctx, const struct kernel_route *route) {
 
   if (sendmsg(ctx->rtnl_sock, &msg, 0) < 0)
     perror("nl_sendmsg");
-}
 
-void remove_route(struct l3ctx *ctx, const struct kernel_route *route) {
-  struct req {
-    struct nlmsghdr nl;
-    struct rtmsg rt;
-    char buf[1024];
-  } req = {
+  struct nlneighreq ndreq = {
     .nl = {
-      .nlmsg_type = RTM_NEWROUTE,
+      .nlmsg_type = RTM_NEWNEIGH,
       .nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_REPLACE,
-      .nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg)),
+      .nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg)),
     },
-    .rt = {
-      .rtm_family = AF_INET6,
-      .rtm_table = route->table,
-      .rtm_type = RTN_THROW,
+    .nd = {
+      .ndm_family = AF_INET6,
+      .ndm_state = NUD_REACHABLE,
+      .ndm_ifindex = route->ifindex,
     },
   };
 
-  struct sockaddr_nl nladdr = { .nl_family = AF_NETLINK };
-  struct iovec iov = { &req, 0 };
-  struct msghdr msg = { &nladdr, sizeof(nladdr), &iov, 1, NULL, 0, 0 };
+  nladdr = (struct sockaddr_nl) { .nl_family = AF_NETLINK };
+  iov = (struct iovec)  { &ndreq, 0 };
+  msg = (struct msghdr) { &nladdr, sizeof(nladdr), &iov, 1, NULL, 0, 0 };
+
+  printf("neigh mac %02x:%02x:%02x:%02x:%02x:%02x\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  rtnl_addattr(&ndreq.nl, sizeof(ndreq), NDA_DST, (void*)route->prefix, sizeof(struct in6_addr));
+  rtnl_addattr(&ndreq.nl, sizeof(ndreq), NDA_LLADDR, mac, sizeof(uint8_t) * 6);
+
+  iov.iov_len = ndreq.nl.nlmsg_len;
+
+  if (sendmsg(ctx->rtnl_sock, &msg, 0) < 0)
+    perror("nl_sendmsg");
+}
+
+void remove_route(struct l3ctx *ctx, const struct kernel_route *route) {
+  struct nlrtreq req;
+  struct sockaddr_nl nladdr;
+  struct iovec iov;
+  struct msghdr msg;
+
+  req = (struct nlrtreq) {};
+  req.nl = (struct nlmsghdr) {
+    .nlmsg_type = RTM_NEWROUTE,
+    .nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_REPLACE,
+    .nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg)),
+  };
+  req.rt = (struct rtmsg) {
+    .rtm_family = AF_INET6,
+    .rtm_table = route->table,
+    .rtm_type = RTN_THROW,
+  };
+
+  nladdr = (struct sockaddr_nl) { .nl_family = AF_NETLINK };
+  iov = (struct iovec) { &req, 0 };
+  msg = (struct msghdr) { &nladdr, sizeof(nladdr), &iov, 1, NULL, 0, 0 };
 
   req.rt.rtm_dst_len = route->plen;
   rtnl_addattr(&req.nl, sizeof(req), RTA_DST, (void*)route->prefix, sizeof(struct in6_addr));
@@ -280,16 +308,17 @@ void remove_route(struct l3ctx *ctx, const struct kernel_route *route) {
   if (sendmsg(ctx->rtnl_sock, &msg, 0) < 0)
     perror("nl_sendmsg");
 
-  req = (struct req) {
-    .nl = {
-      .nlmsg_type = RTM_DELROUTE,
-      .nlmsg_flags = NLM_F_REQUEST,
-      .nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg)),
-    },
-    .rt = {
-      .rtm_family = AF_INET6,
-      .rtm_table = route->table,
-    },
+  // TODO remove neighbour entry
+
+  req = (struct nlrtreq) {};
+  req.nl = (struct nlmsghdr) {
+    .nlmsg_type = RTM_DELROUTE,
+    .nlmsg_flags = NLM_F_REQUEST,
+    .nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg)),
+  };
+  req.rt = (struct rtmsg) {
+    .rtm_family = AF_INET6,
+    .rtm_table = route->table,
   };
 
   nladdr = (struct sockaddr_nl) { .nl_family = AF_NETLINK };
