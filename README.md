@@ -1,6 +1,6 @@
 # l3roamd
 
-l3roamd is supposed to become a core part of future layer 3 mesh networks.
+l3roamd, pronunced *ɛl θriː ɹoʊm diː*, is supposed to become a core part of future layer 3 mesh networks.
 At first it will be built to work with [babeld](https://github.com/jech/babeld).
 
 l3roamd will be doing quite a few things:
