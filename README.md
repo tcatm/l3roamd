@@ -23,6 +23,7 @@ The database could become its own daemon. It's basically a key-value database th
 This information does not need to be present on all nodes (though that's probably the naïve approach we'll take first).
 It just needs to be reasonable certain that a node noticing a client previously unknown to it can figure out whether
 that client has been known by some other node within the last, say, 15 minutes or so.
+In fact, it may suffice to share a client's information with just the nodes that are sending data to the client.
 This timeout depends primarily on the lifecycle of host routes within l3roamd.
 
 The most important outcome of querying the database is actually:
