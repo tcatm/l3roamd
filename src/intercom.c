@@ -114,11 +114,26 @@ void intercom_seek(intercom_ctx *ctx, const struct in6_addr *address) {
     .ttl = 255,
   };
 
+  memcpy(&packet.hdr.sender, ctx->ip.s6_addr, sizeof(uint8_t) * 16);
+
   memcpy(&packet.address, address, 16);
 
   intercom_recently_seen_add(ctx, &packet.hdr);
 
   intercom_send_packet(ctx, (uint8_t*)&packet, sizeof(packet));
+}
+
+void intercom_send_packet_unicast(intercom_ctx *ctx, const struct in6_addr *recipient, uint8_t *packet, ssize_t packet_len) {
+    struct sockaddr_in6 addr = (struct sockaddr_in6) {
+      .sin6_family = AF_INET6,
+      .sin6_port = htons(INTERCOM_PORT),
+      .sin6_addr = *recipient
+    };
+
+    ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, &addr, sizeof(addr));
+
+    if (rc < 0)
+      perror("sendto failed");
 }
 
 void intercom_send_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len) {
@@ -164,6 +179,18 @@ void intercom_handle_seek(struct l3ctx *ctx, intercom_packet_seek *packet) {
 void intercom_handle_claim(struct l3ctx *ctx, intercom_packet_claim *packet) {
   struct timespec now;
   clock_gettime(CLOCK_MONOTONIC, &now);
+  uint32_t lastseen = now.tv_sec - packet->lastseen;
+
+  struct in6_addr sender;
+
+  memcpy(&sender.s6_addr, &packet->hdr.sender, sizeof(uint8_t) * 16);
+
+  clientmgr_handle_claim(&ctx->clientmgr_ctx, ctx, lastseen, packet->mac, &sender);
+}
+
+void intercom_handle_info(struct l3ctx *ctx, intercom_packet_info *packet) {
+  struct timespec now;
+  clock_gettime(CLOCK_MONOTONIC, &now);
 
   struct client client = {
     .ours = false,
@@ -173,14 +200,11 @@ void intercom_handle_claim(struct l3ctx *ctx, intercom_packet_claim *packet) {
     }
   };
 
-  struct in6_addr sender;
-
-  memcpy(&sender.s6_addr, &packet->sender, sizeof(uint8_t) * 16);
   memcpy(client.mac, &packet->mac, sizeof(uint8_t) * 6);
 
   struct client_ip ip;
 
-  intercom_packet_claim_entry *entry = (intercom_packet_claim_entry*)((uint8_t*)(packet) +  sizeof(intercom_packet_claim));
+  intercom_packet_info_entry *entry = (intercom_packet_info_entry*)((uint8_t*)(packet) +  sizeof(intercom_packet_info));
 
   for (int i = 0; i < packet->num_addresses; i++) {
     memcpy(&ip.address.s6_addr, &entry->address, sizeof(uint8_t) * 16);
@@ -195,7 +219,7 @@ void intercom_handle_claim(struct l3ctx *ctx, intercom_packet_claim *packet) {
     entry++;
   }
 
-  clientmgr_handle_claim(&ctx->clientmgr_ctx, ctx, &client, &sender);
+  clientmgr_handle_info(&ctx->clientmgr_ctx, ctx, &client);
 }
 
 void intercom_handle_packet(intercom_ctx *ctx, struct l3ctx *l3ctx, uint8_t *packet, ssize_t packet_len) {
@@ -216,6 +240,9 @@ void intercom_handle_packet(intercom_ctx *ctx, struct l3ctx *l3ctx, uint8_t *pac
 
   if (hdr->type == INTERCOM_CLAIM)
     intercom_handle_claim(l3ctx, (intercom_packet_claim*)packet);
+
+  if (hdr->type == INTERCOM_INFO)
+    intercom_handle_info(l3ctx, (intercom_packet_info*)packet);
 
   hdr->ttl--;
 
@@ -249,31 +276,32 @@ void intercom_handle_in(intercom_ctx *ctx, struct l3ctx *l3ctx, int fd) {
   }
 }
 
-// Claim at most 32 addresses per client
-#define CLAIM_MAX 32
+// Announce at most 32 addresses per client
+#define INFO_MAX 32
 
-void intercom_claim(intercom_ctx *ctx, struct client *client) {
+void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client) {
   struct timespec now;
   clock_gettime(CLOCK_MONOTONIC, &now);
 
-  intercom_packet_claim *packet = malloc(sizeof(intercom_packet_claim) + CLAIM_MAX * sizeof(intercom_packet_claim_entry));
+  intercom_packet_info *packet = malloc(sizeof(intercom_packet_info) + INFO_MAX * sizeof(intercom_packet_info_entry));
   int i;
 
   uint32_t nonce = rand();
 
   packet->hdr = (intercom_packet_hdr) {
-    .type = INTERCOM_CLAIM,
+    .type = INTERCOM_INFO,
     .nonce = nonce,
-    .ttl = 255,
+    .ttl = 1,
   };
 
-  memcpy(&packet->sender, ctx->ip.s6_addr, sizeof(uint8_t) * 16);
+  memcpy(&packet->hdr.sender, ctx->ip.s6_addr, sizeof(uint8_t) * 16);
+
   memcpy(&packet->mac, client->mac, sizeof(uint8_t) * 6);
   packet->lastseen = now.tv_sec - client->lastseen.tv_sec;
 
-  intercom_packet_claim_entry *entry = (intercom_packet_claim_entry*)((uint8_t*)(packet) + sizeof(intercom_packet_claim));
+  intercom_packet_info_entry *entry = (intercom_packet_info_entry*)((uint8_t*)(packet) + sizeof(intercom_packet_info));
 
-  for (i = 0; i < VECTOR_LEN(client->addresses) && i < CLAIM_MAX; i++) {
+  for (i = 0; i < VECTOR_LEN(client->addresses) && i < INFO_MAX; i++) {
     struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
     entry->lastseen = now.tv_sec - ip->lastseen.tv_sec;
     memcpy(&entry->address, ip->address.s6_addr, sizeof(uint8_t) * 16);
@@ -282,7 +310,30 @@ void intercom_claim(intercom_ctx *ctx, struct client *client) {
 
   packet->num_addresses = i;
 
-  ssize_t packet_len = sizeof(intercom_packet_claim) + i * sizeof(intercom_packet_claim_entry);
-  intercom_recently_seen_add(ctx, &packet->hdr);
-  intercom_send_packet(ctx, (uint8_t*)packet, packet_len);
+  ssize_t packet_len = sizeof(intercom_packet_info) + i * sizeof(intercom_packet_info_entry);
+  intercom_send_packet_unicast(ctx, recipient, (uint8_t*)packet, packet_len);
+}
+
+void intercom_claim(intercom_ctx *ctx, uint8_t *mac, uint32_t lastseen) {
+  intercom_packet_claim packet;
+
+  printf("Sending claim\n");
+
+  uint32_t nonce = rand();
+
+  packet.hdr = (intercom_packet_hdr) {
+    .type = INTERCOM_CLAIM,
+    .nonce = nonce,
+    .ttl = 255,
+  };
+
+  memcpy(&packet.hdr.sender, ctx->ip.s6_addr, sizeof(uint8_t) * 16);
+
+  memcpy(&packet.mac, mac, 6);
+
+  packet.lastseen = lastseen;
+
+  intercom_recently_seen_add(ctx, &packet.hdr);
+
+  intercom_send_packet(ctx, (uint8_t*)&packet, sizeof(packet));
 }

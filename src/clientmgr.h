@@ -34,6 +34,7 @@ struct l3ctx;
 
 void clientmgr_add_address(clientmgr_ctx *ctx, struct l3ctx *l3ctx, struct in6_addr *address, uint8_t *mac);
 void clientmgr_update_client_routes(struct l3ctx *ctx, unsigned int table, struct client *client);
-void clientmgr_handle_claim(clientmgr_ctx *ctx, struct l3ctx *l3ctx, struct client *client, struct in6_addr *sender);
+void clientmgr_handle_info(clientmgr_ctx *ctx, struct l3ctx *l3ctx, struct client *client);
+void clientmgr_handle_claim(clientmgr_ctx *ctx, struct l3ctx *l3ctx, uint32_t lastseen, uint8_t *mac, const struct in6_addr *sender);
 void clientmgr_add_client(clientmgr_ctx *ctx, struct l3ctx *l3ctx, uint8_t *mac);
 void print_client(struct client *client);

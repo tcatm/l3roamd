@@ -80,19 +80,22 @@ void clientmgr_add_client(clientmgr_ctx *ctx, struct l3ctx *l3ctx, uint8_t *mac)
 
   struct client *client = clientmgr_get_client(ctx, mac);
 
-  // ignore unknown clients
-  if (client == NULL)
+  if (client == NULL) {
+    struct client _client = { .ours = true };
+    memcpy(_client.mac, mac, sizeof(uint8_t) * 6);
+    VECTOR_ADD(ctx->clients, _client);
+    client = &VECTOR_INDEX(ctx->clients, VECTOR_LEN(ctx->clients) - 1);
+    client = &_client;
+  } else if (client->ours) {
     return;
-
-  if (client->ours)
-    return;
+  }
 
   client->lastseen = now;
   client->ours = true;
 
   print_client(client);
 
-  intercom_claim(&l3ctx->intercom_ctx, client);
+  intercom_claim(&l3ctx->intercom_ctx, mac, now.tv_nsec);
   // TODO timer auf lastseen und so schedulen
 
   clientmgr_update_client_routes(l3ctx, ctx->export_table, client);
@@ -149,7 +152,6 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct l3ctx *l3ctx, struct in6_a
 
   print_client(client);
 
-  intercom_claim(&l3ctx->intercom_ctx, client);
   // TODO timer auf lastseen und so schedulen
 
   clientmgr_update_client_routes(l3ctx, ctx->export_table, client);
@@ -198,36 +200,65 @@ void clientmgr_remove_client_routes(struct l3ctx *ctx, unsigned int table, struc
   }
 }
 
-void clientmgr_handle_claim(clientmgr_ctx *ctx, struct l3ctx *l3ctx, struct client *foreign_client, struct in6_addr *sender) {
-  struct client *client = clientmgr_get_client(ctx, foreign_client->mac);
-
-  printf("Received foreign client\n");
-
-  char str[INET6_ADDRSTRLEN];
-  inet_ntop(AF_INET6, sender, str, INET6_ADDRSTRLEN);
-  printf("Sender %s\n", str);
-
+void clientmgr_handle_info(clientmgr_ctx *ctx, struct l3ctx *l3ctx, struct client *foreign_client) {
+  printf("Received client info\n");
   print_client(foreign_client);
 
-  if (client == NULL) {
-    VECTOR_ADD(ctx->clients, *foreign_client);
-    return;
+  struct client *client = clientmgr_get_client(ctx, foreign_client->mac);
+
+  if (!client) {
+    printf("Didn't know about this client yet.\n");
+    client = foreign_client;
+    VECTOR_ADD(ctx->clients, *client);
+  } else {
+    printf("Merging clients\n");
+    print_client(client);
+
+    for (int i = 0; i < VECTOR_LEN(foreign_client->addresses); i++) {
+      struct client_ip *e = &VECTOR_INDEX(foreign_client->addresses, i);
+      struct client_ip *ip = clientmgr_get_client_ip(client, &e->address);
+
+      printf("ip %p e %p\n", ip, e);
+
+      if (ip == NULL) {
+        VECTOR_ADD(client->addresses, *e);
+      } else if (e->lastseen.tv_nsec > ip->lastseen.tv_nsec) {
+        ip->lastseen = e->lastseen;
+      }
+    }
   }
 
-  if (!client->ours)
-    return;
-
-  if (client->lastseen.tv_sec > foreign_client->lastseen.tv_sec) {
-    intercom_claim(&l3ctx->intercom_ctx, client);
-    return;
-  }
-
-  clientmgr_remove_client_routes(l3ctx, ctx->export_table, client);
+  printf("Now I know about this client:\n");
 
   print_client(client);
 
-  clientmgr_delete_client(ctx, foreign_client->mac);
-  VECTOR_ADD(ctx->clients, *foreign_client);
+  clientmgr_update_client_routes(l3ctx, ctx->export_table, client);
+}
+
+void clientmgr_handle_claim(clientmgr_ctx *ctx, struct l3ctx *l3ctx, uint32_t lastseen, uint8_t *mac, const struct in6_addr *sender) {
+  struct timespec now;
+  clock_gettime(CLOCK_MONOTONIC, &now);
+
+  struct client *client = clientmgr_get_client(ctx, mac);
+
+  printf("Received claim for %02x:%02x:%02x:%02x:%02x:%02x\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+  if (client == NULL)
+    return;
+
+  if (client->ours && client->lastseen.tv_sec > lastseen) {
+    printf("Re-Claiming client\n");
+    intercom_claim(&l3ctx->intercom_ctx, client->mac, now.tv_nsec - client->lastseen.tv_nsec);
+  } else {
+    printf("Dropping client\n");
+    print_client(client);
+
+    client->ours = false;
+    intercom_info(&l3ctx->intercom_ctx, sender, client);
+
+    clientmgr_remove_client_routes(l3ctx, ctx->export_table, client);
+    clientmgr_delete_client(ctx, mac);
+  }
 
   // TODO timer setzen!
 }

@@ -106,3 +106,22 @@ message even if the commit message turns out to be longer than the change. Say, 
     This corrects a typo in the "Improvements welcome!" section.
 
 This approach makes reviewing and reasoning about changes a lot easier.
+
+# Intercom Packets
+
+There are currently three packet types used by l3roamd:
+
+- SEEK,
+- QUERY and
+- INFO
+
+All packets can be sent either as unicast or multicast.
+
+## Header
+
+
+
+## SEEK
+
+This is a multicast packet. SEEK is used to establish a route to an IPv6
+address. The packet contains 
