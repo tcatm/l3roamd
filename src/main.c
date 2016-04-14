@@ -272,7 +272,8 @@ void loop(struct l3ctx *ctx) {
 }
 
 void usage() {
-  puts("Usage: l3roamd [-h] -p <prefix> -i <clientif> -m <meshif> ... -t <export table>");
+  puts("Usage: l3roamd [-h] -a <ip6> -p <prefix> -i <clientif> -m <meshif> ... -t <export table>");
+  puts("  -a <ip6>          ip address of this node");
   puts("  -p <prefix>       clientprefix"); // TODO mehrfache angabe sollte möglich sein
   puts("  -i <clientif>     client interface");
   puts("  -m <meshif>       mesh interface. may be specified multiple times");
@@ -334,11 +335,16 @@ int main(int argc, char *argv[]) {
   intercom_init(&ctx.intercom_ctx);
 
   int c;
-  while ((c = getopt(argc, argv, "hp:i:m:t:")) != -1)
+  while ((c = getopt(argc, argv, "ha:p:i:m:t:")) != -1)
     switch (c) {
       case 'h':
         usage();
         exit(EXIT_SUCCESS);
+      case 'a':
+        if(inet_pton(AF_INET6, optarg, &ctx.ip) != 1)
+          exit_error("Can not parse IP address");
+
+        break;
       case 'p':
         if (!parse_prefix(&ctx.clientmgr_ctx.prefix, optarg))
           exit_error("Can not parse prefix");
