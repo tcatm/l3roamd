@@ -341,7 +341,7 @@ int main(int argc, char *argv[]) {
         usage();
         exit(EXIT_SUCCESS);
       case 'a':
-        if(inet_pton(AF_INET6, optarg, &ctx.ip) != 1)
+        if(inet_pton(AF_INET6, optarg, &ctx.intercom_ctx.ip) != 1)
           exit_error("Can not parse IP address");
 
         break;

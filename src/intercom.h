@@ -25,6 +25,7 @@ typedef struct __attribute__((__packed__)) {
 
 typedef struct __attribute__((__packed__)) {
   intercom_packet_hdr hdr;
+  uint8_t sender[16];
   uint8_t num_addresses;
   uint8_t mac[6];
   uint32_t lastseen;
@@ -44,6 +45,7 @@ typedef struct {
 typedef struct {
   int fd;
   struct sockaddr_in6 groupaddr;
+  struct in6_addr ip;
   VECTOR(intercom_packet_hdr) recent_packets;
   VECTOR(intercom_if) interfaces;
 } intercom_ctx;

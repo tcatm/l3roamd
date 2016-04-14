@@ -173,6 +173,9 @@ void intercom_handle_claim(struct l3ctx *ctx, intercom_packet_claim *packet) {
     }
   };
 
+  struct in6_addr sender;
+
+  memcpy(&sender.s6_addr, &packet->sender, sizeof(uint8_t) * 16);
   memcpy(client.mac, &packet->mac, sizeof(uint8_t) * 6);
 
   struct client_ip ip;
@@ -192,7 +195,7 @@ void intercom_handle_claim(struct l3ctx *ctx, intercom_packet_claim *packet) {
     entry++;
   }
 
-  clientmgr_handle_claim(&ctx->clientmgr_ctx, ctx, &client);
+  clientmgr_handle_claim(&ctx->clientmgr_ctx, ctx, &client, &sender);
 }
 
 void intercom_handle_packet(intercom_ctx *ctx, struct l3ctx *l3ctx, uint8_t *packet, ssize_t packet_len) {
@@ -264,6 +267,7 @@ void intercom_claim(intercom_ctx *ctx, struct client *client) {
     .ttl = 255,
   };
 
+  memcpy(&packet->sender, ctx->ip.s6_addr, sizeof(uint8_t) * 16);
   memcpy(&packet->mac, client->mac, sizeof(uint8_t) * 6);
   packet->lastseen = now.tv_sec - client->lastseen.tv_sec;
 

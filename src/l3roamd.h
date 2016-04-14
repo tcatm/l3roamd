@@ -43,7 +43,6 @@ struct l3ctx {
   bool icmp6ok;
   const char *clientif;
   uint8_t icmp6mac[6];
-  struct in6_addr ip;
   LinkedList output_queue;
   intercom_ctx intercom_ctx;
   wifistations_ctx wifistations_ctx;

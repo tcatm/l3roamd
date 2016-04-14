@@ -198,10 +198,15 @@ void clientmgr_remove_client_routes(struct l3ctx *ctx, unsigned int table, struc
   }
 }
 
-void clientmgr_handle_claim(clientmgr_ctx *ctx, struct l3ctx *l3ctx, struct client *foreign_client) {
+void clientmgr_handle_claim(clientmgr_ctx *ctx, struct l3ctx *l3ctx, struct client *foreign_client, struct in6_addr *sender) {
   struct client *client = clientmgr_get_client(ctx, foreign_client->mac);
 
   printf("Received foreign client\n");
+
+  char str[INET6_ADDRSTRLEN];
+  inet_ntop(AF_INET6, sender, str, INET6_ADDRSTRLEN);
+  printf("Sender %s\n", str);
+
   print_client(foreign_client);
 
   if (client == NULL) {
