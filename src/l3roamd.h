@@ -40,6 +40,7 @@ struct l3ctx {
   struct tun_iface tun;
   int rtnl_sock;
   int icmp6fd;
+  int icmp6nsfd;
   bool icmp6ok;
   const char *clientif;
   uint8_t icmp6mac[6];

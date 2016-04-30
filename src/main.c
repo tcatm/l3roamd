@@ -224,6 +224,12 @@ void loop(struct l3ctx *ctx) {
   if (s == -1)
     exit_error("epoll_ctl");
 
+  event.data.fd = ctx->icmp6nsfd;
+  event.events = EPOLLIN;
+  s = epoll_ctl(efd, EPOLL_CTL_ADD, ctx->icmp6nsfd, &event);
+  if (s == -1)
+    exit_error("epoll_ctl");
+
   event.data.fd = ctx->intercom_ctx.fd;
   event.events = EPOLLIN | EPOLLET;
   s = epoll_ctl(efd, EPOLL_CTL_ADD, ctx->intercom_ctx.fd, &event);
@@ -257,6 +263,9 @@ void loop(struct l3ctx *ctx) {
       } else if (ctx->icmp6fd == events[i].data.fd) {
         if (events[i].events & EPOLLIN)
           icmp6_handle_in(ctx, events[i].data.fd);
+      } else if (ctx->icmp6nsfd == events[i].data.fd) {
+        if (events[i].events & EPOLLIN)
+          icmp6_handle_ns_in(ctx, events[i].data.fd);
       } else if (ctx->intercom_ctx.fd == events[i].data.fd) {
         if (events[i].events & EPOLLIN)
           intercom_handle_in(&ctx->intercom_ctx, ctx, events[i].data.fd);
