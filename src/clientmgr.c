@@ -134,7 +134,7 @@ void clientmgr_pruneclient_task(void *d) {
   clock_gettime(CLOCK_MONOTONIC, &now);
 
   struct timespec then = now;
-  then.tv_sec += IP_CHECKCLIENT_TIMEOUT;
+  then.tv_sec -= IP_CHECKCLIENT_TIMEOUT;
 
   for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
     struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
