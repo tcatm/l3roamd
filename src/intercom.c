@@ -313,6 +313,7 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 
   ssize_t packet_len = sizeof(intercom_packet_info) + i * sizeof(intercom_packet_info_entry);
   intercom_send_packet_unicast(ctx, recipient, (uint8_t*)packet, packet_len);
+  free(packet);
 }
 
 void intercom_claim(intercom_ctx *ctx, uint8_t *mac, uint32_t lastseen) {
