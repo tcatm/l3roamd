@@ -76,67 +76,6 @@ void establish_route(struct l3ctx *ctx, const struct in6_addr *addr) {
   intercom_seek(&ctx->intercom_ctx, addr);
 }
 
-bool process_timer_entry(struct l3ctx *ctx, struct timespec now, const struct in6_addr *addr, struct ip_entry *entry) {
-  entry->try++;
-
-  printf("proces entry %i\n", entry->try);
-
-  if (entry->try >= 4) {
-    // TODO icmp unreachable senden
-    return true;
-  } else {
-    entry->timeout = now.tv_sec + 1;
-
-    establish_route(ctx, addr);
-
-    return false;
-  }
-}
-
-void handle_timer(struct l3ctx *ctx) {
-  unsigned long long nEvents;
-
-  struct timespec now;
-  clock_gettime(CLOCK_MONOTONIC, &now);
-
-  read(ctx->timerfd, &nEvents, sizeof(nEvents));
-
-  printf("timer\n");
-
-  for (int i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
-    struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
-
-    if (e->v->timeout <= now.tv_sec) {
-      bool delete = process_timer_entry(ctx, now, &e->k, e->v);
-
-      if (delete)
-        VECTOR_DELETE(ctx->addrs, i--);
-    }
-  }
-
-  schedule(ctx);
-}
-
-void schedule(struct l3ctx *ctx) {
-  time_t min;
-  int i;
-
-  for (i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
-    struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
-
-    if (e->v->timeout < min || i == 0)
-      min = e->v->timeout;
-  }
-
-  if (i == 0)
-    return;
-
-  struct itimerspec t = {};
-  t.it_value.tv_sec = min;
-
-  timerfd_settime(ctx->timerfd, TFD_TIMER_ABSTIME, &t, NULL);
-}
-
 void handle_packet(struct l3ctx *ctx, uint8_t packet[], ssize_t packet_len) {
   struct in6_addr dst;
   memcpy(&dst, packet + 24, 16);
@@ -161,14 +100,6 @@ void handle_packet(struct l3ctx *ctx, uint8_t packet[], ssize_t packet_len) {
     VECTOR_ADD(ctx->addrs, entry);
 
     e = entry.v;
-
-    struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-
-    e->try = 0;
-    e->timeout = now.tv_sec + 1;
-
-    schedule(ctx);
   }
 
   struct packet *p = malloc(sizeof(struct packet));
@@ -179,8 +110,7 @@ void handle_packet(struct l3ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 
   VECTOR_ADD(e->packets, p);
 
-  if (e->try == 0)
-    establish_route(ctx, &dst);
+  establish_route(ctx, &dst);
 }
 
 void drain_output_queue(struct l3ctx *ctx) {
@@ -372,8 +302,6 @@ int main(int argc, char *argv[]) {
       default:
         fprintf(stderr, "Invalid parameter %c ignored.\n", c);
     }
-
-  ctx.timerfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
 
   list_new(&ctx.output_queue);
 

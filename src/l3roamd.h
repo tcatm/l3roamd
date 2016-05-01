@@ -21,8 +21,6 @@ struct tun_iface {
 };
 
 struct ip_entry {
-  time_t timeout;
-  uint8_t try;
   VECTOR(struct packet*) packets;
 };
 
@@ -37,7 +35,6 @@ struct entry {
 };
 
 struct l3ctx {
-  int timerfd;
   struct tun_iface tun;
   int rtnl_sock;
   int icmp6fd;
