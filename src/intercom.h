@@ -32,6 +32,7 @@ typedef struct __attribute__((__packed__)) {
 
 typedef struct __attribute__((__packed__)) {
   intercom_packet_hdr hdr;
+  uint8_t relinquished;  // != 0 indicates that the node previously managed the client
   uint8_t mac[6];
   uint32_t lastseen;
   uint8_t num_addresses;
