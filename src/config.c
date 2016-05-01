@@ -33,9 +33,8 @@ bool parse_config(const char *filename) {
   if (fp == NULL)
     return false;
 
-  while ((read = getline(&line, &len, fp)) != -1) {
+  while ((read = getline(&line, &len, fp)) != -1)
     parse_line(line);
-  }
 
   fclose(fp);
   free(line);
