@@ -52,3 +52,10 @@ static inline void exit_error(const char *format, ...) {
 	_exit_error(1, 0, format, ap);
 	va_end(ap);
 }
+
+static inline void exit_bug(const char *format, ...) {
+	va_list ap;
+	va_start(ap, format);
+	_exit_error(1, 0, format, ap);
+	va_end(ap);
+}

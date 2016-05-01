@@ -5,6 +5,7 @@
 #include "intercom.h"
 #include "wifistations.h"
 #include "clientmgr.h"
+#include "taskqueue.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -45,6 +46,7 @@ struct l3ctx {
   const char *clientif;
   uint8_t icmp6mac[6];
   LinkedList output_queue;
+  taskqueue_ctx taskqueue_ctx;
   intercom_ctx intercom_ctx;
   wifistations_ctx wifistations_ctx;
   clientmgr_ctx clientmgr_ctx;
