@@ -49,3 +49,4 @@ void clientmgr_add_client(clientmgr_ctx *ctx, struct l3ctx *l3ctx, uint8_t *mac)
 void print_client(struct client *client);
 void clientmgr_pruneclient_task(void *d);
 void clientmgr_checkclient_task(void *d);
+void clientmgr_remove_route(struct l3ctx *l3ctx, clientmgr_ctx *ctx, struct client_ip *ip);

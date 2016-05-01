@@ -120,6 +120,9 @@ void clientmgr_pruneclient_task(void *d) {
   if (client == NULL)
     return;
 
+  if (!client->ours)
+    return;
+
   printf("Pruning client\n");
   print_client(client);
 
@@ -130,9 +133,9 @@ void clientmgr_pruneclient_task(void *d) {
       char str[INET6_ADDRSTRLEN];
       inet_ntop(AF_INET6, &ip->address, str, INET6_ADDRSTRLEN);
       printf("Pruning IP %s\n", str);
-      // TODO remove ip from client
-      // TODO remove route
-      // TODO write a function that removes an ip from a client an the route (if present)
+
+      clientmgr_remove_route(data->l3ctx, data->ctx, ip);
+      clientmgr_delete_client_ip(client, &ip->address);
     }
   }
 }
@@ -143,6 +146,9 @@ void clientmgr_checkclient_task(void *d) {
   struct client *client = clientmgr_get_client(data->ctx, data->mac);
 
   if (client == NULL)
+    return;
+
+  if (!client->ours)
     return;
 
   printf("Checking on client\n");
@@ -242,24 +248,29 @@ void clientmgr_update_client_routes(struct l3ctx *ctx, unsigned int table, struc
 }
 
 // TODO funktion evtl. nach routes.c?
-void clientmgr_remove_client_routes(struct l3ctx *ctx, unsigned int table, struct client *client) {
+
+void clientmgr_remove_route(struct l3ctx *l3ctx, clientmgr_ctx *ctx, struct client_ip *ip) {
+  unsigned int ifindex = if_nametoindex(l3ctx->clientif);
+
+  struct kernel_route route = {
+    .plen = 128,
+    .proto = 23,
+    .ifindex = ifindex,
+    .table = ctx->export_table
+  };
+
+  memcpy(route.prefix, ip->address.s6_addr, 16);
+
+  remove_route(l3ctx, &route);
+}
+
+void clientmgr_remove_client_routes(struct l3ctx *l3ctx, clientmgr_ctx *ctx, struct client *client) {
   // TODO ifindex auslagern, netlink socket und so
   printf("Removing routes\n");
-  unsigned int ifindex = if_nametoindex(ctx->clientif);
 
   for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
-    struct client_ip *e = &VECTOR_INDEX(client->addresses, i);
-
-    struct kernel_route route = {
-      .plen = 128,
-      .proto = 23,
-      .ifindex = ifindex,
-      .table = table
-    };
-
-    memcpy(route.prefix, e->address.s6_addr, 16);
-
-    remove_route(ctx, &route);
+    struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
+    clientmgr_remove_route(l3ctx, ctx, ip);
   }
 }
 
@@ -319,7 +330,7 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, struct l3ctx *l3ctx, uint32_t la
     client->ours = false;
     intercom_info(&l3ctx->intercom_ctx, sender, client);
 
-    clientmgr_remove_client_routes(l3ctx, ctx->export_table, client);
+    clientmgr_remove_client_routes(l3ctx, ctx, client);
     clientmgr_delete_client(ctx, mac);
   }
 
