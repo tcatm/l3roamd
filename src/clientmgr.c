@@ -72,14 +72,14 @@ void clientmgr_delete_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
 void clientmgr_init(clientmgr_ctx *ctx) {
 }
 
-void clientmgr_schedule_client_task(clientmgr_ctx *ctx, struct l3ctx *l3ctx, void (*f)(void *), uint8_t mac[6]) {
+void clientmgr_schedule_client_task(clientmgr_ctx *ctx, struct l3ctx *l3ctx, unsigned int timeout, void (*f)(void *), uint8_t mac[6]) {
   struct client_task *data = calloc(1, sizeof(struct client_task));
 
   data->ctx = ctx;
   data->l3ctx = l3ctx;
   memcpy(data->mac, mac, 6);
 
-  post_task(&l3ctx->taskqueue_ctx, IP_CHECKCLIENT_TIMEOUT, f, data);
+  post_task(&l3ctx->taskqueue_ctx, timeout, f, data);
 }
 
 void clientmgr_add_client(clientmgr_ctx *ctx, struct l3ctx *l3ctx, uint8_t *mac) {
@@ -107,7 +107,7 @@ void clientmgr_add_client(clientmgr_ctx *ctx, struct l3ctx *l3ctx, uint8_t *mac)
 
   intercom_claim(&l3ctx->intercom_ctx, mac, now.tv_nsec);
 
-  clientmgr_schedule_client_task(ctx, l3ctx, clientmgr_checkclient_task, client->mac);
+  clientmgr_schedule_client_task(ctx, l3ctx, IP_CHECKCLIENT_TIMEOUT, clientmgr_checkclient_task, client->mac);
 
   clientmgr_update_client_routes(l3ctx, ctx->export_table, client);
 }
@@ -126,10 +126,15 @@ void clientmgr_pruneclient_task(void *d) {
   printf("Pruning client\n");
   print_client(client);
 
+  struct timespec then;
+  clock_gettime(CLOCK_MONOTONIC, &then);
+
+  then.tv_sec += IP_CHECKCLIENT_TIMEOUT;
+
   for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
     struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
 
-    if (ip->outstanding_replies > 0) {
+    if (timespec_cmp(ip->lastseen, then) <= 0) {
       char str[INET6_ADDRSTRLEN];
       inet_ntop(AF_INET6, &ip->address, str, INET6_ADDRSTRLEN);
       printf("Pruning IP %s\n", str);
@@ -154,16 +159,13 @@ void clientmgr_checkclient_task(void *d) {
   printf("Checking on client\n");
   print_client(client);
 
-  // send solicitation for all IPs of this client
-
   for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
     struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
 
-    ip->outstanding_replies++;
     icmp6_send_solicitation(data->l3ctx, &ip->address);
   }
 
-  clientmgr_schedule_client_task(data->ctx, data->l3ctx, clientmgr_pruneclient_task, data->mac);
+  clientmgr_schedule_client_task(data->ctx, data->l3ctx, 2 * IP_CHECKCLIENT_TIMEOUT, clientmgr_pruneclient_task, data->mac);
   free(d);
 }
 
@@ -218,10 +220,7 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct l3ctx *l3ctx, struct in6_a
 
   print_client(client);
 
-  if (ip->outstanding_replies > 0)
-    ip->outstanding_replies--;
-
-  clientmgr_schedule_client_task(ctx, l3ctx, clientmgr_checkclient_task, client->mac);
+  clientmgr_schedule_client_task(ctx, l3ctx, IP_CHECKCLIENT_TIMEOUT, clientmgr_checkclient_task, client->mac);
 
   clientmgr_update_client_routes(l3ctx, ctx->export_table, client);
 }
@@ -348,6 +347,6 @@ void print_client(struct client *client) {
 
     char str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET6, &e->address, str, INET6_ADDRSTRLEN);
-    printf("  - %s\n", str);
+    printf("  - %s (%ld.%.9ld)\n", str, e->lastseen.tv_sec, e->lastseen.tv_nsec);
   }
 }

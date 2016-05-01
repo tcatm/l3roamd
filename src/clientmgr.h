@@ -17,7 +17,6 @@ struct prefix {
 struct client_ip {
   struct in6_addr address;
   struct timespec lastseen;
-  unsigned int outstanding_replies;
 };
 
 struct client {
