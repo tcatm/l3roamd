@@ -287,7 +287,7 @@ int main(int argc, char *argv[]) {
 
 	break;
       case 'c':
-	parse_config(optarg);
+        parse_config(optarg);
         break;
       case 'p':
         if (!parse_prefix(&ctx.clientmgr_ctx.prefix, optarg))
