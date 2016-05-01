@@ -214,6 +214,7 @@ void loop(struct l3ctx *ctx) {
 void usage() {
   puts("Usage: l3roamd [-h] -a <ip6> -p <prefix> -i <clientif> -m <meshif> ... -t <export table>");
   puts("  -a <ip6>          ip address of this node");
+  puts("  -c <file>	    configuration file");
   puts("  -p <prefix>       clientprefix"); // TODO mehrfache angabe sollte möglich sein
   puts("  -i <clientif>     client interface");
   puts("  -m <meshif>       mesh interface. may be specified multiple times");
