@@ -172,7 +172,7 @@ void clientmgr_checkclient_task(void *d) {
     icmp6_send_solicitation(data->l3ctx, &ip->address);
   }
 
-  clientmgr_schedule_client_task(data->ctx, data->l3ctx, 2 * IP_CHECKCLIENT_TIMEOUT, clientmgr_pruneclient_task, data->mac);
+  clientmgr_schedule_client_task(data->ctx, data->l3ctx, 1.5 * IP_CHECKCLIENT_TIMEOUT, clientmgr_pruneclient_task, data->mac);
   free(d);
 }
 
