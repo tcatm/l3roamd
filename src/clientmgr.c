@@ -1,6 +1,7 @@
 #include "clientmgr.h"
 #include "routes.h"
 #include "icmp6.h"
+#include "timespec.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -126,9 +127,10 @@ void clientmgr_pruneclient_task(void *d) {
   printf("Pruning client\n");
   print_client(client);
 
-  struct timespec then;
-  clock_gettime(CLOCK_MONOTONIC, &then);
+  struct timespec now;
+  clock_gettime(CLOCK_MONOTONIC, &now);
 
+  struct timespec then = now;
   then.tv_sec += IP_CHECKCLIENT_TIMEOUT;
 
   for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
@@ -137,7 +139,7 @@ void clientmgr_pruneclient_task(void *d) {
     if (timespec_cmp(ip->lastseen, then) <= 0) {
       char str[INET6_ADDRSTRLEN];
       inet_ntop(AF_INET6, &ip->address, str, INET6_ADDRSTRLEN);
-      printf("Pruning IP %s\n", str);
+      printf("Pruning IP %s (%lds ago)\n", str, now.tv_sec - ip->lastseen.tv_sec);
 
       clientmgr_remove_route(data->l3ctx, data->ctx, ip);
       clientmgr_delete_client_ip(client, &ip->address);
