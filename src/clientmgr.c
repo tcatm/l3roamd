@@ -108,7 +108,10 @@ void clientmgr_add_client(clientmgr_ctx *ctx, struct l3ctx *l3ctx, uint8_t *mac)
 
   intercom_claim(&l3ctx->intercom_ctx, mac, now.tv_nsec);
 
-  clientmgr_schedule_client_task(ctx, l3ctx, IP_CHECKCLIENT_TIMEOUT, clientmgr_checkclient_task, client->mac);
+  if (!client->check_pending) {
+    client->check_pending = true;
+    clientmgr_schedule_client_task(ctx, l3ctx, IP_CHECKCLIENT_TIMEOUT, clientmgr_checkclient_task, client->mac);
+  }
 
   clientmgr_update_client_routes(l3ctx, ctx->export_table, client);
 }
@@ -154,6 +157,8 @@ void clientmgr_checkclient_task(void *d) {
 
   if (client == NULL)
     return;
+
+  client->check_pending = false;
 
   if (!client->ours)
     return;
@@ -222,7 +227,10 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct l3ctx *l3ctx, struct in6_a
 
   print_client(client);
 
-  clientmgr_schedule_client_task(ctx, l3ctx, IP_CHECKCLIENT_TIMEOUT, clientmgr_checkclient_task, client->mac);
+  if (!client->check_pending) {
+    client->check_pending = true;
+    clientmgr_schedule_client_task(ctx, l3ctx, IP_CHECKCLIENT_TIMEOUT, clientmgr_checkclient_task, client->mac);
+  }
 
   clientmgr_update_client_routes(l3ctx, ctx->export_table, client);
 }

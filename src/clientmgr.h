@@ -21,6 +21,7 @@ struct client_ip {
 
 struct client {
   bool ours;
+  bool check_pending;
   uint8_t mac[6];
   struct timespec lastseen;
   VECTOR(struct client_ip) addresses;
