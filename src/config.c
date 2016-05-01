@@ -2,7 +2,7 @@
 void parse_line(char *line) {
   char delimiter[] = " ";
   char *ptr;
-  char * saveptr;
+  char *saveptr;
   ptr = strtok_r(line, delimiter, &saveptr);
   printf("key: %s\n", ptr);
   ptr = strtok_r(NULL, delimiter, &saveptr);
