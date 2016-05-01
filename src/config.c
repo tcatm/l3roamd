@@ -1,7 +1,4 @@
-#include <string.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <stdio.h>
+#include "config.h"
   void parse_line(char *line) {
     char delimiter[] = " ";
     char *ptr;

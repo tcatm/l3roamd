@@ -32,6 +32,7 @@
 #include "icmp6.h"
 #include "routes.h"
 #include "intercom.h"
+#include "config.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -274,7 +275,7 @@ int main(int argc, char *argv[]) {
   intercom_init(&ctx.intercom_ctx);
 
   int c;
-  while ((c = getopt(argc, argv, "ha:p:i:m:t:")) != -1)
+  while ((c = getopt(argc, argv, "ha:p:i:m:t:c:")) != -1)
     switch (c) {
       case 'h':
         usage();
@@ -283,6 +284,9 @@ int main(int argc, char *argv[]) {
         if(inet_pton(AF_INET6, optarg, &ctx.intercom_ctx.ip) != 1)
           exit_error("Can not parse IP address");
 
+	break;
+      case 'c':
+	parse_config(optarg);
         break;
       case 'p':
         if (!parse_prefix(&ctx.clientmgr_ctx.prefix, optarg))
