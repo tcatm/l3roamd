@@ -107,7 +107,7 @@ void clientmgr_add_client(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 
   print_client(client);
 
-  intercom_claim(CTX(intercom), mac, now.tv_nsec);
+  intercom_claim(CTX(intercom), mac, now.tv_sec);
 
   if (!client->check_pending) {
     client->check_pending = true;
@@ -303,7 +303,7 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
 
       if (ip == NULL) {
         VECTOR_ADD(client->addresses, *e);
-      } else if (e->lastseen.tv_nsec > ip->lastseen.tv_nsec) {
+      } else if (e->lastseen.tv_sec > ip->lastseen.tv_sec) {
         ip->lastseen = e->lastseen;
       }
     }
@@ -330,7 +330,7 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, uint32_t lastseen, uint8_t *mac,
 
   if (client->ours && client->lastseen.tv_sec > lastseen) {
     printf("Re-Claiming client\n");
-    intercom_claim(CTX(intercom), client->mac, now.tv_nsec - client->lastseen.tv_nsec);
+    intercom_claim(CTX(intercom), client->mac, now.tv_sec - client->lastseen.tv_sec);
   } else {
     printf("Dropping client\n");
     print_client(client);
