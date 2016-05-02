@@ -318,6 +318,7 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
   if (recipient != NULL)
     intercom_send_packet_unicast(ctx, recipient, (uint8_t*)packet, packet_len);
   else {
+    printf("Sending client to all neighbours\n");
     intercom_recently_seen_add(ctx, &packet->hdr);
 
     intercom_send_packet(ctx, (uint8_t*)packet, packet_len);
