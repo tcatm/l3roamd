@@ -235,6 +235,8 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
     clientmgr_schedule_client_task(ctx, IP_CHECKCLIENT_TIMEOUT, clientmgr_checkclient_task, client->mac);
   }
 
+  intercom_info(CTX(intercom), NULL, client);
+
   clientmgr_update_client_routes(ctx, ctx->export_table, client);
 }
 

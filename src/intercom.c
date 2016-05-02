@@ -280,6 +280,7 @@ void intercom_handle_in(intercom_ctx *ctx, int fd) {
 // Announce at most 32 addresses per client
 #define INFO_MAX 32
 
+/* recipient = NULL -> send to neighbours */
 void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client) {
   struct timespec now;
   clock_gettime(CLOCK_MONOTONIC, &now);
@@ -313,7 +314,14 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
   packet->num_addresses = i;
 
   ssize_t packet_len = sizeof(intercom_packet_info) + i * sizeof(intercom_packet_info_entry);
-  intercom_send_packet_unicast(ctx, recipient, (uint8_t*)packet, packet_len);
+
+  if (recipient != NULL)
+    intercom_send_packet_unicast(ctx, recipient, (uint8_t*)packet, packet_len);
+  else {
+    intercom_recently_seen_add(ctx, &packet->hdr);
+
+    intercom_send_packet(ctx, (uint8_t*)packet, packet_len);
+  }
   free(packet);
 }
 
