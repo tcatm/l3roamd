@@ -315,7 +315,8 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
 
   print_client(client);
 
-  clientmgr_update_client_routes(ctx, ctx->export_table, client);
+  if (client->ours)
+    clientmgr_update_client_routes(ctx, ctx->export_table, client);
 }
 
 void clientmgr_handle_claim(clientmgr_ctx *ctx, uint32_t lastseen, uint8_t *mac, const struct in6_addr *sender) {
@@ -348,12 +349,16 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, uint32_t lastseen, uint8_t *mac,
 
 void print_client(struct client *client) {
   char ifname[IFNAMSIZ];
-	if_indextoname(client->ifindex, ifname);
 
   printf("Client %02x:%02x:%02x:%02x:%02x:%02x\n", client->mac[0], client->mac[1],
                                                    client->mac[2], client->mac[3],
                                                    client->mac[4], client->mac[5]);
-  printf("Interface: %s (%i)\n", ifname, client->ifindex);
+
+  if (client->ifindex != 0) {
+    if_indextoname(client->ifindex, ifname);
+    printf("Interface: %s (%i)\n", ifname, client->ifindex);
+  }
+
   printf("  Adresses\n");
 
   for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
