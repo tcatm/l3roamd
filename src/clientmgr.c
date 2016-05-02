@@ -97,6 +97,7 @@ void clientmgr_add_client(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
     client = &VECTOR_INDEX(ctx->clients, VECTOR_LEN(ctx->clients) - 1);
     client = &_client;
   } else if (client->ours) {
+    printf("This client is already ours.\n");
     return;
   }
 
