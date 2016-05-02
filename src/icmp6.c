@@ -43,7 +43,7 @@ static inline int setsockopt_int(int socket, int level, int option, int value) {
 	return setsockopt(socket, level, option, &value, sizeof(value));
 }
 
-void icmp6_init(struct l3ctx *ctx) {
+void icmp6_init(icmp6_ctx *ctx) {
 	int fd = socket(PF_INET6, SOCK_RAW | SOCK_NONBLOCK, IPPROTO_ICMPV6);
 	setsockopt_int(fd, IPPROTO_RAW, IPV6_CHECKSUM, 2);
 	setsockopt_int(fd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, 255);
@@ -55,17 +55,17 @@ void icmp6_init(struct l3ctx *ctx) {
 	ICMP6_FILTER_SETPASS(ND_NEIGHBOR_ADVERT, &filter);
 	setsockopt(fd, IPPROTO_ICMPV6, ICMP6_FILTER, &filter, sizeof(filter));
 
-	ctx->icmp6fd = fd;
+	ctx->fd = fd;
 
-	ctx->icmp6nsfd = icmp6_init_packet();
+	ctx->nsfd = icmp6_init_packet();
 
 	icmp6_setup_interface(ctx);
 }
 
-void icmp6_setup_interface(struct l3ctx *ctx) {
-	ctx->icmp6ok = false;
+void icmp6_setup_interface(icmp6_ctx *ctx) {
+	ctx->ok = false;
 
-	int rc = setsockopt(ctx->icmp6fd, SOL_SOCKET, SO_BINDTODEVICE, ctx->clientif, strnlen(ctx->clientif, IFNAMSIZ-1));
+	int rc = setsockopt(ctx->fd, SOL_SOCKET, SO_BINDTODEVICE, ctx->clientif, strnlen(ctx->clientif, IFNAMSIZ-1));
 
 	printf("Setting up icmp6 interface: %i\n", rc);
 
@@ -74,11 +74,11 @@ void icmp6_setup_interface(struct l3ctx *ctx) {
 
 	struct ifreq req = {};
 	strncpy(req.ifr_name, ctx->clientif, IFNAMSIZ-1);
-	ioctl(ctx->icmp6fd, SIOCGIFHWADDR, &req);
-	memcpy(ctx->icmp6mac, req.ifr_hwaddr.sa_data, 6);
+	ioctl(ctx->fd, SIOCGIFHWADDR, &req);
+	memcpy(ctx->mac, req.ifr_hwaddr.sa_data, 6);
 
 	strncpy(req.ifr_name, ctx->clientif, IFNAMSIZ-1);
-	ioctl(ctx->icmp6fd, SIOCGIFINDEX, &req);
+	ioctl(ctx->fd, SIOCGIFINDEX, &req);
 
 	struct sockaddr_ll lladdr;
 
@@ -90,12 +90,12 @@ void icmp6_setup_interface(struct l3ctx *ctx) {
 	lladdr.sll_hatype = 0;
 	lladdr.sll_pkttype = 0;
 	lladdr.sll_halen = ETH_ALEN;
-	bind(ctx->icmp6nsfd, (struct sockaddr *)&lladdr, sizeof(lladdr));
+	bind(ctx->nsfd, (struct sockaddr *)&lladdr, sizeof(lladdr));
 
-	ctx->icmp6ok = true;
+	ctx->ok = true;
 }
 
-void icmp6_interface_changed(struct l3ctx *ctx, int type, const struct ifinfomsg *msg) {
+void icmp6_interface_changed(icmp6_ctx *ctx, int type, const struct ifinfomsg *msg) {
 	char ifname[IFNAMSIZ];
 
 	if (if_indextoname(msg->ifi_index, ifname) == NULL)
@@ -106,6 +106,8 @@ void icmp6_interface_changed(struct l3ctx *ctx, int type, const struct ifinfomsg
 
 	printf("icmp6 interface change detected\n");
 
+	ctx->ifindex = msg->ifi_index;
+
 	switch (type) {
     case RTM_NEWLINK:
     case RTM_SETLINK:
@@ -113,7 +115,7 @@ void icmp6_interface_changed(struct l3ctx *ctx, int type, const struct ifinfomsg
       break;
 
     case RTM_DELLINK:
-			ctx->icmp6ok = false;
+			ctx->ok = false;
       break;
   }
 }
@@ -130,7 +132,7 @@ struct __attribute__((__packed__)) adv_packet {
 	uint8_t hw_addr[6];
 };
 
-void icmp6_handle_ns_in(struct l3ctx *ctx, int fd) {
+void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 	char str[INET6_ADDRSTRLEN];
   struct msghdr msghdr;
 	memset (&msghdr, 0, sizeof (msghdr));
@@ -158,7 +160,7 @@ void icmp6_handle_ns_in(struct l3ctx *ctx, int fd) {
 		.msg_controllen = sizeof (cbuf)
 	};
 
-	ssize_t rc = recvmsg(ctx->icmp6nsfd, &hdr, 0);
+	ssize_t rc = recvmsg(ctx->nsfd, &hdr, 0);
 
 	if (rc == -1)
 		return;
@@ -175,11 +177,11 @@ void icmp6_handle_ns_in(struct l3ctx *ctx, int fd) {
 		inet_ntop(AF_INET6, &packet.sol.hdr.nd_ns_target, str, INET6_ADDRSTRLEN);
 		printf("  Target: %s\n", str);
 
-		clientmgr_add_address(&ctx->clientmgr_ctx, ctx, &packet.sol.hdr.nd_ns_target, mac);
+		clientmgr_add_address(CTX(clientmgr), &packet.sol.hdr.nd_ns_target, mac, ctx->ifindex);
 	}
 }
 
-void icmp6_handle_in(struct l3ctx *ctx, int fd) {
+void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 printf("icmp\n");
 	char str[INET6_ADDRSTRLEN];
   struct msghdr msghdr;
@@ -204,7 +206,7 @@ printf("icmp\n");
 		.msg_controllen = sizeof (cbuf)
 	};
 
-	ssize_t rc = recvmsg(ctx->icmp6fd, &hdr, 0);
+	ssize_t rc = recvmsg(ctx->fd, &hdr, 0);
 
 	if (rc == -1)
 		return;
@@ -223,10 +225,10 @@ printf("icmp\n");
 	inet_ntop(AF_INET6, &packet.hdr.nd_na_target, str, INET6_ADDRSTRLEN);
 	printf("Neighbor Advertisement: %s\n", str);
 
-  clientmgr_add_address(&ctx->clientmgr_ctx, ctx, &packet.hdr.nd_na_target, packet.hw_addr);
+  clientmgr_add_address(CTX(clientmgr), &packet.hdr.nd_na_target, packet.hw_addr, ctx->ifindex);
 }
 
-void icmp6_send_solicitation(struct l3ctx *ctx, const struct in6_addr *addr) {
+void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
   struct sol_packet packet;
 
   packet.hdr.nd_ns_hdr.icmp6_type = ND_NEIGHBOR_SOLICIT;
@@ -237,7 +239,7 @@ void icmp6_send_solicitation(struct l3ctx *ctx, const struct in6_addr *addr) {
 
   packet.opt.nd_opt_type = ND_OPT_SOURCE_LINKADDR;
 	packet.opt.nd_opt_len = 1;
-  memcpy(packet.hw_addr, ctx->icmp6mac, 6);
+  memcpy(packet.hw_addr, ctx->mac, 6);
 
   struct sockaddr_in6 dst = {};
   dst.sin6_family = AF_INET6;
@@ -248,5 +250,5 @@ void icmp6_send_solicitation(struct l3ctx *ctx, const struct in6_addr *addr) {
   inet_ntop(AF_INET6, &dst.sin6_addr, str, sizeof str);
   printf("Send NS to %s\n", str);
 
-  sendto(ctx->icmp6fd, &packet, sizeof(packet), 0, &dst, sizeof(dst));
+  sendto(ctx->fd, &packet, sizeof(packet), 0, &dst, sizeof(dst));
 }

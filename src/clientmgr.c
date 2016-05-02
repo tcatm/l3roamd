@@ -73,17 +73,16 @@ void clientmgr_delete_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
 void clientmgr_init(clientmgr_ctx *ctx) {
 }
 
-void clientmgr_schedule_client_task(clientmgr_ctx *ctx, struct l3ctx *l3ctx, unsigned int timeout, void (*f)(void *), uint8_t mac[6]) {
+void clientmgr_schedule_client_task(clientmgr_ctx *ctx, unsigned int timeout, void (*f)(void *), uint8_t mac[6]) {
   struct client_task *data = calloc(1, sizeof(struct client_task));
 
   data->ctx = ctx;
-  data->l3ctx = l3ctx;
   memcpy(data->mac, mac, 6);
 
-  post_task(&l3ctx->taskqueue_ctx, timeout, f, data);
+  post_task(CTX(taskqueue), timeout, f, data);
 }
 
-void clientmgr_add_client(clientmgr_ctx *ctx, struct l3ctx *l3ctx, uint8_t *mac) {
+void clientmgr_add_client(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex) {
   printf("A client roamed to us\n");
 
   struct timespec now;
@@ -103,17 +102,18 @@ void clientmgr_add_client(clientmgr_ctx *ctx, struct l3ctx *l3ctx, uint8_t *mac)
 
   client->lastseen = now;
   client->ours = true;
+  client->ifindex = ifindex;
 
   print_client(client);
 
-  intercom_claim(&l3ctx->intercom_ctx, mac, now.tv_nsec);
+  intercom_claim(CTX(intercom), mac, now.tv_nsec);
 
   if (!client->check_pending) {
     client->check_pending = true;
-    clientmgr_schedule_client_task(ctx, l3ctx, IP_CHECKCLIENT_TIMEOUT, clientmgr_checkclient_task, client->mac);
+    clientmgr_schedule_client_task(ctx, IP_CHECKCLIENT_TIMEOUT, clientmgr_checkclient_task, client->mac);
   }
 
-  clientmgr_update_client_routes(l3ctx, ctx->export_table, client);
+  clientmgr_update_client_routes(ctx, ctx->export_table, client);
 }
 
 void clientmgr_pruneclient_task(void *d) {
@@ -144,7 +144,7 @@ void clientmgr_pruneclient_task(void *d) {
       inet_ntop(AF_INET6, &ip->address, str, INET6_ADDRSTRLEN);
       printf("Pruning IP %s (%lds ago)\n", str, now.tv_sec - ip->lastseen.tv_sec);
 
-      clientmgr_remove_route(data->l3ctx, data->ctx, ip);
+      clientmgr_remove_route(data->ctx, client, ip);
       clientmgr_delete_client_ip(client, &ip->address);
     }
   }
@@ -152,6 +152,7 @@ void clientmgr_pruneclient_task(void *d) {
 
 void clientmgr_checkclient_task(void *d) {
   struct client_task *data = d;
+  clientmgr_ctx *ctx = data->ctx;
 
   struct client *client = clientmgr_get_client(data->ctx, data->mac);
 
@@ -169,14 +170,14 @@ void clientmgr_checkclient_task(void *d) {
   for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
     struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
 
-    icmp6_send_solicitation(data->l3ctx, &ip->address);
+    icmp6_send_solicitation(CTX(icmp6), &ip->address);
   }
 
-  clientmgr_schedule_client_task(data->ctx, data->l3ctx, 1.5 * IP_CHECKCLIENT_TIMEOUT, clientmgr_pruneclient_task, data->mac);
+  clientmgr_schedule_client_task(ctx, 1.5 * IP_CHECKCLIENT_TIMEOUT, clientmgr_pruneclient_task, data->mac);
   free(d);
 }
 
-void clientmgr_add_address(clientmgr_ctx *ctx, struct l3ctx *l3ctx, struct in6_addr *address, uint8_t *mac) {
+void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex) {
   // TODO sicherstellen, dass IPs nur jeweils einem Client zugeordnet sind
 
   printf("Add address 0\n");
@@ -223,67 +224,63 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct l3ctx *l3ctx, struct in6_a
 
   client->ours = true;
   client->lastseen = now;
+  client->ifindex = ifindex;
   ip->lastseen = now;
 
   print_client(client);
 
   if (!client->check_pending) {
     client->check_pending = true;
-    clientmgr_schedule_client_task(ctx, l3ctx, IP_CHECKCLIENT_TIMEOUT, clientmgr_checkclient_task, client->mac);
+    clientmgr_schedule_client_task(ctx, IP_CHECKCLIENT_TIMEOUT, clientmgr_checkclient_task, client->mac);
   }
 
-  clientmgr_update_client_routes(l3ctx, ctx->export_table, client);
+  clientmgr_update_client_routes(ctx, ctx->export_table, client);
 }
 
 // TODO funktion evtl. nach routes.c?
-void clientmgr_update_client_routes(struct l3ctx *ctx, unsigned int table, struct client *client) {
-  // TODO ifindex auslagern, netlink socket und so
-  unsigned int ifindex = if_nametoindex(ctx->clientif);
-
+void clientmgr_update_client_routes(clientmgr_ctx *ctx, unsigned int table, struct client *client) {
   for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
     struct client_ip *e = &VECTOR_INDEX(client->addresses, i);
 
     struct kernel_route route = {
       .plen = 128,
       .proto = 23,
-      .ifindex = ifindex,
+      .ifindex = client->ifindex,
       .table = table
     };
 
     memcpy(route.prefix, e->address.s6_addr, 16);
 
-    insert_route(ctx, &route, client->mac);
+    insert_route(ctx->l3ctx, &route, client->mac);
   }
 }
 
 // TODO funktion evtl. nach routes.c?
 
-void clientmgr_remove_route(struct l3ctx *l3ctx, clientmgr_ctx *ctx, struct client_ip *ip) {
-  unsigned int ifindex = if_nametoindex(l3ctx->clientif);
-
+void clientmgr_remove_route(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip) {
   struct kernel_route route = {
     .plen = 128,
     .proto = 23,
-    .ifindex = ifindex,
+    .ifindex = client->ifindex,
     .table = ctx->export_table
   };
 
   memcpy(route.prefix, ip->address.s6_addr, 16);
 
-  remove_route(l3ctx, &route);
+  remove_route(ctx->l3ctx, &route);
 }
 
-void clientmgr_remove_client_routes(struct l3ctx *l3ctx, clientmgr_ctx *ctx, struct client *client) {
+void clientmgr_remove_client_routes(clientmgr_ctx *ctx, struct client *client) {
   // TODO ifindex auslagern, netlink socket und so
   printf("Removing routes\n");
 
   for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
     struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
-    clientmgr_remove_route(l3ctx, ctx, ip);
+    clientmgr_remove_route(ctx, client, ip);
   }
 }
 
-void clientmgr_handle_info(clientmgr_ctx *ctx, struct l3ctx *l3ctx, struct client *foreign_client) {
+void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
   printf("Received client info\n");
   print_client(foreign_client);
 
@@ -315,10 +312,10 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct l3ctx *l3ctx, struct clien
 
   print_client(client);
 
-  clientmgr_update_client_routes(l3ctx, ctx->export_table, client);
+  clientmgr_update_client_routes(ctx, ctx->export_table, client);
 }
 
-void clientmgr_handle_claim(clientmgr_ctx *ctx, struct l3ctx *l3ctx, uint32_t lastseen, uint8_t *mac, const struct in6_addr *sender) {
+void clientmgr_handle_claim(clientmgr_ctx *ctx, uint32_t lastseen, uint8_t *mac, const struct in6_addr *sender) {
   struct timespec now;
   clock_gettime(CLOCK_MONOTONIC, &now);
 
@@ -331,15 +328,15 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, struct l3ctx *l3ctx, uint32_t la
 
   if (client->ours && client->lastseen.tv_sec > lastseen) {
     printf("Re-Claiming client\n");
-    intercom_claim(&l3ctx->intercom_ctx, client->mac, now.tv_nsec - client->lastseen.tv_nsec);
+    intercom_claim(CTX(intercom), client->mac, now.tv_nsec - client->lastseen.tv_nsec);
   } else {
     printf("Dropping client\n");
     print_client(client);
 
     client->ours = false;
-    intercom_info(&l3ctx->intercom_ctx, sender, client);
+    intercom_info(CTX(intercom), sender, client);
 
-    clientmgr_remove_client_routes(l3ctx, ctx, client);
+    clientmgr_remove_client_routes(ctx, client);
     clientmgr_delete_client(ctx, mac);
   }
 
@@ -347,9 +344,13 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, struct l3ctx *l3ctx, uint32_t la
 }
 
 void print_client(struct client *client) {
+  char ifname[IFNAMSIZ];
+	if_indextoname(client->ifindex, ifname);
+
   printf("Client %02x:%02x:%02x:%02x:%02x:%02x\n", client->mac[0], client->mac[1],
                                                    client->mac[2], client->mac[3],
                                                    client->mac[4], client->mac[5]);
+  printf("Interface: %s\n", ifname);
   printf("  Adresses\n");
 
   for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {

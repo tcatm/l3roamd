@@ -72,7 +72,7 @@ void establish_route(struct l3ctx *ctx, const struct in6_addr *addr) {
 
   printf("Establish route %s\n", str);
 
-  icmp6_send_solicitation(ctx, addr);
+  icmp6_send_solicitation(&ctx->icmp6_ctx, addr);
 
   intercom_seek(&ctx->intercom_ctx, addr);
 }
@@ -149,15 +149,15 @@ void loop(struct l3ctx *ctx) {
   if (s == -1)
     exit_error("epoll_ctl");
 
-  event.data.fd = ctx->icmp6fd;
+  event.data.fd = ctx->icmp6_ctx.fd;
   event.events = EPOLLIN;
-  s = epoll_ctl(efd, EPOLL_CTL_ADD, ctx->icmp6fd, &event);
+  s = epoll_ctl(efd, EPOLL_CTL_ADD, ctx->icmp6_ctx.fd, &event);
   if (s == -1)
     exit_error("epoll_ctl");
 
-  event.data.fd = ctx->icmp6nsfd;
+  event.data.fd = ctx->icmp6_ctx.nsfd;
   event.events = EPOLLIN;
-  s = epoll_ctl(efd, EPOLL_CTL_ADD, ctx->icmp6nsfd, &event);
+  s = epoll_ctl(efd, EPOLL_CTL_ADD, ctx->icmp6_ctx.nsfd, &event);
   if (s == -1)
     exit_error("epoll_ctl");
 
@@ -191,15 +191,15 @@ void loop(struct l3ctx *ctx) {
       } else if (ctx->tun.fd == events[i].data.fd) {
         if (events[i].events & EPOLLIN)
           tun_handle_in(ctx, events[i].data.fd);
-      } else if (ctx->icmp6fd == events[i].data.fd) {
+      } else if (ctx->icmp6_ctx.fd == events[i].data.fd) {
         if (events[i].events & EPOLLIN)
-          icmp6_handle_in(ctx, events[i].data.fd);
-      } else if (ctx->icmp6nsfd == events[i].data.fd) {
+          icmp6_handle_in(&ctx->icmp6_ctx, events[i].data.fd);
+      } else if (ctx->icmp6_ctx.nsfd == events[i].data.fd) {
         if (events[i].events & EPOLLIN)
-          icmp6_handle_ns_in(ctx, events[i].data.fd);
+          icmp6_handle_ns_in(&ctx->icmp6_ctx, events[i].data.fd);
       } else if (ctx->intercom_ctx.fd == events[i].data.fd) {
         if (events[i].events & EPOLLIN)
-          intercom_handle_in(&ctx->intercom_ctx, ctx, events[i].data.fd);
+          intercom_handle_in(&ctx->intercom_ctx, events[i].data.fd);
       } else if (ctx->taskqueue_ctx.fd == events[i].data.fd) {
         taskqueue_run(&ctx->taskqueue_ctx);
       } else if (ctx->wifistations_ctx.fd == events[i].data.fd) {
@@ -265,13 +265,18 @@ static void init_random(void) {
 void interfaces_changed(struct l3ctx *ctx, int type, const struct ifinfomsg *msg) {
   printf("interfaces changed\n");
   intercom_update_interfaces(&ctx->intercom_ctx);
-  icmp6_interface_changed(ctx, type, msg);
+  icmp6_interface_changed(&ctx->icmp6_ctx, type, msg);
 }
 
 int main(int argc, char *argv[]) {
   struct l3ctx ctx = {};
 
   init_random();
+
+  ctx.taskqueue_ctx.l3ctx = &ctx;
+  ctx.wifistations_ctx.l3ctx = &ctx;
+  ctx.clientmgr_ctx.l3ctx = &ctx;
+  ctx.intercom_ctx.l3ctx = &ctx;
 
   intercom_init(&ctx.intercom_ctx);
 
@@ -296,7 +301,7 @@ int main(int argc, char *argv[]) {
         printf("plen %i\n", ctx.clientmgr_ctx.prefix.plen);
         break;
       case 'i':
-        ctx.clientif = strdupa(optarg);
+        ctx.icmp6_ctx.clientif = strdupa(optarg);
         break;
       case 'm':
         intercom_add_interface(&ctx.intercom_ctx, strdupa(optarg));
@@ -314,7 +319,7 @@ int main(int argc, char *argv[]) {
 
   rtnl_init(&ctx);
 
-  icmp6_init(&ctx);
+  icmp6_init(&ctx.icmp6_ctx);
 
   taskqueue_init(&ctx.taskqueue_ctx);
 

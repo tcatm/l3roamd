@@ -50,6 +50,7 @@ typedef struct {
 } intercom_if;
 
 typedef struct {
+  struct l3ctx *l3ctx;
   int fd;
   struct sockaddr_in6 groupaddr;
   struct in6_addr ip;
@@ -64,7 +65,7 @@ void intercom_recently_seen_add(intercom_ctx *ctx, intercom_packet_hdr *hdr);
 void intercom_send_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len);
 void intercom_seek(intercom_ctx *ctx, const struct in6_addr *address);
 void intercom_init(intercom_ctx *ctx);
-void intercom_handle_in(intercom_ctx *ctx, struct l3ctx *l3ctx, int fd);
+void intercom_handle_in(intercom_ctx *ctx, int fd);
 void intercom_add_interface(intercom_ctx *ctx, char *ifname);
 void intercom_update_interfaces(intercom_ctx *ctx);
 void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client);

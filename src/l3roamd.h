@@ -6,12 +6,13 @@
 #include "wifistations.h"
 #include "clientmgr.h"
 #include "taskqueue.h"
+#include "icmp6.h"
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <arpa/inet.h>
 #include <net/if.h>
-#include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 
 struct tun_iface {
@@ -35,25 +36,22 @@ struct entry {
 };
 
 struct l3ctx {
-  struct tun_iface tun;
-  int rtnl_sock;
-  int icmp6fd;
-  int icmp6nsfd;
-  bool icmp6ok;
-  const char *clientif;
-  uint8_t icmp6mac[6];
-  LinkedList output_queue;
+  struct tun_iface tun; // FIXME own context
+  int rtnl_sock; // FIXME move to own context
+  LinkedList output_queue; // FIXME own context
   taskqueue_ctx taskqueue_ctx;
   intercom_ctx intercom_ctx;
   wifistations_ctx wifistations_ctx;
   clientmgr_ctx clientmgr_ctx;
-  VECTOR(struct entry) addrs;
+  icmp6_ctx icmp6_ctx;
+  VECTOR(struct entry) addrs; // FIXME own context
 };
 
-void schedule(struct l3ctx *ctx);
 void handle_packet(struct l3ctx *ctx, uint8_t packet[], ssize_t packet_len);
 void delete_entry(struct l3ctx *ctx, const struct in6_addr *k);
 void drain_output_queue(struct l3ctx *ctx);
 struct ip_entry *find_entry(struct l3ctx *ctx, const struct in6_addr *k);
 void establish_route(struct l3ctx *ctx, const struct in6_addr *addr);
 void interfaces_changed(struct l3ctx *ctx, int type, const struct ifinfomsg *msg);
+
+#define CTX(tgt) (&ctx->l3ctx->tgt ## _ctx)

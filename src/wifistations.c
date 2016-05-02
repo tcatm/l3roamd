@@ -65,7 +65,9 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
   nla_parse(tb, 8, genlmsg_attrdata(gnlh, 0),
   genlmsg_attrlen(gnlh, 0), NULL);
 
-  if_indextoname(nla_get_u32(tb[NL80211_ATTR_IFINDEX]), ifname);
+	unsigned int ifindex = nla_get_u32(tb[NL80211_ATTR_IFINDEX]);
+
+  if_indextoname(ifindex, ifname);
   printf("%s: ", ifname);
 
 	// TODO warum kann das NULL sein?
@@ -77,7 +79,7 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
       mac_addr_n2a(macbuf, nla_data(tb[NL80211_ATTR_MAC]));
 
       printf("new station %s\n", macbuf);
-			clientmgr_add_client(&ctx->clientmgr_ctx, ctx, nla_data(tb[NL80211_ATTR_MAC]));
+			clientmgr_add_client(&ctx->clientmgr_ctx, nla_data(tb[NL80211_ATTR_MAC]), ifindex);
       break;
     case NL80211_CMD_DEL_STATION:
       break;

@@ -8,6 +8,6 @@ add_executable(l3roamd main.c config.c intercom.c tun.c icmp6.c routes.c vector.
 
 target_link_libraries(l3roamd ${LIBNL_LIBRARIES} ${LIBNL_GENL_LIBRARIES})
 
-set_target_properties(l3roamd PROPERTIES COMPILE_FLAGS "-std=c99 -Wall" LINK_FLAGS "")
+set_target_properties(l3roamd PROPERTIES COMPILE_FLAGS "-std=gnu11 -Wall" LINK_FLAGS "")
 
 install(TARGETS l3roamd RUNTIME DESTINATION bin)

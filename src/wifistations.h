@@ -10,6 +10,7 @@ typedef struct {
 } wifistations_if;
 
 typedef struct {
+  struct l3ctx *l3ctx;
   int fd;
   struct nl_sock *nl_sock;
   struct nl_cb *cb;

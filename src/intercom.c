@@ -172,11 +172,11 @@ void intercom_recently_seen_add(intercom_ctx *ctx, intercom_packet_hdr *hdr) {
   VECTOR_ADD(ctx->recent_packets, *hdr);
 }
 
-void intercom_handle_seek(struct l3ctx *ctx, intercom_packet_seek *packet) {
-  icmp6_send_solicitation(ctx, (const struct in6_addr *)packet->address);
+void intercom_handle_seek(intercom_ctx *ctx, intercom_packet_seek *packet) {
+  icmp6_send_solicitation(CTX(icmp6), (const struct in6_addr *)packet->address);
 }
 
-void intercom_handle_claim(struct l3ctx *ctx, intercom_packet_claim *packet) {
+void intercom_handle_claim(intercom_ctx *ctx, intercom_packet_claim *packet) {
   struct timespec now;
   clock_gettime(CLOCK_MONOTONIC, &now);
   uint32_t lastseen = now.tv_sec - packet->lastseen;
@@ -185,10 +185,11 @@ void intercom_handle_claim(struct l3ctx *ctx, intercom_packet_claim *packet) {
 
   memcpy(&sender.s6_addr, &packet->hdr.sender, sizeof(uint8_t) * 16);
 
-  clientmgr_handle_claim(&ctx->clientmgr_ctx, ctx, lastseen, packet->mac, &sender);
+  // TODO maybe like this? CTX(clientmgr, handle_claim, lastseen, packet->mac, &sender);
+  clientmgr_handle_claim(CTX(clientmgr), lastseen, packet->mac, &sender);
 }
 
-void intercom_handle_info(struct l3ctx *ctx, intercom_packet_info *packet) {
+void intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet) {
   struct timespec now;
   clock_gettime(CLOCK_MONOTONIC, &now);
 
@@ -219,10 +220,10 @@ void intercom_handle_info(struct l3ctx *ctx, intercom_packet_info *packet) {
     entry++;
   }
 
-  clientmgr_handle_info(&ctx->clientmgr_ctx, ctx, &client);
+  clientmgr_handle_info(CTX(clientmgr), &client);
 }
 
-void intercom_handle_packet(intercom_ctx *ctx, struct l3ctx *l3ctx, uint8_t *packet, ssize_t packet_len) {
+void intercom_handle_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len) {
   intercom_packet_hdr *hdr = (intercom_packet_hdr*) packet;
 
   printf("Packet nonce %u -> ", hdr->nonce);
@@ -236,13 +237,13 @@ void intercom_handle_packet(intercom_ctx *ctx, struct l3ctx *l3ctx, uint8_t *pac
   intercom_recently_seen_add(ctx, hdr);
 
   if (hdr->type == INTERCOM_SEEK)
-    intercom_handle_seek(l3ctx, (intercom_packet_seek*)packet);
+    intercom_handle_seek(ctx, (intercom_packet_seek*)packet);
 
   if (hdr->type == INTERCOM_CLAIM)
-    intercom_handle_claim(l3ctx, (intercom_packet_claim*)packet);
+    intercom_handle_claim(ctx, (intercom_packet_claim*)packet);
 
   if (hdr->type == INTERCOM_INFO)
-    intercom_handle_info(l3ctx, (intercom_packet_info*)packet);
+    intercom_handle_info(ctx, (intercom_packet_info*)packet);
 
   hdr->ttl--;
 
@@ -252,7 +253,7 @@ void intercom_handle_packet(intercom_ctx *ctx, struct l3ctx *l3ctx, uint8_t *pac
   }
 }
 
-void intercom_handle_in(intercom_ctx *ctx, struct l3ctx *l3ctx, int fd) {
+void intercom_handle_in(intercom_ctx *ctx, int fd) {
   ssize_t count;
   uint8_t buf[1500];
 
@@ -272,7 +273,7 @@ void intercom_handle_in(intercom_ctx *ctx, struct l3ctx *l3ctx, int fd) {
       break;
     }
 
-    intercom_handle_packet(ctx, l3ctx, buf, count);
+    intercom_handle_packet(ctx, buf, count);
   }
 }
 

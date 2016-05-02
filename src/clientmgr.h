@@ -20,6 +20,7 @@ struct client_ip {
 };
 
 struct client {
+  unsigned int ifindex;
   bool ours;
   bool check_pending;
   uint8_t mac[6];
@@ -28,6 +29,7 @@ struct client {
 };
 
 typedef struct {
+  struct l3ctx *l3ctx;
   struct prefix prefix;
   unsigned int export_table;
   VECTOR(struct client) clients;
@@ -41,12 +43,12 @@ struct client_task {
   uint8_t mac[6];
 };
 
-void clientmgr_add_address(clientmgr_ctx *ctx, struct l3ctx *l3ctx, struct in6_addr *address, uint8_t *mac);
-void clientmgr_update_client_routes(struct l3ctx *ctx, unsigned int table, struct client *client);
-void clientmgr_handle_info(clientmgr_ctx *ctx, struct l3ctx *l3ctx, struct client *client);
-void clientmgr_handle_claim(clientmgr_ctx *ctx, struct l3ctx *l3ctx, uint32_t lastseen, uint8_t *mac, const struct in6_addr *sender);
-void clientmgr_add_client(clientmgr_ctx *ctx, struct l3ctx *l3ctx, uint8_t *mac);
+void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex);
+void clientmgr_update_client_routes(clientmgr_ctx *ctx, unsigned int table, struct client *client);
+void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *client);
+void clientmgr_handle_claim(clientmgr_ctx *ctx, uint32_t lastseen, uint8_t *mac, const struct in6_addr *sender);
+void clientmgr_add_client(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex);
 void print_client(struct client *client);
 void clientmgr_pruneclient_task(void *d);
 void clientmgr_checkclient_task(void *d);
-void clientmgr_remove_route(struct l3ctx *l3ctx, clientmgr_ctx *ctx, struct client_ip *ip);
+void clientmgr_remove_route(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip);
