@@ -301,8 +301,6 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
       struct client_ip *e = &VECTOR_INDEX(foreign_client->addresses, i);
       struct client_ip *ip = clientmgr_get_client_ip(client, &e->address);
 
-      printf("ip %p e %p\n", ip, e);
-
       if (ip == NULL) {
         VECTOR_ADD(client->addresses, *e);
       } else if (e->lastseen.tv_nsec > ip->lastseen.tv_nsec) {
@@ -353,6 +351,11 @@ void print_client(struct client *client) {
   printf("Client %02x:%02x:%02x:%02x:%02x:%02x\n", client->mac[0], client->mac[1],
                                                    client->mac[2], client->mac[3],
                                                    client->mac[4], client->mac[5]);
+
+  if (client->ours)
+    puts("This is ours.");
+  else
+    puts("This it NOT ours.");
 
   if (client->ifindex != 0) {
     if_indextoname(client->ifindex, ifname);
