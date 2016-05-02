@@ -313,8 +313,14 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
 
   print_client(client);
 
-  if (client->ours)
+  if (client->ours) {
+    if (!client->check_pending) {
+      client->check_pending = true;
+      clientmgr_schedule_client_task(ctx, IP_CHECKCLIENT_TIMEOUT, clientmgr_checkclient_task, client->mac);
+    }
+
     clientmgr_update_client_routes(ctx, ctx->export_table, client);
+  }
 }
 
 void clientmgr_handle_claim(clientmgr_ctx *ctx, uint32_t lastseen, uint8_t *mac, const struct in6_addr *sender) {
