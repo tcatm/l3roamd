@@ -300,7 +300,7 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 
   memcpy(&packet->mac, client->mac, sizeof(uint8_t) * 6);
   packet->lastseen = now.tv_sec - client->lastseen.tv_sec;
-  packet->relinquished = client->ours ? 1 : 0;
+  packet->relinquished = (client->ours && recipient != NULL) ? 1 : 0;
 
   intercom_packet_info_entry *entry = (intercom_packet_info_entry*)((uint8_t*)(packet) + sizeof(intercom_packet_info));
 
