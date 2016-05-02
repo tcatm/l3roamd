@@ -92,6 +92,8 @@ void icmp6_setup_interface(icmp6_ctx *ctx) {
 	lladdr.sll_halen = ETH_ALEN;
 	bind(ctx->nsfd, (struct sockaddr *)&lladdr, sizeof(lladdr));
 
+	ctx->ifindex = req.ifr_ifindex;
+
 	ctx->ok = true;
 }
 
