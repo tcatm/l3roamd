@@ -181,7 +181,7 @@ void clientmgr_checkclient_task(void *d) {
 void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex) {
   // TODO sicherstellen, dass IPs nur jeweils einem Client zugeordnet sind
 
-  printf("Add address 0\n");
+  printf("Add address start (ifindex %d)\n", ifindex);
   char str[INET6_ADDRSTRLEN];
 
 
@@ -353,7 +353,7 @@ void print_client(struct client *client) {
   printf("Client %02x:%02x:%02x:%02x:%02x:%02x\n", client->mac[0], client->mac[1],
                                                    client->mac[2], client->mac[3],
                                                    client->mac[4], client->mac[5]);
-  printf("Interface: %s\n", ifname);
+  printf("Interface: %s (%i)\n", ifname, client->ifindex);
   printf("  Adresses\n");
 
   for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
