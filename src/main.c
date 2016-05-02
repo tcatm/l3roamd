@@ -277,6 +277,7 @@ int main(int argc, char *argv[]) {
   ctx.wifistations_ctx.l3ctx = &ctx;
   ctx.clientmgr_ctx.l3ctx = &ctx;
   ctx.intercom_ctx.l3ctx = &ctx;
+  ctx.icmp6_ctx.l3ctx = &ctx;
 
   intercom_init(&ctx.intercom_ctx);
 
