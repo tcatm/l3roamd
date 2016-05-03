@@ -256,6 +256,7 @@ void checkclient(clientmgr_ctx *ctx, uint8_t mac[6]) {
           client_remove_route(ctx, client, ip);
           ip->state = IP_INACTIVE;
         }
+        icmp6_send_solicitation(CTX(icmp6), &ip->address);
         break;
       case IP_INACTIVE:
         if (timespec_cmp(ip->timestamp, client_timeout) <= 0) {
