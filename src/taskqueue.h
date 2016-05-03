@@ -20,8 +20,10 @@ struct taskqueue {
 
 	struct timespec due;			/**< The priority */
 
-  void (*function)(void*);
-  void *data;
+	int refcnt;
+
+	void (*function)(void*);
+	void *data;
 };
 
 /** Checks if an element is currently part of a priority queue */
@@ -35,4 +37,7 @@ void taskqueue_remove(taskqueue_t *elem);
 void taskqueue_init(taskqueue_ctx *ctx);
 void taskqueue_run(taskqueue_ctx *ctx);
 void taskqueue_schedule(taskqueue_ctx *ctx);
+void take_task(taskqueue_t *task);
+bool put_task(taskqueue_t *task);
 taskqueue_t * post_task(taskqueue_ctx *ctx, unsigned int timeout, void (*function)(void*), void *data);
+taskqueue_t * replace_task(taskqueue_ctx *ctx, taskqueue_t * task, unsigned int timeout, void (*function)(void*), void *data);
