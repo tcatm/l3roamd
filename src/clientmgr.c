@@ -332,6 +332,12 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex) {
   struct client *client = get_or_create_client(ctx, mac);
 
+  char ifname[IFNAMSIZ];
+  if_indextoname(ifindex, ifname);
+
+  printf("\033[34mnew client %02x:%02x:%02x:%02x:%02x:%02x on %s\033[0m\n",
+         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], ifname);
+
   struct timespec now;
   clock_gettime(CLOCK_MONOTONIC, &now);
 
