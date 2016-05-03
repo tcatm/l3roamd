@@ -136,8 +136,8 @@ void taskqueue_run(taskqueue_ctx *ctx) {
 
 	if (timespec_cmp(task->due, now) <= 0) {
 		printf("run job\n");
-		task->function(task->data);
 		taskqueue_remove(task);
+		task->function(task->data);
 		put_task(task);
 	}
 
