@@ -116,7 +116,6 @@ void taskqueue_schedule(taskqueue_ctx *ctx) {
 		.it_value = ctx->queue->due
 	};
 
-	printf("schedule\n");
 	timerfd_settime(ctx->fd, TFD_TIMER_ABSTIME, &t, NULL);
 }
 
@@ -127,7 +126,6 @@ void taskqueue_run(taskqueue_ctx *ctx) {
 	clock_gettime(CLOCK_MONOTONIC, &now);
 
 	read(ctx->fd, &nEvents, sizeof(nEvents));
-	printf("run %lli\n", nEvents);
 
 	if (ctx->queue == NULL)
 		return;
@@ -135,7 +133,6 @@ void taskqueue_run(taskqueue_ctx *ctx) {
 	taskqueue_t *task = ctx->queue;
 
 	if (timespec_cmp(task->due, now) <= 0) {
-		printf("run job\n");
 		taskqueue_remove(task);
 		task->function(task->data);
 		put_task(task);
