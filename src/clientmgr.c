@@ -58,6 +58,7 @@ void print_client(struct client *client) {
     switch (e->state) {
       case IP_INACTIVE:
         printf("    - INACTIVE  %s\n", str);
+        break;
       case IP_ACTIVE:
         printf("    - ACTIVE    %s (%ld.%.9ld)\n", str, e->timestamp.tv_sec, e->timestamp.tv_nsec);
         break;
