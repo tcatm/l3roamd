@@ -177,29 +177,19 @@ void intercom_handle_seek(intercom_ctx *ctx, intercom_packet_seek *packet) {
 }
 
 void intercom_handle_claim(intercom_ctx *ctx, intercom_packet_claim *packet) {
-  struct timespec now;
-  clock_gettime(CLOCK_MONOTONIC, &now);
-  uint32_t lastseen = now.tv_sec - packet->lastseen;
-
   struct in6_addr sender;
 
   memcpy(&sender.s6_addr, &packet->hdr.sender, sizeof(uint8_t) * 16);
 
   // TODO maybe like this? CTX(clientmgr, handle_claim, lastseen, packet->mac, &sender);
-  clientmgr_handle_claim(CTX(clientmgr), lastseen, packet->mac, &sender);
+  clientmgr_handle_claim(CTX(clientmgr), &sender, packet->mac);
 }
 
 void intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet) {
   struct timespec now;
   clock_gettime(CLOCK_MONOTONIC, &now);
 
-  struct client client = {
-    .ours = false,
-    .lastseen = (struct timespec) {
-      .tv_sec = now.tv_sec - packet->lastseen,
-      .tv_nsec = 0
-    }
-  };
+  struct client client = {};
 
   memcpy(client.mac, &packet->mac, sizeof(uint8_t) * 6);
 
@@ -209,14 +199,7 @@ void intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet) {
 
   for (int i = 0; i < packet->num_addresses; i++) {
     memcpy(&ip.address.s6_addr, &entry->address, sizeof(uint8_t) * 16);
-
-    ip.lastseen = (struct timespec) {
-      .tv_sec = now.tv_sec - entry->lastseen,
-      .tv_nsec = 0,
-    };
-
     VECTOR_ADD(client.addresses, ip);
-
     entry++;
   }
 
@@ -282,9 +265,6 @@ void intercom_handle_in(intercom_ctx *ctx, int fd) {
 
 /* recipient = NULL -> send to neighbours */
 void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client) {
-  struct timespec now;
-  clock_gettime(CLOCK_MONOTONIC, &now);
-
   intercom_packet_info *packet = malloc(sizeof(intercom_packet_info) + INFO_MAX * sizeof(intercom_packet_info_entry));
   int i;
 
@@ -299,14 +279,11 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
   memcpy(&packet->hdr.sender, ctx->ip.s6_addr, sizeof(uint8_t) * 16);
 
   memcpy(&packet->mac, client->mac, sizeof(uint8_t) * 6);
-  packet->lastseen = now.tv_sec - client->lastseen.tv_sec;
-  packet->relinquished = (client->ours && recipient != NULL) ? 1 : 0;
 
   intercom_packet_info_entry *entry = (intercom_packet_info_entry*)((uint8_t*)(packet) + sizeof(intercom_packet_info));
 
   for (i = 0; i < VECTOR_LEN(client->addresses) && i < INFO_MAX; i++) {
     struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
-    entry->lastseen = now.tv_sec - ip->lastseen.tv_sec;
     memcpy(&entry->address, ip->address.s6_addr, sizeof(uint8_t) * 16);
     entry++;
   }
@@ -326,7 +303,7 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
   free(packet);
 }
 
-void intercom_claim(intercom_ctx *ctx, uint8_t *mac, uint32_t lastseen) {
+void intercom_claim(intercom_ctx *ctx, struct client *client) {
   intercom_packet_claim packet;
 
   printf("Sending claim\n");
@@ -341,9 +318,7 @@ void intercom_claim(intercom_ctx *ctx, uint8_t *mac, uint32_t lastseen) {
 
   memcpy(&packet.hdr.sender, ctx->ip.s6_addr, sizeof(uint8_t) * 16);
 
-  memcpy(&packet.mac, mac, 6);
-
-  packet.lastseen = lastseen;
+  memcpy(&packet.mac, client->mac, 6);
 
   intercom_recently_seen_add(ctx, &packet.hdr);
 

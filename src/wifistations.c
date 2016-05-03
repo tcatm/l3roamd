@@ -82,7 +82,7 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
 
 			// FIXME Hack for br-client
 			ifindex = ctx->icmp6_ctx.ifindex;
-			clientmgr_add_client(&ctx->clientmgr_ctx, nla_data(tb[NL80211_ATTR_MAC]), ifindex);
+			clientmgr_notify_mac(&ctx->clientmgr_ctx, nla_data(tb[NL80211_ATTR_MAC]), ifindex);
       break;
     case NL80211_CMD_DEL_STATION:
       break;

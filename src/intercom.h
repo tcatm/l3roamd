@@ -27,20 +27,16 @@ typedef struct __attribute__((__packed__)) {
 typedef struct __attribute__((__packed__)) {
   intercom_packet_hdr hdr;
   uint8_t mac[6];
-  uint32_t lastseen;
 } intercom_packet_claim;
 
 typedef struct __attribute__((__packed__)) {
   intercom_packet_hdr hdr;
-  uint8_t relinquished;  // != 0 indicates that the node previously managed the client
   uint8_t mac[6];
-  uint32_t lastseen;
   uint8_t num_addresses;
 } intercom_packet_info;
 
 typedef struct __attribute__((__packed__)) {
   uint8_t address[16];
-  uint32_t lastseen; // relative in seconds
 } intercom_packet_info_entry;
 
 typedef struct {
@@ -69,4 +65,4 @@ void intercom_handle_in(intercom_ctx *ctx, int fd);
 void intercom_add_interface(intercom_ctx *ctx, char *ifname);
 void intercom_update_interfaces(intercom_ctx *ctx);
 void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client);
-void intercom_claim(intercom_ctx *ctx, uint8_t *mac, uint32_t lastseen);
+void intercom_claim(intercom_ctx *ctx, struct client *client);

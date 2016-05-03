@@ -2,12 +2,21 @@
 
 #include "vector.h"
 #include "linkedlist.h"
+#include "taskqueue.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <netinet/in.h>
 #include <time.h>
 
 #define IP_CHECKCLIENT_TIMEOUT 5
+#define NA_TIMEOUT 10
+#define CLIENT_TIMEOUT 30
+
+enum ip_state {
+  IP_INACTIVE = 0,
+  IP_ACTIVE,
+  IP_TENTATIVE
+};
 
 struct prefix {
   struct in6_addr prefix;
@@ -15,16 +24,16 @@ struct prefix {
 };
 
 struct client_ip {
+  enum ip_state state;
   struct in6_addr address;
-  struct timespec lastseen;
+  struct timespec timestamp;
 };
 
 struct client {
   unsigned int ifindex;
-  bool ours;
-  bool check_pending;
+  taskqueue_t *check_task;
+  struct timespec timeout;
   uint8_t mac[6];
-  struct timespec lastseen;
   VECTOR(struct client_ip) addresses;
 };
 
@@ -44,11 +53,6 @@ struct client_task {
 };
 
 void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex);
-void clientmgr_update_client_routes(clientmgr_ctx *ctx, unsigned int table, struct client *client);
-void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *client);
-void clientmgr_handle_claim(clientmgr_ctx *ctx, uint32_t lastseen, uint8_t *mac, const struct in6_addr *sender);
-void clientmgr_add_client(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex);
-void print_client(struct client *client);
-void clientmgr_pruneclient_task(void *d);
-void clientmgr_checkclient_task(void *d);
-void clientmgr_remove_route(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip);
+void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex);
+void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[6]);
+void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client);
