@@ -193,7 +193,9 @@ void intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet) {
 
   memcpy(client.mac, &packet->mac, sizeof(uint8_t) * 6);
 
-  struct client_ip ip;
+  struct client_ip ip = {
+    .state = IP_INACTIVE
+  };
 
   intercom_packet_info_entry *entry = (intercom_packet_info_entry*)((uint8_t*)(packet) +  sizeof(intercom_packet_info));
 
