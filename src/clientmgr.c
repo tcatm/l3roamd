@@ -330,6 +330,13 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex) {
   struct client *client = get_or_create_client(ctx, mac);
 
+  struct timespec now;
+  clock_gettime(CLOCK_MONOTONIC, &now);
+
+  client->timeout = now;
+  client->timeout.tv_sec += CLIENT_TIMEOUT;
+  client->ifindex = ifindex;
+
   intercom_claim(CTX(intercom), client);
 
   // Mark all inactive IP addresses tentative and schedule a check to establish
@@ -340,10 +347,6 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
     if (ip->state == IP_INACTIVE)
       ip->state = IP_TENTATIVE;
   }
-
-  clock_gettime(CLOCK_MONOTONIC, &client->timeout);
-
-  client->timeout.tv_sec += CLIENT_TIMEOUT;
 
   schedule_clientcheck(ctx, client, 0);
 }
