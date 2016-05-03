@@ -11,6 +11,7 @@
 #define IP_CHECKCLIENT_TIMEOUT 5
 #define NA_TIMEOUT 10
 #define CLIENT_TIMEOUT 30
+#define TENTATIVE_TRIES 5
 
 enum ip_state {
   IP_INACTIVE = 0,
@@ -25,6 +26,7 @@ struct prefix {
 
 struct client_ip {
   enum ip_state state;
+  int tentative_cnt;
   struct in6_addr address;
   struct timespec timestamp;
 };

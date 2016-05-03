@@ -63,7 +63,7 @@ void print_client(struct client *client) {
         printf("    - ACTIVE    %s (%ld.%.9ld)\n", str, e->timestamp.tv_sec, e->timestamp.tv_nsec);
         break;
       case IP_TENTATIVE:
-        printf("    - TENTATIVE %s\n", str);
+        printf("    - TENTATIVE %s (tries left: %d)\n", str, e->tentative_cnt);
         break;
       default:
         exit_error("Invalid IP state");
@@ -267,7 +267,9 @@ void checkclient(clientmgr_ctx *ctx, uint8_t mac[6]) {
         break;
       case IP_TENTATIVE:
         icmp6_send_solicitation(CTX(icmp6), &ip->address);
-        ip->state = IP_INACTIVE;
+        ip->tentative_cnt--;
+        if (ip->tentative_cnt <= 0)
+          ip->state = IP_INACTIVE;
         break;
     }
   }
@@ -344,8 +346,10 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
   for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
     struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
 
-    if (ip->state == IP_INACTIVE)
+    if (ip->state == IP_INACTIVE || ip->state == IP_TENTATIVE) {
       ip->state = IP_TENTATIVE;
+      ip->tentative_cnt = TENTATIVE_TRIES;
+    }
   }
 
   schedule_clientcheck(ctx, client, 0);
@@ -373,6 +377,7 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
     if (ip->state == IP_ACTIVE) {
       client_remove_route(ctx, client, ip);
       ip->state = IP_TENTATIVE;
+      ip->tentative_cnt = TENTATIVE_TRIES;
     }
   }
 
@@ -399,6 +404,7 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
       continue;
 
     foreign_ip->state = IP_TENTATIVE;
+    foreign_ip->tentative_cnt = TENTATIVE_TRIES;
 
     VECTOR_ADD(client->addresses, *foreign_ip);
   }
