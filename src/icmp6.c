@@ -224,7 +224,6 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 		return;
 
 	inet_ntop(AF_INET6, &packet.hdr.nd_na_target, str, INET6_ADDRSTRLEN);
-	printf("Neighbor Advertisement: %s\n", str);
 
   clientmgr_add_address(CTX(clientmgr), &packet.hdr.nd_na_target, packet.hw_addr, ctx->ifindex);
 }
