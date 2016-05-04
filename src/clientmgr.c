@@ -314,7 +314,8 @@ void checkclient(clientmgr_ctx *ctx, uint8_t mac[6]) {
   if (client == NULL)
     return;
 
-  printf("Checking on client\n");
+
+  printf("Checking ");
   print_client(client);
 
   struct timespec now;
@@ -398,8 +399,6 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
     intercom_info(CTX(intercom), NULL, client);
 
   schedule_clientcheck(ctx, client, IP_CHECKCLIENT_TIMEOUT);
-
-  print_client(client);
 }
 
 /** Notify the client manager about a new MAC (e.g. a new wifi client).
@@ -448,7 +447,6 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
     return;
 
   printf("Dropping client in response to claim\n");
-  print_client(client);
 
   for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
     struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
@@ -486,8 +484,6 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
   }
 
   printf("Merged client\n");
-
-  print_client(client);
 
   schedule_clientcheck(ctx, client, 0);
 }
