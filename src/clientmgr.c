@@ -331,11 +331,15 @@ void checkclient(clientmgr_ctx *ctx, uint8_t mac[6]) {
     }
   }
 
-  if (VECTOR_LEN(client->addresses) == 0 && timespec_cmp(client->timeout, now) <= 0)
+  // If the client has no IP addresses associated and has timed out (after a
+  // roaming event), delete it.
+  if (VECTOR_LEN(client->addresses) == 0 && timespec_cmp(client->timeout, now) <= 0) {
     delete_client(ctx, client->mac);
-  else
-    // TODO schedule at earliest IP timeout
-    schedule_clientcheck(ctx, client, IP_CHECKCLIENT_TIMEOUT);
+    return;
+  }
+
+  // TODO schedule at earliest IP timeout
+  schedule_clientcheck(ctx, client, IP_CHECKCLIENT_TIMEOUT);
 }
 
 /** Add a new address to a client identified by its MAC.
