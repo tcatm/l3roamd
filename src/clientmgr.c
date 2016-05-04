@@ -144,13 +144,23 @@ void client_remove_route(clientmgr_ctx *ctx, struct client *client, struct clien
   struct kernel_route route = {
     .plen = 128,
     .proto = 23,
-    .ifindex = client->ifindex,
     .table = ctx->export_table
   };
 
   memcpy(route.prefix, ip->address.s6_addr, 16);
 
   remove_route(ctx->l3ctx, &route);
+}
+
+void client_update_routes(clientmgr_ctx *ctx, struct client *client) {
+  for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
+    struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
+
+    if (ip->state == IP_ACTIVE) {
+      client_remove_route(ctx, client, ip);
+      client_add_route(ctx, client, ip);
+    }
+  }
 }
 
 /** Given a MAC address returns a client object.
@@ -341,6 +351,8 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
   struct timespec now;
   clock_gettime(CLOCK_MONOTONIC, &now);
 
+  bool update_routes = ifindex != client->ifindex;
+
   client->timeout = now;
   client->timeout.tv_sec += CLIENT_TIMEOUT;
   client->ifindex = ifindex;
@@ -357,6 +369,9 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
       ip->tentative_cnt = TENTATIVE_TRIES;
     }
   }
+
+  if (update_routes)
+    client_update_routes(ctx, client);
 
   schedule_clientcheck(ctx, client, 0);
 }
