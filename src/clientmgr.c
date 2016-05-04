@@ -196,6 +196,19 @@ void delete_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
   }
 }
 
+const char *state_str(enum ip_state state) {
+  switch (state) {
+    case IP_INACTIVE:
+      return "INACTIVE";
+    case IP_ACTIVE:
+      return "ACTIVE";
+    case IP_TENTATIVE:
+      return "TENTATIVE";
+    default:
+      return "(INVALID)";
+  }
+}
+
 /** Change state of an IP address. Trigger all side effects like resetting
     counters, timestamps and route changes.
   */
@@ -252,6 +265,12 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
       }
       break;
   }
+
+  char ip_str[INET6_ADDRSTRLEN];
+  inet_ntop(AF_INET6, &ip->address, ip_str, INET6_ADDRSTRLEN);
+
+  printf("%s changes from %s to %s\n", ip_str, state_str(ip->state),
+                                       state_str(state));
 
   ip->state = state;
 }
