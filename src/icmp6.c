@@ -184,7 +184,6 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 }
 
 void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
-printf("icmp\n");
 	char str[INET6_ADDRSTRLEN];
   struct msghdr msghdr;
 	memset (&msghdr, 0, sizeof (msghdr));

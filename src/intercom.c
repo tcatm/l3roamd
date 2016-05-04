@@ -147,7 +147,6 @@ void intercom_send_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len
 
     groupaddr.sin6_scope_id = iface->ifindex;
 
-    printf("intercom send %i %zi\n", iface->ifindex, packet_len);
     ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, &groupaddr, sizeof(groupaddr));
 
     if (rc < 0)
@@ -211,13 +210,8 @@ void intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet) {
 void intercom_handle_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len) {
   intercom_packet_hdr *hdr = (intercom_packet_hdr*) packet;
 
-  printf("Packet nonce %u -> ", hdr->nonce);
-
-  if (intercom_recently_seen(ctx, hdr)) {
-    printf("dropped\n");
+  if (intercom_recently_seen(ctx, hdr))
     return;
-  }
-  printf("accepted\n");
 
   intercom_recently_seen_add(ctx, hdr);
 
@@ -232,10 +226,8 @@ void intercom_handle_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_l
 
   hdr->ttl--;
 
-  if (hdr->ttl > 0) {
-    printf("intercom: forwarding packet\n");
+  if (hdr->ttl > 0)
     intercom_send_packet(ctx, packet, packet_len);
-  }
 }
 
 void intercom_handle_in(intercom_ctx *ctx, int fd) {
@@ -297,7 +289,6 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
   if (recipient != NULL)
     intercom_send_packet_unicast(ctx, recipient, (uint8_t*)packet, packet_len);
   else {
-    printf("Sending client to all neighbours\n");
     intercom_recently_seen_add(ctx, &packet->hdr);
 
     intercom_send_packet(ctx, (uint8_t*)packet, packet_len);
@@ -307,8 +298,6 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 
 void intercom_claim(intercom_ctx *ctx, struct client *client) {
   intercom_packet_claim packet;
-
-  printf("Sending claim\n");
 
   uint32_t nonce = rand();
 

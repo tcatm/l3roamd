@@ -268,7 +268,6 @@ void insert_route(struct l3ctx *ctx, const struct kernel_route *route, uint8_t *
   iov = (struct iovec)  { &ndreq, 0 };
   msg = (struct msghdr) { &nladdr, sizeof(nladdr), &iov, 1, NULL, 0, 0 };
 
-  printf("neigh mac %02x:%02x:%02x:%02x:%02x:%02x\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   rtnl_addattr(&ndreq.nl, sizeof(ndreq), NDA_DST, (void*)route->prefix, sizeof(struct in6_addr));
   rtnl_addattr(&ndreq.nl, sizeof(ndreq), NDA_LLADDR, mac, sizeof(uint8_t) * 6);
 
