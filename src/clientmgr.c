@@ -119,6 +119,9 @@ void delete_client_ip(struct client *client, const struct in6_addr *address) {
       break;
     }
   }
+
+  printf("\x1b[31mDeleting\x1b[0m ");
+  print_client(client);
 }
 
 // TODO struct nach routes.c, remove_route noch table und ifindex mitgeben
