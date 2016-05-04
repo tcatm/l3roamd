@@ -11,7 +11,7 @@
 #define IP_CHECKCLIENT_TIMEOUT 5
 #define NA_TIMEOUT 10
 #define CLIENT_TIMEOUT 300
-#define TENTATIVE_TRIES 15
+#define TENTATIVE_TRIES 5
 
 enum ip_state {
   IP_INACTIVE = 0,
