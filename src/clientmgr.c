@@ -38,16 +38,16 @@ void print_client(struct client *client) {
                                                    client->mac[4], client->mac[5]);
 
   if (client_is_active(client))
-    puts(" (active)");
+    printf(" (active");
   else
-    puts(" (------)");
+    printf(" (______");
 
   if (client->ifindex != 0) {
     if_indextoname(client->ifindex, ifname);
-    printf("  Interface: %s (%i)\n", ifname, client->ifindex);
+    printf(", %s/%i)\n", ifname, client->ifindex);
+  } else {
+    printf(")\n");
   }
-
-  printf("  IP Adresses:\n");
 
   for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
     struct client_ip *e = &VECTOR_INDEX(client->addresses, i);
@@ -57,13 +57,13 @@ void print_client(struct client *client) {
 
     switch (e->state) {
       case IP_INACTIVE:
-        printf("    - INACTIVE  %s\n", str);
+        printf("  INACTIVE  %s\n", str);
         break;
       case IP_ACTIVE:
-        printf("    - ACTIVE    %s (%ld.%.9ld)\n", str, e->timestamp.tv_sec, e->timestamp.tv_nsec);
+        printf("  ACTIVE    %s (%ld.%.9ld)\n", str, e->timestamp.tv_sec, e->timestamp.tv_nsec);
         break;
       case IP_TENTATIVE:
-        printf("    - TENTATIVE %s (tries left: %d)\n", str, e->tentative_cnt);
+        printf("  TENTATIVE %s (tries left: %d)\n", str, e->tentative_cnt);
         break;
       default:
         exit_error("Invalid IP state");
