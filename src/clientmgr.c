@@ -152,17 +152,6 @@ void client_remove_route(clientmgr_ctx *ctx, struct client *client, struct clien
   remove_route(ctx->l3ctx, &route);
 }
 
-void client_update_routes(clientmgr_ctx *ctx, struct client *client) {
-  for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
-    struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
-
-    if (ip->state == IP_ACTIVE) {
-      client_remove_route(ctx, client, ip);
-      client_add_route(ctx, client, ip);
-    }
-  }
-}
-
 /** Given a MAC address returns a client object.
     Returns NULL if the client is not known.
     */
@@ -205,6 +194,66 @@ void delete_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
       break;
     }
   }
+}
+
+/** Change state of an IP address. Trigger all side effects like resetting
+    counters, timestamps and route changes.
+  */
+void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip, enum ip_state state) {
+  struct timespec now;
+  clock_gettime(CLOCK_MONOTONIC, &now);
+
+  switch (ip->state) {
+    case IP_INACTIVE:
+      switch (state) {
+        case IP_INACTIVE:
+          // ignore
+          break;
+        case IP_ACTIVE:
+          client_add_route(ctx, client, ip);
+          ip->timestamp = now;
+          break;
+        case IP_TENTATIVE:
+          ip->timestamp = now;
+          ip->tentative_cnt = TENTATIVE_TRIES;
+          break;
+      }
+      break;
+    case IP_ACTIVE:
+      switch (state) {
+        case IP_INACTIVE:
+          ip->timestamp = now;
+          client_remove_route(ctx, client, ip);
+          break;
+        case IP_ACTIVE:
+          ip->timestamp = now;
+          // TODO update route
+          break;
+        case IP_TENTATIVE:
+          ip->timestamp = now;
+          ip->tentative_cnt = TENTATIVE_TRIES;
+          client_remove_route(ctx, client, ip);
+          break;
+      }
+      break;
+    case IP_TENTATIVE:
+      switch (state) {
+        case IP_INACTIVE:
+          ip->timestamp = now;
+          break;
+        case IP_ACTIVE:
+          ip->timestamp = now;
+          client_add_route(ctx, client, ip);
+          break;
+        case IP_TENTATIVE:
+          ip->timestamp = now;
+          ip->tentative_cnt = TENTATIVE_TRIES;
+          break;
+      }
+      break;
+  }
+
+  ip->state = state;
 }
 
 /** Schedule a client check. Set timeout to 0 in order to check the client at
@@ -263,10 +312,8 @@ void checkclient(clientmgr_ctx *ctx, uint8_t mac[6]) {
 
     switch (ip->state) {
       case IP_ACTIVE:
-        if (timespec_cmp(ip->timestamp, na_timeout) <= 0) {
-          client_remove_route(ctx, client, ip);
-          ip->state = IP_INACTIVE;
-        }
+        if (timespec_cmp(ip->timestamp, na_timeout) <= 0)
+          client_ip_set_state(ctx, client, ip, IP_INACTIVE);
         icmp6_send_solicitation(CTX(icmp6), &ip->address);
         break;
       case IP_INACTIVE:
@@ -279,7 +326,7 @@ void checkclient(clientmgr_ctx *ctx, uint8_t mac[6]) {
         icmp6_send_solicitation(CTX(icmp6), &ip->address);
         ip->tentative_cnt--;
         if (ip->tentative_cnt <= 0)
-          ip->state = IP_INACTIVE;
+          client_ip_set_state(ctx, client, ip, IP_INACTIVE);
         break;
     }
   }
@@ -316,12 +363,9 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
     ip = &VECTOR_INDEX(client->addresses, VECTOR_LEN(client->addresses) - 1);
   }
 
-  struct timespec now;
-  clock_gettime(CLOCK_MONOTONIC, &now);
-
-  ip->timestamp = now;
-  ip->state = IP_ACTIVE;
   client->ifindex = ifindex;
+
+  client_ip_set_state(ctx, client, ip, IP_ACTIVE);
 
   if (!was_active)
     intercom_claim(CTX(intercom), client);
@@ -331,8 +375,6 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
     intercom_info(CTX(intercom), NULL, client);
 
   schedule_clientcheck(ctx, client, IP_CHECKCLIENT_TIMEOUT);
-
-  client_add_route(ctx, client, ip);
 
   print_client(client);
 }
@@ -351,8 +393,6 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
   struct timespec now;
   clock_gettime(CLOCK_MONOTONIC, &now);
 
-  bool update_routes = ifindex != client->ifindex;
-
   client->timeout = now;
   client->timeout.tv_sec += CLIENT_TIMEOUT;
   client->ifindex = ifindex;
@@ -364,14 +404,9 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
   for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
     struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
 
-    if (ip->state == IP_INACTIVE || ip->state == IP_TENTATIVE) {
-      ip->state = IP_TENTATIVE;
-      ip->tentative_cnt = TENTATIVE_TRIES;
-    }
+    if (ip->state == IP_TENTATIVE || ip->state == IP_INACTIVE)
+      client_ip_set_state(ctx, client, ip, IP_TENTATIVE);
   }
-
-  if (update_routes)
-    client_update_routes(ctx, client);
 
   schedule_clientcheck(ctx, client, 0);
 }
@@ -395,11 +430,8 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
   for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
     struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
 
-    if (ip->state == IP_ACTIVE) {
-      client_remove_route(ctx, client, ip);
-      ip->state = IP_TENTATIVE;
-      ip->tentative_cnt = TENTATIVE_TRIES;
-    }
+    if (ip->state == IP_ACTIVE || ip->state == IP_TENTATIVE)
+      client_ip_set_state(ctx, client, ip, IP_TENTATIVE);
   }
 
   schedule_clientcheck(ctx, client, 0);
@@ -424,10 +456,10 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
     if (ip != NULL)
       continue;
 
-    foreign_ip->state = IP_TENTATIVE;
-    foreign_ip->tentative_cnt = TENTATIVE_TRIES;
-
     VECTOR_ADD(client->addresses, *foreign_ip);
+    ip = &VECTOR_INDEX(client->addresses, VECTOR_LEN(client->addresses) - 1);
+
+    client_ip_set_state(ctx, client, ip, IP_TENTATIVE);
   }
 
   printf("Merged client\n");
