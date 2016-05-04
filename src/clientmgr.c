@@ -12,6 +12,7 @@
 static bool client_is_active(const struct client *client);
 static void checkclient_task(void *d);
 static void checkclient(clientmgr_ctx *ctx, uint8_t mac[6]);
+static const char *state_str(enum ip_state state);
 
 bool prefix_contains(const struct prefix *prefix, struct in6_addr *addr) {
   int plen = prefix->plen;
@@ -57,13 +58,13 @@ void print_client(struct client *client) {
 
     switch (e->state) {
       case IP_INACTIVE:
-        printf("  INACTIVE  %s\n", str);
+        printf("  %s  %s\n", state_str(e->state), str);
         break;
       case IP_ACTIVE:
-        printf("  ACTIVE    %s (%ld.%.9ld)\n", str, e->timestamp.tv_sec, e->timestamp.tv_nsec);
+        printf("  %s    %s (%ld.%.9ld)\n", state_str(e->state), str, e->timestamp.tv_sec, e->timestamp.tv_nsec);
         break;
       case IP_TENTATIVE:
-        printf("  TENTATIVE %s (tries left: %d)\n", str, e->tentative_cnt);
+        printf("  %s %s (tries left: %d)\n", state_str(e->state), str, e->tentative_cnt);
         break;
       default:
         exit_error("Invalid IP state");
@@ -199,13 +200,13 @@ void delete_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
 const char *state_str(enum ip_state state) {
   switch (state) {
     case IP_INACTIVE:
-      return "INACTIVE";
+      return "\x1b[31mINACTIVE\x1b[0m";
     case IP_ACTIVE:
-      return "ACTIVE";
+      return "\x1b[32mACTIVE\x1b[0m";
     case IP_TENTATIVE:
-      return "TENTATIVE";
+      return "\x1b[33mTENTATIVE\x1b[0m";
     default:
-      return "(INVALID)";
+      return "\x1b[35m(INVALID)\x1b[0m";
   }
 }
 
