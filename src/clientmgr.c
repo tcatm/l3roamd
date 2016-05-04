@@ -462,9 +462,6 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 /** Handle incoming client info.
   */
 void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
-  printf("Received client info\n");
-  print_client(foreign_client);
-
   struct client *client = get_client(ctx, foreign_client->mac);
 
   if (client == NULL || !client_is_active(client))
@@ -484,7 +481,8 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
     client_ip_set_state(ctx, client, ip, IP_TENTATIVE);
   }
 
-  printf("Merged client\n");
+  printf("Merged ");
+  print_client(client);
 
   schedule_clientcheck(ctx, client, 0);
 }
