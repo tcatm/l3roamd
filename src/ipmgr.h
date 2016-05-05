@@ -24,9 +24,34 @@
 */
 #pragma once
 
-#include "l3roamd.h"
-#include <stdint.h>
+#include "vector.h"
 
-void tun_open(struct tun_iface *iface, const char *ifname, uint16_t mtu, const char *dev_name);
-void tun_handle_in(struct l3ctx *ctx, int fd);
-void tun_handle_out(struct l3ctx *ctx, int fd);
+#include <stdint.h>
+#include <netinet/in.h>
+
+struct ip_entry {
+  VECTOR(struct packet*) packets;
+};
+
+struct packet {
+  ssize_t len;
+  uint8_t *data;
+};
+
+struct entry {
+  struct in6_addr k;
+  struct ip_entry *v;
+};
+
+typedef struct {
+	int fd;
+	char *ifname;
+	struct l3ctx *l3ctx;
+	VECTOR(struct entry) addrs;
+	VECTOR(struct packet) output_queue;
+} ipmgr_ctx;
+
+void ipmgr_init(ipmgr_ctx *ctx, char *tun_name, unsigned int mtu);
+void ipmgr_route_appeared(ipmgr_ctx *ctx, const struct in6_addr *destination);
+void ipmgr_handle_in(ipmgr_ctx *ctx, int fd);
+void ipmgr_handle_out(ipmgr_ctx *ctx, int fd);

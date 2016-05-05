@@ -26,7 +26,7 @@
 // TODO EPOLLOUT beim schreiben auf den tunfd
 // TODO heap für timer events
 
-#include "tun.h"
+#include "ipmgr.h"
 #include "l3roamd.h"
 #include "error.h"
 #include "icmp6.h"
@@ -44,85 +44,19 @@
 #include <sys/timerfd.h>
 #include <fcntl.h>
 
-struct ip_entry *find_entry(struct l3ctx *ctx, const struct in6_addr *k) {
-  for (int i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
-    struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
+void add_fd(int efd, int fd, uint32_t events) {
+  struct epoll_event event = {};
+  event.data.fd = fd;
+  event.events = events;
 
-    if (memcmp(k, &(e->k), sizeof(struct in6_addr)) == 0)
-      return e->v;
-  }
-
-  return NULL;
-}
-
-void delete_entry(struct l3ctx *ctx, const struct in6_addr *k) {
-  for (int i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
-    struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
-
-    if (memcmp(k, &(e->k), sizeof(struct in6_addr)) == 0) {
-      VECTOR_DELETE(ctx->addrs, i);
-      break;
-    }
-  }
-}
-
-void establish_route(struct l3ctx *ctx, const struct in6_addr *addr) {
-  char str[INET6_ADDRSTRLEN];
-  inet_ntop(AF_INET6, addr, str, sizeof str);
-
-  printf("Establish route %s\n", str);
-
-  icmp6_send_solicitation(&ctx->icmp6_ctx, addr);
-
-  intercom_seek(&ctx->intercom_ctx, addr);
-}
-
-void handle_packet(struct l3ctx *ctx, uint8_t packet[], ssize_t packet_len) {
-  struct in6_addr dst;
-  memcpy(&dst, packet + 24, 16);
-
-  uint8_t a0 = dst.s6_addr[0];
-
-  // Check for dst in 2000::/3 or fc00::/7
-  if ((a0 & 0xe0) != 0x20 && (a0 & 0xfe) != 0xfc)
-    return;
-
-  char str[INET6_ADDRSTRLEN];
-  inet_ntop(AF_INET6, &dst, str, sizeof str);
-  printf("Got packet to %s\n", str);
-
-  struct ip_entry *e = find_entry(ctx, &dst);
-
-  if (!e) {
-    struct entry entry;
-    entry.k = dst;
-    entry.v = (struct ip_entry*)calloc(1, sizeof(struct ip_entry));
-
-    VECTOR_ADD(ctx->addrs, entry);
-
-    e = entry.v;
-  }
-
-  struct packet *p = malloc(sizeof(struct packet));
-
-  p->len = packet_len;
-  p->data = malloc(packet_len);
-  memcpy(p->data, packet, packet_len);
-
-  VECTOR_ADD(e->packets, p);
-
-  establish_route(ctx, &dst);
-}
-
-void drain_output_queue(struct l3ctx *ctx) {
-  tun_handle_out(ctx, ctx->tun.fd);
+  int s = epoll_ctl(efd, EPOLL_CTL_ADD, fd, &event);
+  if (s == -1)
+    exit_error("epoll_ctl");
 }
 
 void loop(struct l3ctx *ctx) {
-  int s;
   int efd;
   int maxevents = 64;
-  struct epoll_event event = {};
   struct epoll_event *events;
 
   efd = epoll_create1(0);
@@ -131,66 +65,32 @@ void loop(struct l3ctx *ctx) {
     abort();
   }
 
-  event.data.fd = ctx->tun.fd;
-  event.events = EPOLLIN | EPOLLET;
-  s = epoll_ctl(efd, EPOLL_CTL_ADD, ctx->tun.fd, &event);
-  if (s == -1)
-    exit_error("epoll_ctl");
-
-  event.data.fd = ctx->rtnl_sock;
-  event.events = EPOLLIN | EPOLLET;
-  s = epoll_ctl(efd, EPOLL_CTL_ADD, ctx->rtnl_sock, &event);
-  if (s == -1)
-    exit_error("epoll_ctl");
-
-  event.data.fd = ctx->taskqueue_ctx.fd;
-  event.events = EPOLLIN;
-  s = epoll_ctl(efd, EPOLL_CTL_ADD, ctx->taskqueue_ctx.fd, &event);
-  if (s == -1)
-    exit_error("epoll_ctl");
-
-  event.data.fd = ctx->icmp6_ctx.fd;
-  event.events = EPOLLIN;
-  s = epoll_ctl(efd, EPOLL_CTL_ADD, ctx->icmp6_ctx.fd, &event);
-  if (s == -1)
-    exit_error("epoll_ctl");
-
-  event.data.fd = ctx->icmp6_ctx.nsfd;
-  event.events = EPOLLIN;
-  s = epoll_ctl(efd, EPOLL_CTL_ADD, ctx->icmp6_ctx.nsfd, &event);
-  if (s == -1)
-    exit_error("epoll_ctl");
-
-  event.data.fd = ctx->intercom_ctx.fd;
-  event.events = EPOLLIN | EPOLLET;
-  s = epoll_ctl(efd, EPOLL_CTL_ADD, ctx->intercom_ctx.fd, &event);
-  if (s == -1)
-    exit_error("epoll_ctl");
-
-  event.data.fd = ctx->wifistations_ctx.fd;
-  event.events = EPOLLIN;
-  s = epoll_ctl(efd, EPOLL_CTL_ADD, ctx->wifistations_ctx.fd, &event);
-  if (s == -1)
-    exit_error("epoll_ctl");
+  add_fd(efd, ctx->ipmgr_ctx.fd, EPOLLIN | EPOLLET);
+  add_fd(efd, ctx->rtnl_sock, EPOLLIN | EPOLLET);
+  add_fd(efd, ctx->taskqueue_ctx.fd, EPOLLIN);
+  add_fd(efd, ctx->icmp6_ctx.fd, EPOLLIN);
+  add_fd(efd, ctx->icmp6_ctx.nsfd, EPOLLIN);
+  add_fd(efd, ctx->intercom_ctx.fd, EPOLLIN | EPOLLET);
+  add_fd(efd, ctx->wifistations_ctx.fd, EPOLLIN);
 
   /* Buffer where events are returned */
-  events = calloc(maxevents, sizeof event);
+  events = calloc(maxevents, sizeof(struct epoll_event));
 
   /* The event loop */
   while (1) {
-    int n, i;
-
+    int n;
     n = epoll_wait(efd, events, maxevents, -1);
-    for(i = 0; i < n; i++) {
+
+    for(int i = 0; i < n; i++) {
       if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)) {
         fprintf(stderr, "epoll error\n");
         close(events[i].data.fd);
       } else if (ctx->rtnl_sock == events[i].data.fd) {
         if (events[i].events & EPOLLIN)
           rtnl_handle_in(ctx, events[i].data.fd);
-      } else if (ctx->tun.fd == events[i].data.fd) {
+      } else if (ctx->ipmgr_ctx.fd == events[i].data.fd) {
         if (events[i].events & EPOLLIN)
-          tun_handle_in(ctx, events[i].data.fd);
+          ipmgr_handle_in(&ctx->ipmgr_ctx, events[i].data.fd);
       } else if (ctx->icmp6_ctx.fd == events[i].data.fd) {
         if (events[i].events & EPOLLIN)
           icmp6_handle_in(&ctx->icmp6_ctx, events[i].data.fd);
@@ -248,20 +148,6 @@ bool parse_prefix(struct prefix *prefix, const char *str) {
   return true;
 }
 
-static void init_random(void) {
-	unsigned int seed;
-	int fd = open("/dev/urandom", O_RDONLY);
-	if (fd < 0)
-		exit_errno("can't open /dev/urandom");
-
-	if (read(fd, &seed, sizeof(seed)) != sizeof(seed))
-		exit_errno("can't read from /dev/urandom");
-
-	close(fd);
-
-	srandom(seed);
-}
-
 void interfaces_changed(struct l3ctx *ctx, int type, const struct ifinfomsg *msg) {
   printf("interfaces changed\n");
   intercom_update_interfaces(&ctx->intercom_ctx);
@@ -271,13 +157,12 @@ void interfaces_changed(struct l3ctx *ctx, int type, const struct ifinfomsg *msg
 int main(int argc, char *argv[]) {
   struct l3ctx ctx = {};
 
-  init_random();
-
   ctx.taskqueue_ctx.l3ctx = &ctx;
   ctx.wifistations_ctx.l3ctx = &ctx;
   ctx.clientmgr_ctx.l3ctx = &ctx;
   ctx.intercom_ctx.l3ctx = &ctx;
   ctx.icmp6_ctx.l3ctx = &ctx;
+  ctx.ipmgr_ctx.l3ctx = &ctx;
 
   intercom_init(&ctx.intercom_ctx);
 
@@ -314,16 +199,10 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Invalid parameter %c ignored.\n", c);
     }
 
-  list_new(&ctx.output_queue);
-
-  tun_open(&ctx.tun, "l3roam0", 9000, "/dev/net/tun");
-
   rtnl_init(&ctx);
-
+  ipmgr_init(&ctx.ipmgr_ctx, "l3roam0", 9000);
   icmp6_init(&ctx.icmp6_ctx);
-
   taskqueue_init(&ctx.taskqueue_ctx);
-
   wifistations_init(&ctx.wifistations_ctx);
 
   loop(&ctx);

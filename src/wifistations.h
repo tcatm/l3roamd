@@ -17,7 +17,5 @@ typedef struct {
   VECTOR(wifistations_if) interfaces;
 } wifistations_ctx;
 
-struct l3ctx;
-
 void wifistations_handle_in(wifistations_ctx *ctx);
 void wifistations_init(wifistations_ctx *ctx);

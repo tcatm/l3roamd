@@ -1,7 +1,6 @@
 #pragma once
 
 #include "vector.h"
-#include "linkedlist.h"
 #include "taskqueue.h"
 #include <stdint.h>
 #include <stdbool.h>
@@ -46,14 +45,13 @@ typedef struct {
   VECTOR(struct client) clients;
 } clientmgr_ctx;
 
-struct l3ctx;
-
 struct client_task {
   clientmgr_ctx *ctx;
   struct l3ctx *l3ctx;
   uint8_t mac[6];
 };
 
+bool clientmgr_valid_address(clientmgr_ctx *ctx, struct in6_addr *address);
 void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex);
 void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex);
 void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[6]);

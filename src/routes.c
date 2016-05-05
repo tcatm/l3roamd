@@ -87,7 +87,7 @@ void filter_kernel_routes(struct l3ctx *ctx, const struct nlmsghdr *nh) {
   if (current_route->plen != 128)
     return;
 
-  handle_route(ctx, current_route);
+  ipmgr_route_appeared(&ctx->ipmgr_ctx, (const struct in6_addr*)&current_route->prefix);
 }
 
 void rtnl_handle_msg(struct l3ctx *ctx, const struct nlmsghdr *nh) {
@@ -120,30 +120,6 @@ void rtnl_init(struct l3ctx *ctx) {
     exit_error("can't bind RTNL socket");
 }
 
-
-void handle_route(struct l3ctx *ctx, struct kernel_route *route) {
-  // TODO check if dest is in addresses
-  // TODO if so, queue all packets for sending
-  // TODO remove ip entry
-
-  struct ip_entry *e = find_entry(ctx,(const struct in6_addr*)&route->prefix);
-
-  if (!e)
-    return;
-
-  for (int i = 0; i < VECTOR_LEN(e->packets); i++) {
-    struct packet *p = VECTOR_INDEX(e->packets, i);
-    list_push(&ctx->output_queue, p);
-  }
-
-  VECTOR_FREE(e->packets);
-
-  delete_entry(ctx, (const struct in6_addr*)&route->prefix);
-
-  print_route(route);
-
-  drain_output_queue(ctx);
-}
 
 int parse_kernel_route_rta(struct rtmsg *rtm, int len, struct kernel_route *route) {
     struct rtattr *rta = RTM_RTA(rtm);
@@ -222,7 +198,7 @@ struct nlneighreq {
   char buf[1024];
 };
 
-void insert_route(struct l3ctx *ctx, const struct kernel_route *route, uint8_t *mac) {
+void route_insert(struct l3ctx *ctx, const struct kernel_route *route, uint8_t *mac) {
   struct nlrtreq req = {
     .nl = {
       .nlmsg_type = RTM_NEWROUTE,
@@ -277,7 +253,7 @@ void insert_route(struct l3ctx *ctx, const struct kernel_route *route, uint8_t *
     perror("nl_sendmsg");
 }
 
-void remove_route(struct l3ctx *ctx, const struct kernel_route *route) {
+void route_remove(struct l3ctx *ctx, const struct kernel_route *route) {
   struct nlrtreq req;
   struct sockaddr_nl nladdr;
   struct iovec iov;

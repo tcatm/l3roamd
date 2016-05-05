@@ -139,7 +139,7 @@ void client_add_route(clientmgr_ctx *ctx, struct client *client, struct client_i
 
   memcpy(route.prefix, ip->address.s6_addr, 16);
 
-  insert_route(ctx->l3ctx, &route, client->mac);
+  route_insert(ctx->l3ctx, &route, client->mac);
 }
 
 /** Remove a route.
@@ -153,7 +153,7 @@ void client_remove_route(clientmgr_ctx *ctx, struct client *client, struct clien
 
   memcpy(route.prefix, ip->address.s6_addr, 16);
 
-  remove_route(ctx->l3ctx, &route);
+  route_remove(ctx->l3ctx, &route);
 }
 
 /** Given a MAC address returns a client object.
@@ -366,6 +366,12 @@ void checkclient(clientmgr_ctx *ctx, uint8_t mac[6]) {
   schedule_clientcheck(ctx, client, IP_CHECKCLIENT_TIMEOUT);
 }
 
+/** Check whether an IP address is contained in a client prefix.
+  */
+bool clientmgr_valid_address(clientmgr_ctx *ctx, struct in6_addr *address) {
+  return prefix_contains(&ctx->prefix, address);
+}
+
 /** Add a new address to a client identified by its MAC.
  */
 void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex) {
@@ -483,6 +489,8 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
 
     client_ip_set_state(ctx, client, ip, IP_TENTATIVE);
   }
+
+  // TODO free foreign_client?
 
   printf("Merged ");
   print_client(client);

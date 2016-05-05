@@ -54,7 +54,6 @@ typedef struct {
   VECTOR(intercom_if) interfaces;
 } intercom_ctx;
 
-struct l3ctx;
 struct client;
 
 void intercom_recently_seen_add(intercom_ctx *ctx, intercom_packet_hdr *hdr);
