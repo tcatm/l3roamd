@@ -20,4 +20,4 @@ typedef struct {
 struct l3ctx;
 
 void wifistations_handle_in(wifistations_ctx *ctx);
-void wifistations_init(wifistations_ctx *ctx, struct l3ctx *l3ctx);
+void wifistations_init(wifistations_ctx *ctx);

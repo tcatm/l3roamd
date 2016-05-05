@@ -49,7 +49,7 @@ void wifistations_handle_in(wifistations_ctx *ctx) {
 }
 
 int wifistations_handle_event(struct nl_msg *msg, void *arg) {
-	struct l3ctx *ctx = arg;
+	wifistations_ctx *ctx = arg;
   struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
   struct nlattr *tb[8];
   char macbuf[6*3];
@@ -71,8 +71,8 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
   printf("%s: ", ifname);
 
 	// TODO warum kann das NULL sein?
-		if (gnlh == NULL)
-			return 0;
+	if (gnlh == NULL)
+		return 0;
 
   switch (gnlh->cmd) {
     case NL80211_CMD_NEW_STATION:
@@ -80,9 +80,9 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
 
       printf("new station %s\n", macbuf);
 
-			// FIXME Hack for br-client
-			ifindex = ctx->icmp6_ctx.ifindex;
-			clientmgr_notify_mac(&ctx->clientmgr_ctx, nla_data(tb[NL80211_ATTR_MAC]), ifindex);
+			// TODO Hack for br-client
+			ifindex = ctx->l3ctx->icmp6_ctx.ifindex;
+			clientmgr_notify_mac(CTX(clientmgr), nla_data(tb[NL80211_ATTR_MAC]), ifindex);
       break;
     case NL80211_CMD_DEL_STATION:
       break;
@@ -91,7 +91,7 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
 	return 0;
 }
 
-void wifistations_init(wifistations_ctx *ctx, struct l3ctx *l3ctx) {
+void wifistations_init(wifistations_ctx *ctx) {
 	ctx->nl_sock = nl_socket_alloc();
 	if (!ctx->nl_sock)
 		exit_error("Failed to allocate netlink socket.\n");
@@ -124,7 +124,7 @@ void wifistations_init(wifistations_ctx *ctx, struct l3ctx *l3ctx) {
 
   /* no sequence checking for multicast messages */
   nl_cb_set(ctx->cb, NL_CB_SEQ_CHECK, NL_CB_CUSTOM, no_seq_check, NULL);
-  nl_cb_set(ctx->cb, NL_CB_VALID, NL_CB_CUSTOM, wifistations_handle_event, l3ctx);
+  nl_cb_set(ctx->cb, NL_CB_VALID, NL_CB_CUSTOM, wifistations_handle_event, ctx);
 
   ctx->fd = nl_socket_get_fd(ctx->nl_sock);
 

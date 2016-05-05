@@ -324,7 +324,7 @@ int main(int argc, char *argv[]) {
 
   taskqueue_init(&ctx.taskqueue_ctx);
 
-  wifistations_init(&ctx.wifistations_ctx, &ctx);
+  wifistations_init(&ctx.wifistations_ctx);
 
   loop(&ctx);
 
