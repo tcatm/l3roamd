@@ -25,22 +25,26 @@
 #pragma once
 
 #include "vector.h"
+#include "taskqueue.h"
 
 #include <stdint.h>
 #include <netinet/in.h>
 
-struct ip_entry {
-  VECTOR(struct packet*) packets;
-};
+#define IPCHECK_INTERVAL 2
+#define PACKET_TIMEOUT 2
+#define SEEK_TIMEOUT 10
 
 struct packet {
+	struct timespec timestamp;
   ssize_t len;
   uint8_t *data;
 };
 
 struct entry {
-  struct in6_addr k;
-  struct ip_entry *v;
+  struct in6_addr address;
+	struct timespec timestamp;
+	taskqueue_t *check_task;
+	VECTOR(struct packet*) packets;
 };
 
 typedef struct {
@@ -50,6 +54,11 @@ typedef struct {
 	VECTOR(struct entry) addrs;
 	VECTOR(struct packet) output_queue;
 } ipmgr_ctx;
+
+struct ip_task {
+	ipmgr_ctx *ctx;
+	struct in6_addr address;
+};
 
 void ipmgr_init(ipmgr_ctx *ctx, char *tun_name, unsigned int mtu);
 void ipmgr_route_appeared(ipmgr_ctx *ctx, const struct in6_addr *destination);

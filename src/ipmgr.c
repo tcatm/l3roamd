@@ -1,6 +1,7 @@
 #include "error.h"
 #include "ipmgr.h"
 #include "l3roamd.h"
+#include "timespec.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -11,6 +12,9 @@
 #include <linux/if_tun.h>
 
 static void tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name);
+static void schedule_ipcheck(ipmgr_ctx *ctx, struct entry *e);
+static void ipcheck_task(void *d);
+static bool ipcheck(ipmgr_ctx *ctx, struct entry *e);
 
 void tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name) {
   int ctl_sock = -1;
@@ -63,12 +67,12 @@ error:
   ctx->fd = -1;
 }
 
-struct ip_entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
+struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
   for (int i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
     struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
 
-    if (memcmp(k, &(e->k), sizeof(struct in6_addr)) == 0)
-      return e->v;
+    if (memcmp(k, &(e->address), sizeof(struct in6_addr)) == 0)
+      return e;
   }
 
   return NULL;
@@ -78,7 +82,7 @@ void delete_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
   for (int i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
     struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
 
-    if (memcmp(k, &(e->k), sizeof(struct in6_addr)) == 0) {
+    if (memcmp(k, &(e->address), sizeof(struct in6_addr)) == 0) {
       VECTOR_DELETE(ctx->addrs, i);
       break;
     }
@@ -114,30 +118,97 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
     return;
   }
 
-  struct ip_entry *e = find_entry(ctx, &dst);
+  struct timespec now;
+  clock_gettime(CLOCK_MONOTONIC, &now);
+
+  struct entry *e = find_entry(ctx, &dst);
+
+  bool new = !e;
 
   // TODO set timestamp here
   if (!e) {
-    struct entry entry;
-    entry.k = dst;
-    entry.v = (struct ip_entry*)calloc(1, sizeof(struct ip_entry));
+
+    struct entry entry = {
+      .address = dst,
+      .timestamp = now,
+    };
 
     VECTOR_ADD(ctx->addrs, entry);
-
-    e = entry.v;
-  } else {
-    // TODO check timestamp here
+    e = &VECTOR_INDEX(ctx->addrs, VECTOR_LEN(ctx->addrs) - 1);
   }
 
   struct packet *p = malloc(sizeof(struct packet));
 
+  p->timestamp = now;
   p->len = packet_len;
   p->data = malloc(packet_len);
+
   memcpy(p->data, packet, packet_len);
 
   VECTOR_ADD(e->packets, p);
 
-  seek_address(ctx, &dst);
+  struct timespec then = now;
+  then.tv_sec -= SEEK_TIMEOUT;
+
+  if (timespec_cmp(e->timestamp, then) <= 0 || new) {
+    seek_address(ctx, &dst);
+    e->timestamp = now;
+  }
+
+  schedule_ipcheck(ctx, e);
+}
+
+void schedule_ipcheck(ipmgr_ctx *ctx, struct entry *e) {
+  struct ip_task *data = calloc(1, sizeof(struct ip_task));
+
+  data->ctx = ctx;
+  data->address = e->address;
+
+  if (e->check_task == NULL)
+    e->check_task = post_task(CTX(taskqueue), IPCHECK_INTERVAL, ipcheck_task, free, data);
+}
+
+void ipcheck_task(void *d) {
+  struct ip_task *data = d;
+
+  struct entry *e = find_entry(data->ctx, &data->address);
+
+  if (!e)
+    return;
+
+  e->check_task = NULL;
+
+  if (ipcheck(data->ctx, e))
+    schedule_ipcheck(data->ctx, e);
+}
+
+bool ipcheck(ipmgr_ctx *ctx, struct entry *e) {
+  struct timespec now;
+  clock_gettime(CLOCK_MONOTONIC, &now);
+
+  struct timespec then = now;
+  then.tv_sec -= PACKET_TIMEOUT;
+
+  for (int i = 0; i < VECTOR_LEN(e->packets); i++) {
+    struct packet *p = VECTOR_INDEX(e->packets, i);
+
+    if (timespec_cmp(p->timestamp, then) <= 0) {
+      free(p->data);
+      VECTOR_DELETE(e->packets, i);
+      i--;
+    }
+  }
+
+  then = now;
+  then.tv_sec -= SEEK_TIMEOUT;
+
+  if (VECTOR_LEN(e->packets) == 0 && timespec_cmp(e->timestamp, then) <= 0) {
+    VECTOR_FREE(e->packets);
+    delete_entry(ctx, &e->address);
+    return false;
+  }
+
+  return true;
 }
 
 void ipmgr_handle_in(ipmgr_ctx *ctx, int fd) {
@@ -194,11 +265,7 @@ void ipmgr_handle_out(ipmgr_ctx *ctx, int fd) {
 }
 
 void ipmgr_route_appeared(ipmgr_ctx *ctx, const struct in6_addr *destination) {
-  // TODO check if dest is in addresses
-  // TODO if so, queue all packets for sending
-  // TODO remove ip entry
-
-  struct ip_entry *e = find_entry(ctx, destination);
+  struct entry *e = find_entry(ctx, destination);
 
   if (!e)
     return;
