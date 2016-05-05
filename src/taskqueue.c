@@ -53,13 +53,14 @@ void taskqueue_init(taskqueue_ctx *ctx) {
 }
 
 /** Enqueues a new task. A task with a timeout of zero is scheduled immediately. */
-taskqueue_t * post_task(taskqueue_ctx *ctx, unsigned int timeout, void (*function)(void*), void *data) {
+taskqueue_t * post_task(taskqueue_ctx *ctx, unsigned int timeout, void (*function)(void*), void (*cleanup)(void*), void *data) {
 	taskqueue_t *task = calloc(1, sizeof(taskqueue_t));
 
   clock_gettime(CLOCK_MONOTONIC, &task->due);
 
 	task->due.tv_sec += timeout;
 	task->function = function;
+	task->cleanup = cleanup;
 	task->data = data;
 
 	take_task(task);
@@ -73,7 +74,7 @@ taskqueue_t * post_task(taskqueue_ctx *ctx, unsigned int timeout, void (*functio
 
 /** Enqueues a new task if it'll be scheduled before the old one.
     A task with a timeout of zero is scheduled immediately. */
-taskqueue_t * replace_task(taskqueue_ctx *ctx, taskqueue_t *old_task, unsigned int timeout, void (*function)(void*), void *data) {
+taskqueue_t * replace_task(taskqueue_ctx *ctx, taskqueue_t *old_task, unsigned int timeout, void (*function)(void*), void (*cleanup)(void*), void *data) {
 	taskqueue_t *task = calloc(1, sizeof(taskqueue_t));
 
   clock_gettime(CLOCK_MONOTONIC, &task->due);
@@ -145,6 +146,9 @@ bool put_task(taskqueue_t *task) {
 	task->refcnt--;
 
 	if (task->refcnt <= 0) {
+		if (task->cleanup != NULL)
+			task->cleanup(task->data);
+
 		free(task);
 		return true;
 	}

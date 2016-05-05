@@ -23,6 +23,7 @@ struct taskqueue {
 	int refcnt;
 
 	void (*function)(void*);
+	void (*cleanup)(void*);
 	void *data;
 };
 
@@ -39,5 +40,5 @@ void taskqueue_run(taskqueue_ctx *ctx);
 void taskqueue_schedule(taskqueue_ctx *ctx);
 void take_task(taskqueue_t *task);
 bool put_task(taskqueue_t *task);
-taskqueue_t * post_task(taskqueue_ctx *ctx, unsigned int timeout, void (*function)(void*), void *data);
-taskqueue_t * replace_task(taskqueue_ctx *ctx, taskqueue_t * task, unsigned int timeout, void (*function)(void*), void *data);
+taskqueue_t * post_task(taskqueue_ctx *ctx, unsigned int timeout, void (*function)(void*), void (*cleanup)(void*), void *data);
+taskqueue_t * replace_task(taskqueue_ctx *ctx, taskqueue_t * task, unsigned int timeout, void (*function)(void*), void (*cleanup)(void*), void *data);

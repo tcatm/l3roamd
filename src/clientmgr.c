@@ -289,9 +289,9 @@ void schedule_clientcheck(clientmgr_ctx *ctx, struct client *client, unsigned in
   memcpy(data->mac, client->mac, 6);
 
   if (client->check_task == NULL)
-    client->check_task = post_task(CTX(taskqueue), timeout, checkclient_task, data);
+    client->check_task = post_task(CTX(taskqueue), timeout, checkclient_task, free, data);
   else
-    client->check_task = replace_task(CTX(taskqueue), client->check_task, timeout, checkclient_task, data);
+    client->check_task = replace_task(CTX(taskqueue), client->check_task, timeout, checkclient_task, free, data);
 
   take_task(client->check_task);
 }
