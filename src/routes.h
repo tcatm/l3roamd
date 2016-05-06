@@ -28,3 +28,5 @@ void rtnl_handle_in(struct l3ctx *ctx, int fd);
 void rtnl_init(struct l3ctx *ctx);
 void route_insert(struct l3ctx *ctx, const struct kernel_route *route, uint8_t *mac);
 void route_remove(struct l3ctx *ctx, const struct kernel_route *route);
+void rtnl_add_address(struct l3ctx *ctx, struct in6_addr *address);
+void rtnl_remove_address(struct l3ctx *ctx, struct in6_addr *address);

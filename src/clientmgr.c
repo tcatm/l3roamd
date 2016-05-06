@@ -14,6 +14,22 @@ static void checkclient_task(void *d);
 static void checkclient(clientmgr_ctx *ctx, uint8_t mac[6]);
 static const char *state_str(enum ip_state state);
 
+struct in6_addr node_client_ip_from_mac(uint8_t mac[6]) {
+  struct in6_addr address = {};
+  inet_pton(AF_INET6, NODE_CLIENT_PREFIX, &address);
+
+  address.s6_addr[8] = mac[0] ^ 0x02;
+  address.s6_addr[9] = mac[1];
+  address.s6_addr[10] = mac[2];
+  address.s6_addr[11] = 0xff;
+  address.s6_addr[12] = 0xfe;
+  address.s6_addr[13] = mac[3];
+  address.s6_addr[14] = mac[4];
+  address.s6_addr[15] = mac[5];
+
+  return address;
+}
+
 bool prefix_contains(const struct prefix *prefix, struct in6_addr *addr) {
   int plen = prefix->plen;
 
@@ -91,6 +107,22 @@ bool client_is_active(const struct client *client) {
   }
 
   return false;
+}
+
+/** Adds the special node client IP address.
+  */
+void add_special_ip(clientmgr_ctx *ctx, struct client *client) {
+  struct in6_addr address = node_client_ip_from_mac(client->mac);
+  printf("Adding special address\n");
+  rtnl_add_address(ctx->l3ctx, &address);
+}
+
+/** Removes the special node client IP address.
+  */
+void remove_special_ip(clientmgr_ctx *ctx, struct client *client) {
+  struct in6_addr address = node_client_ip_from_mac(client->mac);
+  printf("Removing special address\n");
+  rtnl_remove_address(ctx->l3ctx, &address);
 }
 
 /** Given an IP address returns the IP object of a client.
@@ -401,12 +433,15 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 
   client_ip_set_state(ctx, client, ip, IP_ACTIVE);
 
-  if (!was_active)
-    intercom_claim(CTX(intercom), client);
+  if (!was_active) {
+    struct in6_addr address = node_client_ip_from_mac(client->mac);
+    if (!intercom_claim(CTX(intercom), &address, client))
+      add_special_ip(ctx, client);
+  }
 
   // If the IP address is new, add to distributed database (neighbor's for now).
   if (ip_is_new)
-    intercom_info(CTX(intercom), NULL, client);
+    intercom_info(CTX(intercom), NULL, client, false);
 
   schedule_clientcheck(ctx, client, IP_CHECKCLIENT_TIMEOUT);
 }
@@ -429,7 +464,11 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
   client->timeout.tv_sec += CLIENT_TIMEOUT;
   client->ifindex = ifindex;
 
-  intercom_claim(CTX(intercom), client);
+  struct in6_addr address = node_client_ip_from_mac(client->mac);
+  if (!intercom_claim(CTX(intercom), &address, client)) {
+    printf("Claim failed.\n");
+    add_special_ip(ctx, client);
+  }
 
   // Mark all inactive IP addresses tentative and schedule a check to establish
   // whether the client is using them now.
@@ -451,7 +490,12 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
   if (client == NULL)
     return;
 
-  intercom_info(CTX(intercom), sender, client);
+  bool active = client_is_active(client);
+
+  if (active)
+    remove_special_ip(ctx, client);
+
+  intercom_info(CTX(intercom), sender, client, active);
 
   if (!client_is_active(client))
     return;
@@ -470,7 +514,7 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 
 /** Handle incoming client info.
   */
-void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
+void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bool relinquished) {
   struct client *client = get_client(ctx, foreign_client->mac);
 
   if (client == NULL || !client_is_active(client))
@@ -491,6 +535,9 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
   }
 
   // TODO free foreign_client?
+
+  if (relinquished)
+    add_special_ip(ctx, client);
 
   printf("Merged ");
   print_client(client);

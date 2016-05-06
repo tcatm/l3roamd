@@ -1,6 +1,8 @@
 #include "routes.h"
 #include "error.h"
 
+static void rtnl_change_address(struct l3ctx *ctx, struct in6_addr *address, int type, int flags);
+
 void print_route(struct kernel_route *route) {
   char ifname[IFNAMSIZ];
   char addr_prefix[INET6_ADDRSTRLEN];
@@ -320,4 +322,43 @@ int rtnl_addattr(struct nlmsghdr *n, int maxlen, int type, void *data, int datal
 	memcpy(RTA_DATA(rta), data, datalen);
 	n->nlmsg_len = NLMSG_ALIGN(n->nlmsg_len) + len;
 	return 0;
+}
+
+void rtnl_add_address(struct l3ctx *ctx, struct in6_addr *address) {
+  rtnl_change_address(ctx, address, RTM_NEWADDR, NLM_F_CREATE | NLM_F_EXCL | NLM_F_REQUEST);
+}
+
+void rtnl_remove_address(struct l3ctx *ctx, struct in6_addr *address) {
+  rtnl_change_address(ctx, address, RTM_DELADDR, NLM_F_REQUEST);
+}
+
+void rtnl_change_address(struct l3ctx *ctx, struct in6_addr *address, int type, int flags) {
+  struct iovec iov;
+  struct msghdr msg;
+  struct sockaddr_nl nladdr = { .nl_family = AF_NETLINK };
+
+  struct {
+     struct nlmsghdr nl;
+     struct ifaddrmsg ifa;
+     char buf[1024];
+  } req = {};
+
+  req.nl.nlmsg_len = NLMSG_LENGTH(sizeof(struct ifaddrmsg));
+  req.nl.nlmsg_type = type;
+  req.nl.nlmsg_flags = flags;
+
+  req.ifa.ifa_family = AF_INET6;
+  req.ifa.ifa_prefixlen = 128;
+  req.ifa.ifa_index = 1; // get the loopback index
+  req.ifa.ifa_scope = 0;
+
+  rtnl_addattr(&req.nl, sizeof(req), IFA_LOCAL, address, sizeof(struct in6_addr));
+
+  iov = (struct iovec) {&req, 0 };
+  msg = (struct msghdr) {&nladdr, sizeof(nladdr), &iov, 1, NULL, 0, 0 };
+
+  iov.iov_len = req.nl.nlmsg_len;
+
+  if (sendmsg(ctx->rtnl_sock, &msg, 0) < 0)
+    perror("nl_sendmsg");
 }

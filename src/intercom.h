@@ -31,6 +31,7 @@ typedef struct __attribute__((__packed__)) {
 
 typedef struct __attribute__((__packed__)) {
   intercom_packet_hdr hdr;
+  uint8_t relinquished;
   uint8_t mac[6];
   uint8_t num_addresses;
 } intercom_packet_info;
@@ -63,5 +64,5 @@ void intercom_init(intercom_ctx *ctx);
 void intercom_handle_in(intercom_ctx *ctx, int fd);
 void intercom_add_interface(intercom_ctx *ctx, char *ifname);
 void intercom_update_interfaces(intercom_ctx *ctx);
-void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client);
-void intercom_claim(intercom_ctx *ctx, struct client *client);
+void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client, bool relinquished);
+bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client);

@@ -123,7 +123,7 @@ void intercom_seek(intercom_ctx *ctx, const struct in6_addr *address) {
   intercom_send_packet(ctx, (uint8_t*)&packet, sizeof(packet));
 }
 
-void intercom_send_packet_unicast(intercom_ctx *ctx, const struct in6_addr *recipient, uint8_t *packet, ssize_t packet_len) {
+bool intercom_send_packet_unicast(intercom_ctx *ctx, const struct in6_addr *recipient, uint8_t *packet, ssize_t packet_len) {
     struct sockaddr_in6 addr = (struct sockaddr_in6) {
       .sin6_family = AF_INET6,
       .sin6_port = htons(INTERCOM_PORT),
@@ -134,6 +134,8 @@ void intercom_send_packet_unicast(intercom_ctx *ctx, const struct in6_addr *reci
 
     if (rc < 0)
       perror("sendto failed");
+
+    return rc >= 0;
 }
 
 void intercom_send_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len) {
@@ -204,7 +206,7 @@ void intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet) {
     entry++;
   }
 
-  clientmgr_handle_info(CTX(clientmgr), &client);
+  clientmgr_handle_info(CTX(clientmgr), &client, packet->relinquished);
 }
 
 void intercom_handle_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len) {
@@ -258,7 +260,7 @@ void intercom_handle_in(intercom_ctx *ctx, int fd) {
 #define INFO_MAX 32
 
 /* recipient = NULL -> send to neighbours */
-void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client) {
+void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client, bool relinquished) {
   intercom_packet_info *packet = malloc(sizeof(intercom_packet_info) + INFO_MAX * sizeof(intercom_packet_info_entry));
   int i;
 
@@ -273,6 +275,7 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
   memcpy(&packet->hdr.sender, ctx->ip.s6_addr, sizeof(uint8_t) * 16);
 
   memcpy(&packet->mac, client->mac, sizeof(uint8_t) * 6);
+  packet->relinquished = relinquished;
 
   intercom_packet_info_entry *entry = (intercom_packet_info_entry*)((uint8_t*)(packet) + sizeof(intercom_packet_info));
 
@@ -296,7 +299,7 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
   free(packet);
 }
 
-void intercom_claim(intercom_ctx *ctx, struct client *client) {
+bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client) {
   intercom_packet_claim packet;
 
   uint32_t nonce = rand();
@@ -313,5 +316,10 @@ void intercom_claim(intercom_ctx *ctx, struct client *client) {
 
   intercom_recently_seen_add(ctx, &packet.hdr);
 
-  intercom_send_packet(ctx, (uint8_t*)&packet, sizeof(packet));
+  if (recipient != NULL)
+    return intercom_send_packet_unicast(ctx, recipient, (uint8_t*)&packet, sizeof(packet));
+  else {
+    intercom_send_packet(ctx, (uint8_t*)&packet, sizeof(packet));
+    return true;
+  }
 }
