@@ -370,7 +370,11 @@ void checkclient(clientmgr_ctx *ctx, uint8_t mac[6]) {
       case IP_ACTIVE:
         if (timespec_cmp(ip->timestamp, na_timeout) <= 0)
           client_ip_set_state(ctx, client, ip, IP_INACTIVE);
-        icmp6_send_solicitation(CTX(icmp6), &ip->address);
+
+        if (clientmgr_is_ipv4(CTX(clientmgr), &ip->address))
+          arp_send_request(CTX(arp), &ip->address);
+        else
+          icmp6_send_solicitation(CTX(icmp6), &ip->address);
         break;
       case IP_INACTIVE:
         if (timespec_cmp(ip->timestamp, client_timeout) <= 0) {
@@ -379,7 +383,11 @@ void checkclient(clientmgr_ctx *ctx, uint8_t mac[6]) {
         }
         break;
       case IP_TENTATIVE:
-        icmp6_send_solicitation(CTX(icmp6), &ip->address);
+        if (clientmgr_is_ipv4(CTX(clientmgr), &ip->address))
+          arp_send_request(CTX(arp), &ip->address);
+        else
+          icmp6_send_solicitation(CTX(icmp6), &ip->address);
+
         ip->tentative_cnt--;
         if (ip->tentative_cnt <= 0)
           client_ip_set_state(ctx, client, ip, IP_INACTIVE);
@@ -401,7 +409,13 @@ void checkclient(clientmgr_ctx *ctx, uint8_t mac[6]) {
 /** Check whether an IP address is contained in a client prefix.
   */
 bool clientmgr_valid_address(clientmgr_ctx *ctx, struct in6_addr *address) {
-  return prefix_contains(&ctx->prefix, address);
+  return prefix_contains(&ctx->prefix, address) | clientmgr_is_ipv4(ctx, address);
+}
+
+/** Check whether an IP address is contained in the IPv4 prefix.
+  */
+bool clientmgr_is_ipv4(clientmgr_ctx *ctx, struct in6_addr *address) {
+  return prefix_contains(&ctx->v4prefix, address);
 }
 
 /** Add a new address to a client identified by its MAC.
@@ -411,9 +425,9 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 
   char str[INET6_ADDRSTRLEN];
   inet_ntop(AF_INET6, address, str, INET6_ADDRSTRLEN);
-  printf("Add Address: %s\n", str);
+  printf("Add Address: %s (MAC %02x:%02x:%02x:%02x:%02x:%02x)\n", str, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-  if (!prefix_contains(&ctx->prefix, address))
+  if (!clientmgr_valid_address(ctx, address))
     return;
 
   struct client *client = get_or_create_client(ctx, mac);

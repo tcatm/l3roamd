@@ -70,6 +70,7 @@ void loop(struct l3ctx *ctx) {
   add_fd(efd, ctx->taskqueue_ctx.fd, EPOLLIN);
   add_fd(efd, ctx->icmp6_ctx.fd, EPOLLIN);
   add_fd(efd, ctx->icmp6_ctx.nsfd, EPOLLIN);
+  add_fd(efd, ctx->arp_ctx.fd, EPOLLIN);
   add_fd(efd, ctx->intercom_ctx.fd, EPOLLIN | EPOLLET);
   add_fd(efd, ctx->wifistations_ctx.fd, EPOLLIN);
 
@@ -97,6 +98,9 @@ void loop(struct l3ctx *ctx) {
       } else if (ctx->icmp6_ctx.nsfd == events[i].data.fd) {
         if (events[i].events & EPOLLIN)
           icmp6_handle_ns_in(&ctx->icmp6_ctx, events[i].data.fd);
+      } else if (ctx->arp_ctx.fd == events[i].data.fd) {
+        if (events[i].events & EPOLLIN)
+          arp_handle_in(&ctx->arp_ctx, events[i].data.fd);
       } else if (ctx->intercom_ctx.fd == events[i].data.fd) {
         if (events[i].events & EPOLLIN)
           intercom_handle_in(&ctx->intercom_ctx, events[i].data.fd);
@@ -112,13 +116,14 @@ void loop(struct l3ctx *ctx) {
 }
 
 void usage() {
-  puts("Usage: l3roamd [-h] -a <ip6> -p <prefix> -i <clientif> -m <meshif> ... -t <export table>");
+  puts("Usage: l3roamd [-h] -a <ip6> -p <prefix> -i <clientif> -m <meshif> ... -t <export table> -4 [prefix]");
   puts("  -a <ip6>          ip address of this node");
   puts("  -c <file>         configuration file");
   puts("  -p <prefix>       clientprefix"); // TODO mehrfache angabe sollte möglich sein
   puts("  -i <clientif>     client interface");
   puts("  -m <meshif>       mesh interface. may be specified multiple times");
   puts("  -t <export table> export routes to this table");
+  puts("  -4 <prefix>       IPv4 translation prefix");
   puts("  -h                this help\n");
 }
 
@@ -152,6 +157,7 @@ void interfaces_changed(struct l3ctx *ctx, int type, const struct ifinfomsg *msg
   printf("interfaces changed\n");
   intercom_update_interfaces(&ctx->intercom_ctx);
   icmp6_interface_changed(&ctx->icmp6_ctx, type, msg);
+  arp_interface_changed(&ctx->arp_ctx, type, msg);
 }
 
 int main(int argc, char *argv[]) {
@@ -163,11 +169,12 @@ int main(int argc, char *argv[]) {
   ctx.intercom_ctx.l3ctx = &ctx;
   ctx.icmp6_ctx.l3ctx = &ctx;
   ctx.ipmgr_ctx.l3ctx = &ctx;
+  ctx.arp_ctx.l3ctx = &ctx;
 
   intercom_init(&ctx.intercom_ctx);
 
   int c;
-  while ((c = getopt(argc, argv, "ha:p:i:m:t:c:")) != -1)
+  while ((c = getopt(argc, argv, "ha:p:i:m:t:c:4:")) != -1)
     switch (c) {
       case 'h':
         usage();
@@ -188,12 +195,23 @@ int main(int argc, char *argv[]) {
         break;
       case 'i':
         ctx.icmp6_ctx.clientif = strdupa(optarg);
+        ctx.arp_ctx.clientif = strdupa(optarg);
         break;
       case 'm':
         intercom_add_interface(&ctx.intercom_ctx, strdupa(optarg));
         break;
       case 't':
         ctx.clientmgr_ctx.export_table = atoi(optarg);
+        break;
+      case '4':
+        if (!parse_prefix(&ctx.clientmgr_ctx.v4prefix, optarg))
+          exit_error("Can not parse IPv4 prefix");
+
+        if (ctx.clientmgr_ctx.v4prefix.plen != 96)
+          exit_error("IPv4 prefix must be /96");
+
+        ctx.arp_ctx.prefix = ctx.clientmgr_ctx.v4prefix.prefix;
+
         break;
       default:
         fprintf(stderr, "Invalid parameter %c ignored.\n", c);
@@ -202,6 +220,7 @@ int main(int argc, char *argv[]) {
   rtnl_init(&ctx);
   ipmgr_init(&ctx.ipmgr_ctx, "l3roam0", 9000);
   icmp6_init(&ctx.icmp6_ctx);
+  arp_init(&ctx.arp_ctx);
   taskqueue_init(&ctx.taskqueue_ctx);
   wifistations_init(&ctx.wifistations_ctx);
 

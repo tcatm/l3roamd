@@ -7,6 +7,7 @@
 #include "taskqueue.h"
 #include "icmp6.h"
 #include "ipmgr.h"
+#include "arp.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -23,6 +24,7 @@ struct l3ctx {
   clientmgr_ctx clientmgr_ctx;
   icmp6_ctx icmp6_ctx;
   ipmgr_ctx ipmgr_ctx;
+  arp_ctx arp_ctx;
 };
 
 void interfaces_changed(struct l3ctx *ctx, int type, const struct ifinfomsg *msg);

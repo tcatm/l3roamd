@@ -89,13 +89,17 @@ void delete_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
   }
 }
 
-void seek_address(ipmgr_ctx *ctx, const struct in6_addr *addr) {
+void seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
   char str[INET6_ADDRSTRLEN];
   inet_ntop(AF_INET6, addr, str, sizeof str);
 
   printf("\x1b[36mLooking for %s\x1b[0m\n", str);
 
-  icmp6_send_solicitation(CTX(icmp6), addr);
+  if (clientmgr_is_ipv4(CTX(clientmgr), addr))
+    arp_send_request(CTX(arp), addr);
+  else
+    icmp6_send_solicitation(CTX(icmp6), addr);
+
   intercom_seek(CTX(intercom), addr);
 }
 
@@ -105,8 +109,8 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 
   uint8_t a0 = dst.s6_addr[0];
 
-  // Check for dst in 2000::/3 or fc00::/7
-  if ((a0 & 0xe0) != 0x20 && (a0 & 0xfe) != 0xfc)
+  // Ignore multicast
+  if (a0 == 0xff)
     return;
 
   char str[INET6_ADDRSTRLEN];

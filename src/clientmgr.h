@@ -42,6 +42,7 @@ struct client {
 typedef struct {
   struct l3ctx *l3ctx;
   struct prefix prefix;
+  struct prefix v4prefix;
   unsigned int export_table;
   VECTOR(struct client) clients;
 } clientmgr_ctx;
@@ -53,6 +54,7 @@ struct client_task {
 };
 
 bool clientmgr_valid_address(clientmgr_ctx *ctx, struct in6_addr *address);
+bool clientmgr_is_ipv4(clientmgr_ctx *ctx, struct in6_addr *address);
 void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex);
 void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex);
 void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[6]);
