@@ -1,8 +1,9 @@
 #include "clientmgr.h"
-#include "routes.h"
+#include "routemgr.h"
 #include "icmp6.h"
 #include "timespec.h"
 #include "error.h"
+#include "l3roamd.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -114,7 +115,7 @@ bool client_is_active(const struct client *client) {
 void add_special_ip(clientmgr_ctx *ctx, struct client *client) {
   struct in6_addr address = node_client_ip_from_mac(client->mac);
   printf("Adding special address\n");
-  rtnl_add_address(ctx->l3ctx, &address);
+  rtnl_add_address(CTX(routemgr), &address);
 }
 
 /** Removes the special node client IP address.
@@ -122,7 +123,7 @@ void add_special_ip(clientmgr_ctx *ctx, struct client *client) {
 void remove_special_ip(clientmgr_ctx *ctx, struct client *client) {
   struct in6_addr address = node_client_ip_from_mac(client->mac);
   printf("Removing special address\n");
-  rtnl_remove_address(ctx->l3ctx, &address);
+  rtnl_remove_address(CTX(routemgr), &address);
 }
 
 /** Given an IP address returns the IP object of a client.
@@ -162,30 +163,35 @@ void delete_client_ip(struct client *client, const struct in6_addr *address) {
 /** Adds a route.
   */
 void client_add_route(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip) {
-  struct kernel_route route = {
-    .plen = 128,
-    .proto = 23,
-    .ifindex = client->ifindex,
-    .table = ctx->export_table
-  };
+  if (clientmgr_is_ipv4(ctx, &ip->address)) {
+    struct in_addr ip4 = {
+      .s_addr = ip->address.s6_addr[12] << 24 | ip->address.s6_addr[13] << 16 | ip->address.s6_addr[14] << 8 | ip->address.s6_addr[15]
+    };
 
-  memcpy(route.prefix, ip->address.s6_addr, 16);
-
-  route_insert(ctx->l3ctx, &route, client->mac);
+    routemgr_insert_route(CTX(routemgr), ctx->export_table, ctx->nat46ifindex, &ip->address);
+    routemgr_insert_route4(CTX(routemgr), ctx->export_table, client->ifindex, &ip4);
+    routemgr_insert_neighbor4(CTX(routemgr), client->ifindex, &ip4, client->mac);
+  } else {
+    routemgr_insert_route(CTX(routemgr), ctx->export_table, client->ifindex, &ip->address);
+    routemgr_insert_neighbor(CTX(routemgr), client->ifindex, &ip->address, client->mac);
+  }
 }
 
 /** Remove a route.
   */
 void client_remove_route(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip) {
-  struct kernel_route route = {
-    .plen = 128,
-    .proto = 23,
-    .table = ctx->export_table
-  };
+  if (clientmgr_is_ipv4(ctx, &ip->address)) {
+    struct in_addr ip4 = {
+      .s_addr = ip->address.s6_addr[12] << 24 | ip->address.s6_addr[13] << 16 | ip->address.s6_addr[14] << 8 | ip->address.s6_addr[15]
+    };
 
-  memcpy(route.prefix, ip->address.s6_addr, 16);
-
-  route_remove(ctx->l3ctx, &route);
+    routemgr_remove_route(CTX(routemgr), ctx->export_table, &ip->address);
+    routemgr_remove_route4(CTX(routemgr), ctx->export_table, &ip4);
+    routemgr_remove_neighbor4(CTX(routemgr), client->ifindex, &ip4, client->mac);
+  } else {
+    routemgr_remove_route(CTX(routemgr), ctx->export_table, &ip->address);
+    routemgr_remove_neighbor(CTX(routemgr), client->ifindex, &ip->address, client->mac);
+  }
 }
 
 /** Given a MAC address returns a client object.

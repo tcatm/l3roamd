@@ -30,7 +30,7 @@
 #include "l3roamd.h"
 #include "error.h"
 #include "icmp6.h"
-#include "routes.h"
+#include "routemgr.h"
 #include "intercom.h"
 #include "config.h"
 
@@ -66,7 +66,7 @@ void loop(struct l3ctx *ctx) {
   }
 
   add_fd(efd, ctx->ipmgr_ctx.fd, EPOLLIN | EPOLLET);
-  add_fd(efd, ctx->rtnl_sock, EPOLLIN | EPOLLET);
+  add_fd(efd, ctx->routemgr_ctx.fd, EPOLLIN | EPOLLET);
   add_fd(efd, ctx->taskqueue_ctx.fd, EPOLLIN);
   add_fd(efd, ctx->icmp6_ctx.fd, EPOLLIN);
   add_fd(efd, ctx->icmp6_ctx.nsfd, EPOLLIN);
@@ -86,9 +86,9 @@ void loop(struct l3ctx *ctx) {
       if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)) {
         fprintf(stderr, "epoll error\n");
         close(events[i].data.fd);
-      } else if (ctx->rtnl_sock == events[i].data.fd) {
+      } else if (ctx->routemgr_ctx.fd == events[i].data.fd) {
         if (events[i].events & EPOLLIN)
-          rtnl_handle_in(ctx, events[i].data.fd);
+          routemgr_handle_in(&ctx->routemgr_ctx, events[i].data.fd);
       } else if (ctx->ipmgr_ctx.fd == events[i].data.fd) {
         if (events[i].events & EPOLLIN)
           ipmgr_handle_in(&ctx->ipmgr_ctx, events[i].data.fd);
@@ -116,7 +116,7 @@ void loop(struct l3ctx *ctx) {
 }
 
 void usage() {
-  puts("Usage: l3roamd [-h] -a <ip6> -p <prefix> -i <clientif> -m <meshif> ... -t <export table> -4 [prefix]");
+  puts("Usage: l3roamd [-h] -a <ip6> -p <prefix> -i <clientif> -m <meshif> ... -t <export table> -4 [prefix] -t <nat46if>");
   puts("  -a <ip6>          ip address of this node");
   puts("  -c <file>         configuration file");
   puts("  -p <prefix>       clientprefix"); // TODO mehrfache angabe sollte möglich sein
@@ -124,6 +124,7 @@ void usage() {
   puts("  -m <meshif>       mesh interface. may be specified multiple times");
   puts("  -t <export table> export routes to this table");
   puts("  -4 <prefix>       IPv4 translation prefix");
+  puts("  -t <nat46if>      interface for nat46");
   puts("  -h                this help\n");
 }
 
@@ -170,11 +171,12 @@ int main(int argc, char *argv[]) {
   ctx.icmp6_ctx.l3ctx = &ctx;
   ctx.ipmgr_ctx.l3ctx = &ctx;
   ctx.arp_ctx.l3ctx = &ctx;
+  ctx.routemgr_ctx.l3ctx = &ctx;
 
   intercom_init(&ctx.intercom_ctx);
 
   int c;
-  while ((c = getopt(argc, argv, "ha:p:i:m:t:c:4:")) != -1)
+  while ((c = getopt(argc, argv, "ha:p:i:m:t:c:4:n:")) != -1)
     switch (c) {
       case 'h':
         usage();
@@ -213,11 +215,14 @@ int main(int argc, char *argv[]) {
         ctx.arp_ctx.prefix = ctx.clientmgr_ctx.v4prefix.prefix;
 
         break;
+      case 'n':
+        ctx.clientmgr_ctx.nat46ifindex = if_nametoindex(optarg);
+        break;
       default:
         fprintf(stderr, "Invalid parameter %c ignored.\n", c);
     }
 
-  rtnl_init(&ctx);
+  routemgr_init(&ctx.routemgr_ctx);
   ipmgr_init(&ctx.ipmgr_ctx, "l3roam0", 9000);
   icmp6_init(&ctx.icmp6_ctx);
   arp_init(&ctx.arp_ctx);

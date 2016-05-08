@@ -8,6 +8,7 @@
 #include "icmp6.h"
 #include "ipmgr.h"
 #include "arp.h"
+#include "routemgr.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -17,7 +18,6 @@
 #include <linux/rtnetlink.h>
 
 struct l3ctx {
-  int rtnl_sock; // FIXME move to own context
   taskqueue_ctx taskqueue_ctx;
   intercom_ctx intercom_ctx;
   wifistations_ctx wifistations_ctx;
@@ -25,6 +25,7 @@ struct l3ctx {
   icmp6_ctx icmp6_ctx;
   ipmgr_ctx ipmgr_ctx;
   arp_ctx arp_ctx;
+  routemgr_ctx routemgr_ctx;
 };
 
 void interfaces_changed(struct l3ctx *ctx, int type, const struct ifinfomsg *msg);

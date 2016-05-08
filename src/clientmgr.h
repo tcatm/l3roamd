@@ -44,6 +44,7 @@ typedef struct {
   struct prefix prefix;
   struct prefix v4prefix;
   unsigned int export_table;
+  int nat46ifindex;
   VECTOR(struct client) clients;
 } clientmgr_ctx;
 
