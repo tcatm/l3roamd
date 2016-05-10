@@ -77,6 +77,7 @@ bool reschedule_task(taskqueue_ctx *ctx, taskqueue_t *task, unsigned int timeout
 
 	struct timespec due;
 	clock_gettime(CLOCK_MONOTONIC, &due);
+	due.tv_sec += timeout;
 
 	if (timespec_cmp(due, task->due)) {
 		task->due = due;
