@@ -185,7 +185,6 @@ void intercom_handle_claim(intercom_ctx *ctx, intercom_packet_claim *packet) {
 
 	memcpy(&sender.s6_addr, &packet->hdr.sender, sizeof(uint8_t) * 16);
 
-	// TODO maybe like this? CTX(clientmgr, handle_claim, lastseen, packet->mac, &sender);
 	clientmgr_handle_claim(CTX(clientmgr), &sender, packet->mac);
 }
 

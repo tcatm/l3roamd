@@ -24,7 +24,6 @@
    */
 
 // TODO EPOLLOUT beim schreiben auf den tunfd
-// TODO heap für timer events
 
 #include "ipmgr.h"
 #include "l3roamd.h"

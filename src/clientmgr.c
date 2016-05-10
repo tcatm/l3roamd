@@ -157,9 +157,6 @@ void delete_client_ip(struct client *client, const struct in6_addr *address) {
 	print_client(client);
 }
 
-// TODO struct nach routes.c, remove_route noch table und ifindex mitgeben
-// TODO refactor this
-
 /** Adds a route.
   */
 void client_add_route(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip) {
@@ -229,9 +226,10 @@ struct client *get_or_create_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
 void delete_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
 	// TODO free addresses vector here?
 	for (int i = 0; i < VECTOR_LEN(ctx->clients); i++) {
-		struct client *e = &VECTOR_INDEX(ctx->clients, i);
+		struct client *client = &VECTOR_INDEX(ctx->clients, i);
 
-		if (memcmp(mac, e->mac, sizeof(uint8_t) * 6) == 0) {
+		if (memcmp(mac, client->mac, sizeof(uint8_t) * 6) == 0) {
+			VECTOR_FREE(client->addresses);
 			VECTOR_DELETE(ctx->clients, i);
 			break;
 		}
@@ -542,8 +540,6 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bo
 
 		client_ip_set_state(ctx, client, ip, IP_TENTATIVE);
 	}
-
-	// TODO free foreign_client?
 
 	if (relinquished)
 		add_special_ip(ctx, client);

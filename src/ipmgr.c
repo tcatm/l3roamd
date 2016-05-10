@@ -129,9 +129,7 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 
 	bool new = !e;
 
-	// TODO set timestamp here
 	if (!e) {
-
 		struct entry entry = {
 			.address = dst,
 			.timestamp = now,
