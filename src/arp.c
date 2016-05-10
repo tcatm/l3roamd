@@ -8,7 +8,7 @@
 #include <linux/if_ether.h>
 
 void arp_handle_in(arp_ctx *ctx, int fd) {
-  struct msghdr msghdr;
+	struct msghdr msghdr;
 	memset (&msghdr, 0, sizeof (msghdr));
 
 	char cbuf[CMSG_SPACE (sizeof (int))];
@@ -43,9 +43,9 @@ void arp_handle_in(arp_ctx *ctx, int fd) {
 
 	struct in6_addr address = ctx->prefix;
 
-  memcpy(&address.s6_addr[12], packet.spa, 4);
+	memcpy(&address.s6_addr[12], packet.spa, 4);
 
-  char str[INET6_ADDRSTRLEN];
+	char str[INET6_ADDRSTRLEN];
 	inet_ntop(AF_INET6, &address, str, INET6_ADDRSTRLEN);
 	printf("ARP Response from %s (MAC %02x:%02x:%02x:%02x:%02x:%02x)\n", str, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 

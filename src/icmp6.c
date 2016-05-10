@@ -111,15 +111,15 @@ void icmp6_interface_changed(icmp6_ctx *ctx, int type, const struct ifinfomsg *m
 	ctx->ifindex = msg->ifi_index;
 
 	switch (type) {
-    case RTM_NEWLINK:
-    case RTM_SETLINK:
+		case RTM_NEWLINK:
+		case RTM_SETLINK:
 			icmp6_setup_interface(ctx);
-      break;
+			break;
 
-    case RTM_DELLINK:
+		case RTM_DELLINK:
 			ctx->ok = false;
-      break;
-  }
+			break;
+	}
 }
 
 struct __attribute__((__packed__)) sol_packet {
@@ -136,12 +136,12 @@ struct __attribute__((__packed__)) adv_packet {
 
 void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 	char str[INET6_ADDRSTRLEN];
-  struct msghdr msghdr;
+	struct msghdr msghdr;
 	memset (&msghdr, 0, sizeof (msghdr));
 
 	char cbuf[CMSG_SPACE (sizeof (int))];
 
-	struct __attribute__((__packed__))  {
+	struct __attribute__((__packed__)) {
 		struct ip6_hdr hdr;
 		struct sol_packet sol;
 	} packet;
@@ -185,7 +185,7 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 
 void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 	char str[INET6_ADDRSTRLEN];
-  struct msghdr msghdr;
+	struct msghdr msghdr;
 	memset (&msghdr, 0, sizeof (msghdr));
 
 	struct adv_packet packet;
@@ -218,37 +218,37 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 	if (packet.hdr.nd_na_hdr.icmp6_code != 0)
 		return;
 
-  // only handle when it is a response to a solicitation
+	// only handle when it is a response to a solicitation
 	// and override bit is set (i.e. a MAC is supplied)
 	if ((packet.hdr.nd_na_hdr.icmp6_dataun.icmp6_un_data8[0] & 0x60) != 0x60)
 		return;
 
 	inet_ntop(AF_INET6, &packet.hdr.nd_na_target, str, INET6_ADDRSTRLEN);
 
-  clientmgr_add_address(CTX(clientmgr), &packet.hdr.nd_na_target, packet.hw_addr, ctx->ifindex);
+	clientmgr_add_address(CTX(clientmgr), &packet.hdr.nd_na_target, packet.hw_addr, ctx->ifindex);
 }
 
 void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
-  struct sol_packet packet;
+	struct sol_packet packet;
 
-  packet.hdr.nd_ns_hdr.icmp6_type = ND_NEIGHBOR_SOLICIT;
-  packet.hdr.nd_ns_hdr.icmp6_code = 0;
-  packet.hdr.nd_ns_hdr.icmp6_cksum = 0;
-  packet.hdr.nd_ns_reserved = 0;
-  memcpy(&packet.hdr.nd_ns_target, addr, 16);
+	packet.hdr.nd_ns_hdr.icmp6_type = ND_NEIGHBOR_SOLICIT;
+	packet.hdr.nd_ns_hdr.icmp6_code = 0;
+	packet.hdr.nd_ns_hdr.icmp6_cksum = 0;
+	packet.hdr.nd_ns_reserved = 0;
+	memcpy(&packet.hdr.nd_ns_target, addr, 16);
 
-  packet.opt.nd_opt_type = ND_OPT_SOURCE_LINKADDR;
+	packet.opt.nd_opt_type = ND_OPT_SOURCE_LINKADDR;
 	packet.opt.nd_opt_len = 1;
-  memcpy(packet.hw_addr, ctx->mac, 6);
+	memcpy(packet.hw_addr, ctx->mac, 6);
 
-  struct sockaddr_in6 dst = {};
-  dst.sin6_family = AF_INET6;
-  memcpy(&dst.sin6_addr, addr, 16);
-  memcpy(&dst.sin6_addr, "\xff\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\xff", 13);
+	struct sockaddr_in6 dst = {};
+	dst.sin6_family = AF_INET6;
+	memcpy(&dst.sin6_addr, addr, 16);
+	memcpy(&dst.sin6_addr, "\xff\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\xff", 13);
 
-  char str[INET6_ADDRSTRLEN];
-  inet_ntop(AF_INET6, &dst.sin6_addr, str, sizeof str);
-  printf("Send NS to %s\n", str);
+	char str[INET6_ADDRSTRLEN];
+	inet_ntop(AF_INET6, &dst.sin6_addr, str, sizeof str);
+	printf("Send NS to %s\n", str);
 
-  sendto(ctx->fd, &packet, sizeof(packet), 0, &dst, sizeof(dst));
+	sendto(ctx->fd, &packet, sizeof(packet), 0, &dst, sizeof(dst));
 }

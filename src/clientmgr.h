@@ -14,43 +14,43 @@
 #define NODE_CLIENT_PREFIX "fec0::"
 
 enum ip_state {
-  IP_INACTIVE = 0,
-  IP_ACTIVE,
-  IP_TENTATIVE
+	IP_INACTIVE = 0,
+	IP_ACTIVE,
+	IP_TENTATIVE
 };
 
 struct prefix {
-  struct in6_addr prefix;
-  int plen;
+	struct in6_addr prefix;
+	int plen;
 };
 
 struct client_ip {
-  enum ip_state state;
-  int tentative_cnt;
-  struct in6_addr address;
-  struct timespec timestamp;
+	enum ip_state state;
+	int tentative_cnt;
+	struct in6_addr address;
+	struct timespec timestamp;
 };
 
 struct client {
-  unsigned int ifindex;
-  taskqueue_t *check_task;
-  struct timespec timeout;
-  uint8_t mac[6];
-  VECTOR(struct client_ip) addresses;
+	unsigned int ifindex;
+	taskqueue_t *check_task;
+	struct timespec timeout;
+	uint8_t mac[6];
+	VECTOR(struct client_ip) addresses;
 };
 
 typedef struct {
-  struct l3ctx *l3ctx;
-  struct prefix prefix;
-  struct prefix v4prefix;
-  unsigned int export_table;
-  int nat46ifindex;
-  VECTOR(struct client) clients;
+	struct l3ctx *l3ctx;
+	struct prefix prefix;
+	struct prefix v4prefix;
+	unsigned int export_table;
+	int nat46ifindex;
+	VECTOR(struct client) clients;
 } clientmgr_ctx;
 
 struct client_task {
-  clientmgr_ctx *ctx;
-  uint8_t mac[6];
+	clientmgr_ctx *ctx;
+	uint8_t mac[6];
 };
 
 bool clientmgr_valid_address(clientmgr_ctx *ctx, struct in6_addr *address);

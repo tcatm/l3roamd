@@ -13,46 +13,46 @@
 enum {INTERCOM_SEEK, INTERCOM_CLAIM, INTERCOM_INFO};
 
 typedef struct __attribute__((__packed__)) {
-  uint8_t ttl;
-  uint32_t nonce;
-  uint8_t type;
-  uint8_t sender[16];
+	uint8_t ttl;
+	uint32_t nonce;
+	uint8_t type;
+	uint8_t sender[16];
 } intercom_packet_hdr;
 
 typedef struct __attribute__((__packed__)) {
-  intercom_packet_hdr hdr;
-  uint8_t address[16];
+	intercom_packet_hdr hdr;
+	uint8_t address[16];
 } intercom_packet_seek;
 
 typedef struct __attribute__((__packed__)) {
-  intercom_packet_hdr hdr;
-  uint8_t mac[6];
+	intercom_packet_hdr hdr;
+	uint8_t mac[6];
 } intercom_packet_claim;
 
 typedef struct __attribute__((__packed__)) {
-  intercom_packet_hdr hdr;
-  uint8_t relinquished;
-  uint8_t mac[6];
-  uint8_t num_addresses;
+	intercom_packet_hdr hdr;
+	uint8_t relinquished;
+	uint8_t mac[6];
+	uint8_t num_addresses;
 } intercom_packet_info;
 
 typedef struct __attribute__((__packed__)) {
-  uint8_t address[16];
+	uint8_t address[16];
 } intercom_packet_info_entry;
 
 typedef struct {
-  bool ok;
-  unsigned int ifindex;
-  char *ifname;
+	bool ok;
+	unsigned int ifindex;
+	char *ifname;
 } intercom_if;
 
 typedef struct {
-  struct l3ctx *l3ctx;
-  int fd;
-  struct sockaddr_in6 groupaddr;
-  struct in6_addr ip;
-  VECTOR(intercom_packet_hdr) recent_packets;
-  VECTOR(intercom_if) interfaces;
+	struct l3ctx *l3ctx;
+	int fd;
+	struct sockaddr_in6 groupaddr;
+	struct in6_addr ip;
+	VECTOR(intercom_packet_hdr) recent_packets;
+	VECTOR(intercom_if) interfaces;
 } intercom_ctx;
 
 struct client;

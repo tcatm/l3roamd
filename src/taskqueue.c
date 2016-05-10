@@ -24,21 +24,6 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-// heap for tasks
-// geordnet nach wann es due ist
-// abarbeiten:
-//   oberstes element anschauen, wenn due abarbeiten
-//   sonst neuen aufruf schedulen
-//
-// canceln eines events durch hinzufügen eines "removetasks", wird dann beim abarbeiten ausgeführt
-// hinzufügen eines events mit relativem timestamp
-
-// taskentry
-// - id
-// - duetime
-// - function pointer
-// - argument pointer
-
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/timerfd.h>
@@ -56,7 +41,7 @@ void taskqueue_init(taskqueue_ctx *ctx) {
 taskqueue_t * post_task(taskqueue_ctx *ctx, unsigned int timeout, void (*function)(void*), void (*cleanup)(void*), void *data) {
 	taskqueue_t *task = calloc(1, sizeof(taskqueue_t));
 
-  clock_gettime(CLOCK_MONOTONIC, &task->due);
+	clock_gettime(CLOCK_MONOTONIC, &task->due);
 
 	task->due.tv_sec += timeout;
 	task->function = function;

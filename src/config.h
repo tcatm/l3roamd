@@ -6,5 +6,4 @@
 #include <stdio.h>
 
 void parse_line(char *line);
-  
 bool parse_config(const char *filename);

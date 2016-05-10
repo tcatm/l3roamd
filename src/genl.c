@@ -12,16 +12,13 @@
 
 #include "genl.h"
 
-static int error_handler(struct sockaddr_nl *nla, struct nlmsgerr *err,
-			 void *arg)
-{
+static int error_handler(struct sockaddr_nl *nla, struct nlmsgerr *err, void *arg) {
 	int *ret = arg;
 	*ret = err->error;
 	return NL_STOP;
 }
 
-static int ack_handler(struct nl_msg *msg, void *arg)
-{
+static int ack_handler(struct nl_msg *msg, void *arg) {
 	int *ret = arg;
 	*ret = 0;
 	return NL_STOP;
@@ -32,8 +29,7 @@ struct handler_args {
 	int id;
 };
 
-static int family_handler(struct nl_msg *msg, void *arg)
-{
+static int family_handler(struct nl_msg *msg, void *arg) {
 	struct handler_args *grp = arg;
 	struct nlattr *tb[CTRL_ATTR_MAX + 1];
 	struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
@@ -65,8 +61,7 @@ static int family_handler(struct nl_msg *msg, void *arg)
 	return NL_SKIP;
 }
 
-int nl_get_multicast_id(struct nl_sock *sock, const char *family, const char *group)
-{
+int nl_get_multicast_id(struct nl_sock *sock, const char *family, const char *group) {
 	struct nl_msg *msg;
 	struct nl_cb *cb;
 	int ret, ctrlid;

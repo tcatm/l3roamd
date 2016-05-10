@@ -45,48 +45,48 @@ void mac_addr_n2a(char *mac_addr, unsigned char *arg) {
 }
 
 void wifistations_handle_in(wifistations_ctx *ctx) {
-  nl_recvmsgs(ctx->nl_sock, ctx->cb);
+	nl_recvmsgs(ctx->nl_sock, ctx->cb);
 }
 
 int wifistations_handle_event(struct nl_msg *msg, void *arg) {
 	wifistations_ctx *ctx = arg;
-  struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
-  struct nlattr *tb[8];
-  char macbuf[6*3];
+	struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
+	struct nlattr *tb[8];
+	char macbuf[6*3];
 
 
-  // TODO filtern auf interfaces, die uns interessieren
-  // TODO liste von interfaces pflegen (netlink)
+	// TODO filtern auf interfaces, die uns interessieren
+	// TODO liste von interfaces pflegen (netlink)
 
-  printf("event %i\n", gnlh->cmd);
+	printf("event %i\n", gnlh->cmd);
 
-  char ifname[100];
+	char ifname[100];
 
-  nla_parse(tb, 8, genlmsg_attrdata(gnlh, 0),
-  genlmsg_attrlen(gnlh, 0), NULL);
+	nla_parse(tb, 8, genlmsg_attrdata(gnlh, 0),
+	genlmsg_attrlen(gnlh, 0), NULL);
 
 	unsigned int ifindex = nla_get_u32(tb[NL80211_ATTR_IFINDEX]);
 
-  if_indextoname(ifindex, ifname);
-  printf("%s: ", ifname);
+	if_indextoname(ifindex, ifname);
+	printf("%s: ", ifname);
 
 	// TODO warum kann das NULL sein?
 	if (gnlh == NULL)
 		return 0;
 
-  switch (gnlh->cmd) {
-    case NL80211_CMD_NEW_STATION:
-      mac_addr_n2a(macbuf, nla_data(tb[NL80211_ATTR_MAC]));
+	switch (gnlh->cmd) {
+		case NL80211_CMD_NEW_STATION:
+			mac_addr_n2a(macbuf, nla_data(tb[NL80211_ATTR_MAC]));
 
-      printf("new station %s\n", macbuf);
+			printf("new station %s\n", macbuf);
 
 			// TODO Hack for br-client
 			ifindex = ctx->l3ctx->icmp6_ctx.ifindex;
 			clientmgr_notify_mac(CTX(clientmgr), nla_data(tb[NL80211_ATTR_MAC]), ifindex);
-      break;
-    case NL80211_CMD_DEL_STATION:
-      break;
-  }
+			break;
+		case NL80211_CMD_DEL_STATION:
+			break;
+	}
 
 	return 0;
 }
@@ -109,28 +109,28 @@ void wifistations_init(wifistations_ctx *ctx) {
 		goto fail;
 	}
 
-  /* MLME multicast group */
-  int mcid = nl_get_multicast_id(ctx->nl_sock, "nl80211", "mlme");
-  if (mcid >= 0) {
-    int ret = nl_socket_add_membership(ctx->nl_sock, mcid);
-    if (ret)
-      goto fail;
-  }
+	/* MLME multicast group */
+	int mcid = nl_get_multicast_id(ctx->nl_sock, "nl80211", "mlme");
+	if (mcid >= 0) {
+		int ret = nl_socket_add_membership(ctx->nl_sock, mcid);
+		if (ret)
+			goto fail;
+	}
 
-  ctx->cb = nl_cb_alloc(NL_CB_DEFAULT);
+	ctx->cb = nl_cb_alloc(NL_CB_DEFAULT);
 
-  if (!ctx->cb)
-    exit_error("failed to allocate netlink callbacks\n");
+	if (!ctx->cb)
+		exit_error("failed to allocate netlink callbacks\n");
 
-  /* no sequence checking for multicast messages */
-  nl_cb_set(ctx->cb, NL_CB_SEQ_CHECK, NL_CB_CUSTOM, no_seq_check, NULL);
-  nl_cb_set(ctx->cb, NL_CB_VALID, NL_CB_CUSTOM, wifistations_handle_event, ctx);
+	/* no sequence checking for multicast messages */
+	nl_cb_set(ctx->cb, NL_CB_SEQ_CHECK, NL_CB_CUSTOM, no_seq_check, NULL);
+	nl_cb_set(ctx->cb, NL_CB_VALID, NL_CB_CUSTOM, wifistations_handle_event, ctx);
 
-  ctx->fd = nl_socket_get_fd(ctx->nl_sock);
+	ctx->fd = nl_socket_get_fd(ctx->nl_sock);
 
 	return;
 
 fail:
 	nl_socket_free(ctx->nl_sock);
-  exit_error("Could not open nl80211 socket");
+	exit_error("Could not open nl80211 socket");
 }

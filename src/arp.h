@@ -24,7 +24,7 @@ typedef struct {
 	struct l3ctx *l3ctx;
 	int fd;
 	bool ok;
-  struct in6_addr prefix;
+	struct in6_addr prefix;
 	uint8_t mac[6];
 	const char *clientif;
 	unsigned int ifindex;

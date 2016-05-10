@@ -8,32 +8,32 @@
 #define ROUTE_PROTO 158
 
 struct nlrtreq {
-  struct nlmsghdr nl;
-  struct rtmsg rt;
-  char buf[1024];
+	struct nlmsghdr nl;
+	struct rtmsg rt;
+	char buf[1024];
 };
 
 struct nlneighreq {
-  struct nlmsghdr nl;
-  struct ndmsg nd;
-  char buf[1024];
+	struct nlmsghdr nl;
+	struct ndmsg nd;
+	char buf[1024];
 };
 
 struct kernel_route {
-    struct in6_addr prefix;
-    int plen;
-    struct in6_addr src_prefix;
-    int src_plen; /* no source prefix <=> src_plen == 0 */
-    int metric;
-    unsigned int ifindex;
-    int proto;
-    struct in6_addr gw;
-    unsigned int table;
+		struct in6_addr prefix;
+		int plen;
+		struct in6_addr src_prefix;
+		int src_plen; /* no source prefix <=> src_plen == 0 */
+		int metric;
+		unsigned int ifindex;
+		int proto;
+		struct in6_addr gw;
+		unsigned int table;
 };
 
 typedef struct {
-  struct l3ctx *l3ctx;
-  int fd;
+	struct l3ctx *l3ctx;
+	int fd;
 } routemgr_ctx;
 
 void handle_route(routemgr_ctx *ctx, struct kernel_route *route);

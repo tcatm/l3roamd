@@ -36,12 +36,12 @@
 
 struct packet {
 	struct timespec timestamp;
-  ssize_t len;
-  uint8_t *data;
+	ssize_t len;
+	uint8_t *data;
 };
 
 struct entry {
-  struct in6_addr address;
+	struct in6_addr address;
 	struct timespec timestamp;
 	taskqueue_t *check_task;
 	VECTOR(struct packet*) packets;
