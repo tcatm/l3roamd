@@ -50,7 +50,6 @@ typedef struct {
 
 struct client_task {
   clientmgr_ctx *ctx;
-  struct l3ctx *l3ctx;
   uint8_t mac[6];
 };
 

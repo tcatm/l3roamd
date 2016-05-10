@@ -352,7 +352,6 @@ void checkclient(clientmgr_ctx *ctx, uint8_t mac[6]) {
   if (client == NULL)
     return;
 
-
   printf("Checking ");
   print_client(client);
 
@@ -373,7 +372,7 @@ void checkclient(clientmgr_ctx *ctx, uint8_t mac[6]) {
         if (timespec_cmp(ip->timestamp, na_timeout) <= 0)
           client_ip_set_state(ctx, client, ip, IP_INACTIVE);
 
-        if (clientmgr_is_ipv4(CTX(clientmgr), &ip->address))
+        if (clientmgr_is_ipv4(ctx, &ip->address))
           arp_send_request(CTX(arp), &ip->address);
         else
           icmp6_send_solicitation(CTX(icmp6), &ip->address);
@@ -385,7 +384,7 @@ void checkclient(clientmgr_ctx *ctx, uint8_t mac[6]) {
         }
         break;
       case IP_TENTATIVE:
-        if (clientmgr_is_ipv4(CTX(clientmgr), &ip->address))
+        if (clientmgr_is_ipv4(ctx, &ip->address))
           arp_send_request(CTX(arp), &ip->address);
         else
           icmp6_send_solicitation(CTX(icmp6), &ip->address);
