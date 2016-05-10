@@ -63,50 +63,29 @@ taskqueue_t * post_task(taskqueue_ctx *ctx, unsigned int timeout, void (*functio
 	task->cleanup = cleanup;
 	task->data = data;
 
-	take_task(task);
-
 	taskqueue_insert(&ctx->queue, task);
-
 	taskqueue_schedule(ctx);
 
 	return task;
 }
 
-/** Enqueues a new task if it'll be scheduled before the old one.
-    A task with a timeout of zero is scheduled immediately. */
-taskqueue_t * replace_task(taskqueue_ctx *ctx, taskqueue_t *old_task, unsigned int timeout, void (*function)(void*), void (*cleanup)(void*), void *data) {
-	taskqueue_t *task = calloc(1, sizeof(taskqueue_t));
+/** Changes the timeout of a task.
+  */
+bool reschedule_task(taskqueue_ctx *ctx, taskqueue_t *task, unsigned int timeout) {
+	if (task == NULL || !taskqueue_linked(task))
+		return false;
 
-  clock_gettime(CLOCK_MONOTONIC, &task->due);
+	struct timespec due;
+	clock_gettime(CLOCK_MONOTONIC, &due);
 
-	task->due.tv_sec += timeout;
-	task->function = function;
-	task->data = data;
-
-	take_task(task);
-
-	// If the old_task is not part of the queue
-	// or if the new task is due before the old one,
-	// free the old task right back and insert the new one.
-	if (!taskqueue_linked(old_task))
+	if (timespec_cmp(due, task->due)) {
+		task->due = due;
+		taskqueue_remove(task);
 		taskqueue_insert(&ctx->queue, task);
-	else if (timespec_cmp(task->due, old_task->due) < 0) {
-		taskqueue_remove(old_task);
-		put_task(old_task);
-		taskqueue_insert(&ctx->queue, task);
-	}	else {
-		// old task is due before new task
-		put_task(task);
-		task = old_task;
+		taskqueue_schedule(ctx);
 	}
 
-	// Always put back old task.
-	// If it wasn't run it's refcnt will be >= 1.
-	put_task(old_task);
-
-	taskqueue_schedule(ctx);
-
-	return task;
+	return true;
 }
 
 void taskqueue_schedule(taskqueue_ctx *ctx) {
@@ -136,28 +115,14 @@ void taskqueue_run(taskqueue_ctx *ctx) {
 	if (timespec_cmp(task->due, now) <= 0) {
 		taskqueue_remove(task);
 		task->function(task->data);
-		put_task(task);
-	}
 
-	taskqueue_schedule(ctx);
-}
-
-bool put_task(taskqueue_t *task) {
-	task->refcnt--;
-
-	if (task->refcnt <= 0) {
 		if (task->cleanup != NULL)
 			task->cleanup(task->data);
 
 		free(task);
-		return true;
 	}
 
-	return false;
-}
-
-void take_task(taskqueue_t *task) {
-	task->refcnt++;
+	taskqueue_schedule(ctx);
 }
 
 /** Links an element at the position specified by \e queue */
