@@ -106,7 +106,12 @@ void wifistations_init(wifistations_ctx *ctx) {
 	int nl80211_id = genl_ctrl_resolve(ctx->nl_sock, "nl80211");
 	if (nl80211_id < 0) {
 		fprintf(stderr, "nl80211 not found.\n");
-		goto fail;
+		/* To resolve issue #29 we do not bail out, but return
+		 * without wifi socket instead.
+		 */
+		nl_socket_free(ctx->nl_sock);
+		ctx->nl_sock = NULL;
+		return;
 	}
 
 	/* MLME multicast group */
