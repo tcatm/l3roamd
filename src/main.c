@@ -71,7 +71,7 @@ void loop(struct l3ctx *ctx) {
 	add_fd(efd, ctx->icmp6_ctx.nsfd, EPOLLIN);
 	add_fd(efd, ctx->arp_ctx.fd, EPOLLIN);
 	add_fd(efd, ctx->intercom_ctx.fd, EPOLLIN | EPOLLET);
-	if (ctx->wifistations_ctx.fd) {
+	if (ctx->wifistations_ctx.fd >= 0) {
 		add_fd(efd, ctx->wifistations_ctx.fd, EPOLLIN);
 	}
 
@@ -107,8 +107,7 @@ void loop(struct l3ctx *ctx) {
 					intercom_handle_in(&ctx->intercom_ctx, events[i].data.fd);
 			} else if (ctx->taskqueue_ctx.fd == events[i].data.fd) {
 				taskqueue_run(&ctx->taskqueue_ctx);
-			} else if (ctx->wifistations_ctx.fd
-				  && ctx->wifistations_ctx.fd == events[i].data.fd) {
+			} else if (ctx->wifistations_ctx.fd == events[i].data.fd) {
 				wifistations_handle_in(&ctx->wifistations_ctx);
 			}
 		}
