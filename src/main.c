@@ -71,7 +71,9 @@ void loop(struct l3ctx *ctx) {
 	add_fd(efd, ctx->icmp6_ctx.nsfd, EPOLLIN);
 	add_fd(efd, ctx->arp_ctx.fd, EPOLLIN);
 	add_fd(efd, ctx->intercom_ctx.fd, EPOLLIN | EPOLLET);
-	add_fd(efd, ctx->wifistations_ctx.fd, EPOLLIN);
+	if (ctx->wifistations_ctx.fd >= 0) {
+		add_fd(efd, ctx->wifistations_ctx.fd, EPOLLIN);
+	}
 
 	/* Buffer where events are returned */
 	events = calloc(maxevents, sizeof(struct epoll_event));
