@@ -49,6 +49,7 @@ struct in6_addr mac2ipv6(uint8_t mac[6]) {
 
 	return address;
 }
+
 bool prefix_contains(const struct prefix *prefix, struct in6_addr *addr) {
 	int mask=0xff;
 	for (int remaining_plen = prefix->plen, i=0;remaining_plen > 0; remaining_plen-= 8) {
