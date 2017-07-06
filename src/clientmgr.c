@@ -51,18 +51,14 @@ struct in6_addr node_client_ip_from_mac(uint8_t mac[6]) {
 }
 
 bool prefix_contains(const struct prefix *prefix, struct in6_addr *addr) {
-	int plen = prefix->plen;
-
-	for (int i = 0; i < 16; i++) {
-		int mask = ~((1<<(8 - (plen > 8 ? 8 : plen))) - 1);
+	int mask=0xff;
+	for (int remaining_plen = prefix->plen, i=0;remaining_plen > 0; remaining_plen-= 8) {
+		if (remaining_plen < 8)
+			mask = 0xff & (0xff00 >>remaining_plen);
 
 		if ((addr->s6_addr[i] & mask) != prefix->prefix.s6_addr[i])
 			return false;
-
-		plen -= 8;
-
-		if (plen < 0)
-			plen = 0;
+		i++;
 	}
 	return true;
 }
