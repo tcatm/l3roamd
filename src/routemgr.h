@@ -7,6 +7,22 @@
 #define KERNEL_INFINITY 0xffff
 #define ROUTE_PROTO 158
 
+#ifndef NDA_RTA
+#define NDA_RTA(r) \
+        ((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct ndmsg))))
+#endif
+
+#define RTA_ALIGNTO     4
+#define RTA_ALIGN(len) ( ((len)+RTA_ALIGNTO-1) & ~(RTA_ALIGNTO-1) )
+#define RTA_LENGTH(len) (RTA_ALIGN(sizeof(struct rtattr)) + (len))
+#define RTA_DATA(rta)   ((void*)(((char*)(rta)) + RTA_LENGTH(0)))
+#define RTA_PAYLOAD(rta) ((int)((rta)->rta_len) - RTA_LENGTH(0))
+
+static inline __u32 rta_getattr_u32(const struct rtattr *rta)
+{
+        return *(__u32 *)RTA_DATA(rta);
+}
+
 struct nlrtreq {
 	struct nlmsghdr nl;
 	struct rtmsg rt;
@@ -34,6 +50,7 @@ struct kernel_route {
 typedef struct {
 	struct l3ctx *l3ctx;
 	int fd;
+	const char *client_bridge;
 } routemgr_ctx;
 
 void handle_route(routemgr_ctx *ctx, struct kernel_route *route);

@@ -68,7 +68,6 @@ void loop(struct l3ctx *ctx) {
 
 	add_fd(efd, ctx->ipmgr_ctx.fd, EPOLLIN | EPOLLET);
 	add_fd(efd, ctx->routemgr_ctx.fd, EPOLLIN | EPOLLET);
-	add_fd(efd, ctx->taskqueue_ctx.fd, EPOLLIN);
 	add_fd(efd, ctx->icmp6_ctx.fd, EPOLLIN);
 	add_fd(efd, ctx->icmp6_ctx.nsfd, EPOLLIN);
 	add_fd(efd, ctx->arp_ctx.fd, EPOLLIN);
@@ -89,11 +88,12 @@ void loop(struct l3ctx *ctx) {
 	while (1) {
 		int n;
 		n = epoll_wait(efd, events, maxevents, -1);
-
 		for(int i = 0; i < n; i++) {
 			if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)) {
 				fprintf(stderr, "epoll error\n");
 				close(events[i].data.fd);
+				// TODO: routemgr is handling routes from kernel AND direct neighbours from fdb.
+				// Refactor this at is actually a netlink-handler
 			} else if (ctx->routemgr_ctx.fd == events[i].data.fd) {
 				if (events[i].events & EPOLLIN)
 					routemgr_handle_in(&ctx->routemgr_ctx, events[i].data.fd);
@@ -112,8 +112,6 @@ void loop(struct l3ctx *ctx) {
 			} else if (ctx->intercom_ctx.fd == events[i].data.fd) {
 				if (events[i].events & EPOLLIN)
 					intercom_handle_in(&ctx->intercom_ctx, events[i].data.fd);
-			} else if (ctx->taskqueue_ctx.fd == events[i].data.fd) {
-				taskqueue_run(&ctx->taskqueue_ctx);
 			} else if (ctx->socket_ctx.fd == events[i].data.fd) {
 				socket_handle_in(&ctx->socket_ctx, VECTOR_LEN(ctx->clientmgr_ctx.clients));
 			} else if (ctx->wifistations_ctx.fd == events[i].data.fd) {
@@ -126,17 +124,18 @@ void loop(struct l3ctx *ctx) {
 }
 
 void usage() {
-	puts("Usage: l3roamd [-h] -a <ip6> -p <prefix> -i <clientif> -m <meshif> ... -t <export table> -4 [prefix] -t <nat46if>");
-	puts("  -a <ip6>          ip address of this node");
-	puts("  -c <file>         configuration file");
-	puts("  -p <prefix>       clientprefix"); // TODO mehrfache angabe sollte möglich sein
-	puts("  -s <socketpath>   provide statistics on this socket");
-	puts("  -i <clientif>     client interface");
-	puts("  -m <meshif>       mesh interface. may be specified multiple times");
-	puts("  -t <export table> export routes to this table");
-	puts("  -4 <prefix>       IPv4 translation prefix");
-	puts("  -t <nat46if>      interface for nat46");
-	puts("  -h                this help\n");
+	puts("Usage: l3roamd [-h] -b <client-bridge> -a <ip6> -p <prefix> -i <clientif> -m <meshif> ... -t <export table> -4 [prefix] -t <nat46if>");
+	puts("  -a <ip6>           ip address of this node");
+	puts("  -b <client-bridge> this is the bridge where all clients are connected");
+	puts("  -c <file>          configuration file");
+	puts("  -p <prefix>        clientprefix"); // TODO we should be able to handle multiple prefixes in the same instance
+	puts("  -s <socketpath>    provide statistics on this socket");
+	puts("  -i <clientif>      client interface");
+	puts("  -m <meshif>        mesh interface. may be specified multiple times");
+	puts("  -t <export table>  export routes to this table");
+	puts("  -4 <prefix>        IPv4 translation prefix");
+	puts("  -t <nat46if>       interface for nat46");
+	puts("  -h                 this help\n");
 }
 
 bool parse_prefix(struct prefix *prefix, const char *str) {
@@ -178,7 +177,6 @@ int main(int argc, char *argv[]) {
 
 	signal(SIGPIPE, SIG_IGN);
 
-	ctx.taskqueue_ctx.l3ctx = &ctx;
 	ctx.wifistations_ctx.l3ctx = &ctx;
 	ctx.clientmgr_ctx.l3ctx = &ctx;
 	ctx.intercom_ctx.l3ctx = &ctx;
@@ -191,8 +189,11 @@ int main(int argc, char *argv[]) {
 	intercom_init(&ctx.intercom_ctx);
 
 	int c;
-	while ((c = getopt(argc, argv, "ha:p:i:m:t:c:4:n:s:")) != -1)
+	while ((c = getopt(argc, argv, "ha:b:p:i:m:t:c:4:n:s:")) != -1)
 		switch (c) {
+			case 'b':
+				ctx.routemgr_ctx.client_bridge = strdupa(optarg);
+				break;
 			case 'h':
 				usage();
 				exit(EXIT_SUCCESS);
@@ -207,7 +208,7 @@ int main(int argc, char *argv[]) {
 				if (!parse_prefix(&ctx.clientmgr_ctx.prefix, optarg))
 					exit_error("Can not parse prefix");
 
-				printf("plen %i\n", ctx.clientmgr_ctx.prefix.plen);
+				printf("prefix length: %i\n", ctx.clientmgr_ctx.prefix.plen);
 				break;
 			case 'i':
 				ctx.icmp6_ctx.clientif = strdupa(optarg);
@@ -239,12 +240,18 @@ int main(int argc, char *argv[]) {
 				fprintf(stderr, "Invalid parameter %c ignored.\n", c);
 		}
 
+	if (!ctx.routemgr_ctx.client_bridge) {
+		printf("-b is mandatory\n\n");
+		usage();
+		exit(EXIT_SUCCESS);
+	}
+
+
 	socket_init(&ctx.socket_ctx, socketpath);
 	routemgr_init(&ctx.routemgr_ctx);
 	ipmgr_init(&ctx.ipmgr_ctx, "l3roam0", 9000);
 	icmp6_init(&ctx.icmp6_ctx);
 	arp_init(&ctx.arp_ctx);
-	taskqueue_init(&ctx.taskqueue_ctx);
 	wifistations_init(&ctx.wifistations_ctx);
 
 	loop(&ctx);

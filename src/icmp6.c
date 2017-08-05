@@ -69,8 +69,10 @@ void icmp6_setup_interface(icmp6_ctx *ctx) {
 
 	printf("Setting up icmp6 interface: %i\n", rc);
 
-	if (rc < 0)
+	if (rc < 0) {
+		perror("icmp6 - setsockopt:");
 		return;
+	}
 
 	struct ifreq req = {};
 	strncpy(req.ifr_name, ctx->clientif, IFNAMSIZ-1);
@@ -170,7 +172,6 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 	uint8_t *mac = lladdr.sll_addr;
 
 	if (packet.sol.hdr.nd_ns_hdr.icmp6_type == ND_NEIGHBOR_SOLICIT) {
-
 		if (memcmp(&packet.hdr.ip6_src, "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 16) != 0)
 			return;
 

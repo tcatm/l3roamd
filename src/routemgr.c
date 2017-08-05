@@ -2,10 +2,122 @@
 #include "error.h"
 #include "l3roamd.h"
 
+#include "clientmgr.h"
+#include "icmp6.h"
+#include <net/if.h>
+
 static void rtnl_change_address(routemgr_ctx *ctx, struct in6_addr *address, int type, int flags);
 static void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh);
 static int rtnl_addattr(struct nlmsghdr *n, int maxlen, int type, void *data, int datalen);
-static void rtnl_talk(routemgr_ctx *ctx, struct nlmsghdr *req);
+static void rtmgr_rtnl_talk(routemgr_ctx *ctx, struct nlmsghdr *req);
+
+
+void routemgr_remove_neighbour(routemgr_ctx *ctx, const int ifindex, uint8_t mac[6]) {
+	struct nlneighreq req = {
+		.nl = {
+			.nlmsg_type = RTM_DELNEIGH,
+			.nlmsg_flags = NLM_F_REQUEST,
+			.nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg)),
+		},
+		.nd = {
+			.ndm_family = AF_INET6,
+			.ndm_state = NUD_PERMANENT,
+			.ndm_ifindex = ifindex,
+		},
+	};
+
+	rtnl_addattr(&req.nl, sizeof(req), NDA_LLADDR, mac, sizeof(uint8_t) * 6);
+
+	rtmgr_rtnl_talk(ctx, (struct nlmsghdr*)&req);
+}
+
+
+
+int parse_rtattr_flags(struct rtattr *tb[], int max, struct rtattr *rta,
+		int len, unsigned short flags)
+{
+	unsigned short type;
+
+	memset(tb, 0, sizeof(struct rtattr *) * (max + 1));
+	while (RTA_OK(rta, len)) {
+		type = rta->rta_type & ~flags;
+		if ((type <= max) && (!tb[type]))
+			tb[type] = rta;
+		rta = RTA_NEXT(rta,len);
+	}
+	if (len)
+		fprintf(stderr, "!!!Deficit %d, rta_len=%d\n", len, rta->rta_len);
+	return 0;
+}
+
+int parse_rtattr(struct rtattr *tb[], int max, struct rtattr *rta, int len)
+{
+	return parse_rtattr_flags(tb, max, rta, len, 0);
+}
+
+
+void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
+	struct ndmsg *msg = NLMSG_DATA(nh);
+	char ifname[IFNAMSIZ];
+	char brifname[IFNAMSIZ];
+	struct rtattr * tb[NDA_MAX+1];
+	brifname[0]='\0';
+
+	parse_rtattr(tb, NDA_MAX, NDA_RTA(msg), nh->nlmsg_len - NLMSG_LENGTH(sizeof(*msg)));
+
+	char mac_str[64];
+	if (tb[NDA_LLADDR]) {
+		mac_addr_n2a(mac_str, RTA_DATA(tb[NDA_LLADDR]));
+	}
+
+	if_indextoname(msg->ndm_ifindex, ifname);
+
+	if (tb[NDA_MASTER])
+		if_indextoname(rta_getattr_u32(tb[NDA_MASTER]),brifname);
+
+	if ( !strncmp(CTX(icmp6)->clientif,ifname,strlen(ifname)) ||
+	     !strncmp(ctx->client_bridge,ifname,strlen(ctx->client_bridge)) ||
+	     !strncmp(ctx->client_bridge,brifname,strlen(ctx->client_bridge))
+	     ) {
+		printf("neighbour [%s] changed on interface %s\n", mac_str, ifname);
+		if (tb[NDA_MASTER]) {
+			if_indextoname(rta_getattr_u32(tb[NDA_MASTER]),ifname);
+			if (! strncmp( ifname, ctx->client_bridge, strlen(ifname))) {
+				switch (nh->nlmsg_type) {
+					case RTM_NEWNEIGH:
+						printf("ADDING neighbour on %s [%s]\n", ifname, mac_str) ;
+						clientmgr_notify_mac(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]), rta_getattr_u32(tb[NDA_MASTER]));
+						break;
+					case RTM_DELNEIGH:
+						// client has roamed or was turned off 5 minutes ago
+						printf("REMOVING neighbour on %s [%s]\n", ifname, mac_str);
+						clientmgr_delete_client(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]));
+						break;
+					case RTM_GETNEIGH:
+						printf("GETNEIGH\n");
+						break;
+					default:
+						break;
+				}
+			}
+		} else {
+			switch (nh->nlmsg_type) {
+				case RTM_NEWNEIGH:
+					if (tb[NDA_DST] && tb[NDA_LLADDR]) {
+						char abuf[64];
+						abuf[0]='\0';
+						inet_ntop(AF_INET6, RTA_DATA(tb[NDA_DST]), abuf, 64);
+						clientmgr_add_address(CTX(clientmgr),  RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
+					}
+					break;
+				case RTM_DELNEIGH:
+					printf("NEIGHBOUR DISAPPEARED\n");
+				default:
+					break;
+			}
+		}
+	}
+}
 
 void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	const struct ifinfomsg *msg = NLMSG_DATA(nh);
@@ -26,7 +138,7 @@ void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	interfaces_changed(ctx->l3ctx, nh->nlmsg_type, msg);
 }
 
-void filter_kernel_routes(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
+void handle_kernel_routes(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	int rc;
 
 	struct kernel_route route;
@@ -66,7 +178,11 @@ void rtnl_handle_msg(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	switch (nh->nlmsg_type) {
 		case RTM_NEWROUTE:
 		case RTM_DELROUTE:
-			filter_kernel_routes(ctx, nh);
+			handle_kernel_routes(ctx, nh);
+			break;
+		case RTM_NEWNEIGH:
+		case RTM_DELNEIGH:
+			rtnl_handle_neighbour(ctx,nh);
 			break;
 		case RTM_NEWLINK:
 		case RTM_DELLINK:
@@ -85,7 +201,7 @@ void routemgr_init(routemgr_ctx *ctx) {
 
 	struct sockaddr_nl snl = {
 		.nl_family = AF_NETLINK,
-		.nl_groups = RTMGRP_IPV6_ROUTE | RTMGRP_LINK,
+		.nl_groups = RTMGRP_IPV6_ROUTE | RTMGRP_LINK | RTMGRP_NEIGH,
 	};
 
 	if (bind(ctx->fd, (struct sockaddr *)&snl, sizeof(snl)) < 0)
@@ -147,7 +263,7 @@ void routemgr_handle_in(routemgr_ctx *ctx, int fd) {
 				case NLMSG_DONE:
 					return;
 				case NLMSG_ERROR:
-					perror("error: netlink error");
+					perror("netlink error: ");
 				default:
 					rtnl_handle_msg(ctx, nh);
 			}
@@ -197,7 +313,7 @@ void rtnl_change_address(routemgr_ctx *ctx, struct in6_addr *address, int type, 
 
 	rtnl_addattr(&req.nl, sizeof(req), IFA_LOCAL, address, sizeof(struct in6_addr));
 
-	rtnl_talk(ctx, (struct nlmsghdr*)&req);
+	rtmgr_rtnl_talk(ctx, (struct nlmsghdr*)&req);
 }
 
 void routemgr_insert_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_addr *address, uint8_t mac[6]) {
@@ -217,14 +333,15 @@ void routemgr_insert_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_a
 	rtnl_addattr(&req.nl, sizeof(req), NDA_DST, (void*)address, sizeof(struct in6_addr));
 	rtnl_addattr(&req.nl, sizeof(req), NDA_LLADDR, mac, sizeof(uint8_t) * 6);
 
-	rtnl_talk(ctx, (struct nlmsghdr*)&req);
+	rtmgr_rtnl_talk(ctx, (struct nlmsghdr*)&req);
 }
+
 
 void routemgr_remove_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_addr *address, uint8_t mac[6]) {
 	struct nlneighreq req = {
 		.nl = {
 			.nlmsg_type = RTM_NEWNEIGH,
-			.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_REPLACE,
+			.nlmsg_flags = NLM_F_REQUEST,
 			.nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg)),
 		},
 		.nd = {
@@ -237,7 +354,7 @@ void routemgr_remove_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_a
 	rtnl_addattr(&req.nl, sizeof(req), NDA_DST, (void*)address, sizeof(struct in6_addr));
 	rtnl_addattr(&req.nl, sizeof(req), NDA_LLADDR, mac, sizeof(uint8_t) * 6);
 
-	rtnl_talk(ctx, (struct nlmsghdr*)&req);
+	rtmgr_rtnl_talk(ctx, (struct nlmsghdr*)&req);
 }
 
 void routemgr_insert_route(routemgr_ctx *ctx, const int table, const int ifindex, struct in6_addr *address) {
@@ -260,7 +377,7 @@ void routemgr_insert_route(routemgr_ctx *ctx, const int table, const int ifindex
 	rtnl_addattr(&req.nl, sizeof(req), RTA_DST, (void*)address, sizeof(struct in6_addr));
 	rtnl_addattr(&req.nl, sizeof(req), RTA_OIF, (void*)&ifindex, sizeof(ifindex));
 
-	rtnl_talk(ctx, (struct nlmsghdr *)&req);
+	rtmgr_rtnl_talk(ctx, (struct nlmsghdr *)&req);
 }
 
 void routemgr_remove_route(routemgr_ctx *ctx, const int table, struct in6_addr *address) {
@@ -279,7 +396,7 @@ void routemgr_remove_route(routemgr_ctx *ctx, const int table, struct in6_addr *
 	};
 
 	rtnl_addattr(&req1.nl, sizeof(req1), RTA_DST, (void*)address, sizeof(struct in6_addr));
-	rtnl_talk(ctx, (struct nlmsghdr *)&req1);
+	rtmgr_rtnl_talk(ctx, (struct nlmsghdr *)&req1);
 
 	struct nlrtreq req2 = {
 		.nl = {
@@ -295,10 +412,10 @@ void routemgr_remove_route(routemgr_ctx *ctx, const int table, struct in6_addr *
 	};
 
 	rtnl_addattr(&req2.nl, sizeof(req2), RTA_DST, (void*)address, sizeof(struct in6_addr));
-	rtnl_talk(ctx, (struct nlmsghdr *)&req2);
+	rtmgr_rtnl_talk(ctx, (struct nlmsghdr *)&req2);
 }
 
-void rtnl_talk(routemgr_ctx *ctx, struct nlmsghdr *req) {
+void rtmgr_rtnl_talk(routemgr_ctx *ctx, struct nlmsghdr *req) {
 	struct sockaddr_nl nladdr = {
 		.nl_family = AF_NETLINK
 	};
@@ -308,8 +425,10 @@ void rtnl_talk(routemgr_ctx *ctx, struct nlmsghdr *req) {
 
 	iov.iov_len = req->nlmsg_len;
 
-	if (sendmsg(ctx->fd, &msg, 0) < 0)
+	while (sendmsg(ctx->fd, &msg, 0) <= 0) {
+		printf("retrying, just got an error saying:");
 		perror("nl_sendmsg");
+	}
 }
 
 void routemgr_insert_neighbor4(routemgr_ctx *ctx, const int ifindex, struct in_addr *address, uint8_t mac[6]) {
@@ -329,7 +448,7 @@ void routemgr_insert_neighbor4(routemgr_ctx *ctx, const int ifindex, struct in_a
 	rtnl_addattr(&req.nl, sizeof(req), NDA_DST, (void*)address, sizeof(struct in_addr));
 	rtnl_addattr(&req.nl, sizeof(req), NDA_LLADDR, mac, sizeof(uint8_t) * 6);
 
-	rtnl_talk(ctx, (struct nlmsghdr*)&req);
+	rtmgr_rtnl_talk(ctx, (struct nlmsghdr*)&req);
 }
 
 void routemgr_remove_neighbor4(routemgr_ctx *ctx, const int ifindex, struct in_addr *address, uint8_t mac[6]) {
@@ -349,7 +468,7 @@ void routemgr_remove_neighbor4(routemgr_ctx *ctx, const int ifindex, struct in_a
 	rtnl_addattr(&req.nl, sizeof(req), NDA_DST, (void*)address, sizeof(struct in_addr));
 	rtnl_addattr(&req.nl, sizeof(req), NDA_LLADDR, mac, sizeof(uint8_t) * 6);
 
-	rtnl_talk(ctx, (struct nlmsghdr*)&req);
+	rtmgr_rtnl_talk(ctx, (struct nlmsghdr*)&req);
 }
 
 void routemgr_insert_route4(routemgr_ctx *ctx, const int table, const int ifindex, struct in_addr *address) {
@@ -372,7 +491,7 @@ void routemgr_insert_route4(routemgr_ctx *ctx, const int table, const int ifinde
 	rtnl_addattr(&req.nl, sizeof(req), RTA_DST, (void*)address, sizeof(struct in_addr));
 	rtnl_addattr(&req.nl, sizeof(req), RTA_OIF, (void*)&ifindex, sizeof(ifindex));
 
-	rtnl_talk(ctx, (struct nlmsghdr *)&req);
+	rtmgr_rtnl_talk(ctx, (struct nlmsghdr *)&req);
 }
 
 void routemgr_remove_route4(routemgr_ctx *ctx, const int table, struct in_addr *address) {
@@ -391,7 +510,7 @@ void routemgr_remove_route4(routemgr_ctx *ctx, const int table, struct in_addr *
 	};
 
 	rtnl_addattr(&req1.nl, sizeof(req1), RTA_DST, (void*)address, sizeof(struct in_addr));
-	rtnl_talk(ctx, (struct nlmsghdr *)&req1);
+	rtmgr_rtnl_talk(ctx, (struct nlmsghdr *)&req1);
 
 	struct nlrtreq req2 = {
 		.nl = {
@@ -407,5 +526,5 @@ void routemgr_remove_route4(routemgr_ctx *ctx, const int table, struct in_addr *
 	};
 
 	rtnl_addattr(&req2.nl, sizeof(req2), RTA_DST, (void*)address, sizeof(struct in_addr));
-	rtnl_talk(ctx, (struct nlmsghdr *)&req2);
+	rtmgr_rtnl_talk(ctx, (struct nlmsghdr *)&req2);
 }
