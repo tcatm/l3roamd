@@ -194,6 +194,22 @@ void rtnl_handle_msg(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	}
 }
 
+static void routemgr_initial_neighbours(routemgr_ctx *ctx, uint8_t family) {
+	struct nlneighreq req = {
+		.nl = {
+			.nlmsg_type = RTM_GETNEIGH,
+			.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP,
+			.nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg)),
+		},
+		.nd = {
+			.ndm_family = family,
+		}
+
+	};
+	rtmgr_rtnl_talk(ctx, (struct nlmsghdr *)&req);
+}
+
+
 void routemgr_init(routemgr_ctx *ctx) {
 	ctx->fd = socket(AF_NETLINK, SOCK_RAW|SOCK_NONBLOCK, NETLINK_ROUTE);
 	if (ctx->fd < 0)
@@ -206,6 +222,9 @@ void routemgr_init(routemgr_ctx *ctx) {
 
 	if (bind(ctx->fd, (struct sockaddr *)&snl, sizeof(snl)) < 0)
 		exit_error("can't bind RTNL socket");
+
+	routemgr_initial_neighbours(ctx, AF_INET);
+	routemgr_initial_neighbours(ctx, AF_INET6);
 }
 
 
