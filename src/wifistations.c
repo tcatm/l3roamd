@@ -29,21 +29,6 @@ static int no_seq_check(struct nl_msg *msg, void *arg) {
 	return NL_OK;
 }
 
-void mac_addr_n2a(char *mac_addr, unsigned char *arg) {
-	int i, l;
-
-	l = 0;
-	for (i = 0; i < 6; i++) {
-		if (i == 0) {
-			sprintf(mac_addr+l, "%02x", arg[i]);
-			l += 2;
-		} else {
-			sprintf(mac_addr+l, ":%02x", arg[i]);
-			l += 3;
-		}
-	}
-}
-
 void wifistations_handle_in(wifistations_ctx *ctx) {
 	nl_recvmsgs(ctx->nl_sock, ctx->cb);
 }
@@ -68,7 +53,6 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
 	unsigned int ifindex = nla_get_u32(tb[NL80211_ATTR_IFINDEX]);
 
 	if_indextoname(ifindex, ifname);
-	printf("%s: ", ifname);
 
 	// TODO warum kann das NULL sein?
 	if (gnlh == NULL)
@@ -78,9 +62,7 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
 		case NL80211_CMD_NEW_STATION:
 			mac_addr_n2a(macbuf, nla_data(tb[NL80211_ATTR_MAC]));
 
-			printf("new station %s\n", macbuf);
-
-			// TODO Hack for br-client
+			printf("new wifi station [%s] found on interface %s\n", macbuf, ifname);
 			ifindex = ctx->l3ctx->icmp6_ctx.ifindex;
 			clientmgr_notify_mac(CTX(clientmgr), nla_data(tb[NL80211_ATTR_MAC]), ifindex);
 			break;

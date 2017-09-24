@@ -30,7 +30,7 @@ bool join_mcast(const int sock, const struct in6_addr addr, intercom_if *iface) 
 	else if (errno == EADDRINUSE)
 		return true;
 
- error:
+error:
 	fprintf(stderr, "Could not join multicast group on %s: ", iface->ifname);
 	perror(NULL);
 	return false;
@@ -130,7 +130,7 @@ bool intercom_send_packet_unicast(intercom_ctx *ctx, const struct in6_addr *reci
 		.sin6_addr = *recipient
 	};
 
-	ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, &addr, sizeof(addr));
+	ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, (struct sockaddr*)&addr, sizeof(addr));
 
 	if (rc < 0)
 		perror("sendto failed");
@@ -149,7 +149,8 @@ void intercom_send_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len
 
 		groupaddr.sin6_scope_id = iface->ifindex;
 
-		ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, &groupaddr, sizeof(groupaddr));
+		ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, (struct sockaddr*)&groupaddr, sizeof(groupaddr));
+		printf("sent packet to %s on iface %s rc: %zi\n", INTERCOM_GROUP, iface->ifname,rc);
 
 		if (rc < 0)
 			iface->ok = false;
@@ -161,7 +162,7 @@ bool intercom_recently_seen(intercom_ctx *ctx, intercom_packet_hdr *hdr) {
 		intercom_packet_hdr *ref_hdr = &VECTOR_INDEX(ctx->recent_packets, i);
 
 		if (ref_hdr->nonce == hdr->nonce && ref_hdr->type == hdr->type)
-				return true;
+			return true;
 	}
 	return false;
 }
@@ -245,7 +246,7 @@ void intercom_handle_in(intercom_ctx *ctx, int fd) {
 			/* If errno == EAGAIN, that means we have read all
 				 data. So go back to the main loop. */
 			if (errno != EAGAIN) {
-				perror("read");
+				perror("read - going back to main loop");
 			}
 			break;
 		} else if (count == 0) {
