@@ -6,6 +6,7 @@
 #include <linux/netlink.h>
 #include <linux/if_packet.h>
 #include <linux/if_ether.h>
+#include <linux/if_arp.h>
 
 void arp_handle_in(arp_ctx *ctx, int fd) {
 	struct msghdr msghdr;
@@ -36,7 +37,7 @@ void arp_handle_in(arp_ctx *ctx, int fd) {
 	if (rc == -1)
 		return;
 
-	if (packet.op != htons(ARP_REPLY))
+	if (packet.op != htons(ARPOP_REPLY))
 		return;
 
 	uint8_t *mac = lladdr.sll_addr;
@@ -58,7 +59,7 @@ void arp_send_request(arp_ctx *ctx, const struct in6_addr *addr) {
 		.pr = htons(0x800),
 		.hdl = 6,
 		.prl = 4,
-		.op = htons(ARP_REQUEST)
+		.op = htons(ARPOP_REQUEST)
 	};
 
 	memcpy(&packet.sha, ctx->mac, 6);
