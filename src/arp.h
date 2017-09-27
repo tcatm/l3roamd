@@ -5,9 +5,6 @@
 #include <netinet/in.h>
 #include <linux/rtnetlink.h>
 
-#define ARP_REQUEST 1
-#define ARP_REPLY 2
-
 struct __attribute__((packed)) arp_packet {
 	uint16_t hd;
 	uint16_t pr;

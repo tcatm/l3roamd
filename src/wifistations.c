@@ -20,29 +20,7 @@
 #include <netlink/msg.h>
 #include <netlink/attr.h>
 
-#define NL80211_CMD_NEW_STATION 19
-#define NL80211_CMD_DEL_STATION 20
-#define NL80211_ATTR_IFINDEX 3
-#define NL80211_ATTR_MAC 6
-
-static int no_seq_check(struct nl_msg *msg, void *arg) {
-	return NL_OK;
-}
-
-void mac_addr_n2a(char *mac_addr, unsigned char *arg) {
-	int i, l;
-
-	l = 0;
-	for (i = 0; i < 6; i++) {
-		if (i == 0) {
-			sprintf(mac_addr+l, "%02x", arg[i]);
-			l += 2;
-		} else {
-			sprintf(mac_addr+l, ":%02x", arg[i]);
-			l += 3;
-		}
-	}
-}
+#include <linux/nl80211.h>
 
 void wifistations_handle_in(wifistations_ctx *ctx) {
 	nl_recvmsgs(ctx->nl_sock, ctx->cb);
@@ -68,7 +46,6 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
 	unsigned int ifindex = nla_get_u32(tb[NL80211_ATTR_IFINDEX]);
 
 	if_indextoname(ifindex, ifname);
-	printf("%s: ", ifname);
 
 	// TODO warum kann das NULL sein?
 	if (gnlh == NULL)
@@ -78,9 +55,7 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
 		case NL80211_CMD_NEW_STATION:
 			mac_addr_n2a(macbuf, nla_data(tb[NL80211_ATTR_MAC]));
 
-			printf("new station %s\n", macbuf);
-
-			// TODO Hack for br-client
+			printf("new wifi station [%s] found on interface %s\n", macbuf, ifname);
 			ifindex = ctx->l3ctx->icmp6_ctx.ifindex;
 			clientmgr_notify_mac(CTX(clientmgr), nla_data(tb[NL80211_ATTR_MAC]), ifindex);
 			break;
@@ -97,20 +72,28 @@ void wifistations_init(wifistations_ctx *ctx) {
 		exit_error("Failed to allocate netlink socket.\n");
 
 	nl_socket_set_buffer_size(ctx->nl_sock, 8192, 8192);
+	/* no sequence checking for multicast messages */
+	nl_socket_disable_seq_check(ctx->nl_sock);
 
 	if (genl_connect(ctx->nl_sock)) {
 		fprintf(stderr, "Failed to connect to generic netlink.\n");
 		goto fail;
 	}
 
-	int nl80211_id = genl_ctrl_resolve(ctx->nl_sock, "nl80211");
+	int nl80211_id = genl_ctrl_resolve(ctx->nl_sock, NL80211_GENL_NAME);
 	if (nl80211_id < 0) {
 		fprintf(stderr, "nl80211 not found.\n");
-		goto fail;
+		/* To resolve issue #29 we do not bail out, but return with an
+		 * invalid file descriptor and without a wifi socket instead.
+		 */
+		ctx->fd = -1;
+		nl_socket_free(ctx->nl_sock);
+		ctx->nl_sock = NULL;
+		return;
 	}
 
 	/* MLME multicast group */
-	int mcid = nl_get_multicast_id(ctx->nl_sock, "nl80211", "mlme");
+	int mcid = nl_get_multicast_id(ctx->nl_sock, NL80211_GENL_NAME, NL80211_MULTICAST_GROUP_MLME);
 	if (mcid >= 0) {
 		int ret = nl_socket_add_membership(ctx->nl_sock, mcid);
 		if (ret)
@@ -122,8 +105,6 @@ void wifistations_init(wifistations_ctx *ctx) {
 	if (!ctx->cb)
 		exit_error("failed to allocate netlink callbacks\n");
 
-	/* no sequence checking for multicast messages */
-	nl_cb_set(ctx->cb, NL_CB_SEQ_CHECK, NL_CB_CUSTOM, no_seq_check, NULL);
 	nl_cb_set(ctx->cb, NL_CB_VALID, NL_CB_CUSTOM, wifistations_handle_event, ctx);
 
 	ctx->fd = nl_socket_get_fd(ctx->nl_sock);

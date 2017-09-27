@@ -259,7 +259,7 @@ void ipmgr_handle_out(ipmgr_ctx *ctx, int fd) {
 
 		if (count == -1) {
 			if (errno != EAGAIN)
-				perror("write");
+				perror("write failed");
 
 			break;
 		}
@@ -278,6 +278,7 @@ void ipmgr_route_appeared(ipmgr_ctx *ctx, const struct in6_addr *destination) {
 	}
 
 	VECTOR_FREE(e->packets);
+
 
 	delete_entry(ctx, destination);
 
