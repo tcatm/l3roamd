@@ -12,9 +12,7 @@
         ((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct ndmsg))))
 #endif
 
-#ifndef RTA_ALIGNTO
 #define RTA_ALIGNTO     4
-#endif
 #define RTA_ALIGN(len) ( ((len)+RTA_ALIGNTO-1) & ~(RTA_ALIGNTO-1) )
 #define RTA_LENGTH(len) (RTA_ALIGN(sizeof(struct rtattr)) + (len))
 #define RTA_DATA(rta)   ((void*)(((char*)(rta)) + RTA_LENGTH(0)))
