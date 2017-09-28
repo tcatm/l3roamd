@@ -1,12 +1,12 @@
 #include "intercom.h"
 #include "error.h"
 #include "l3roamd.h"
+#include "if.h"
 
 #include <time.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <net/if.h>
 #include <netinet/in.h>
 #include <sys/types.h>
 #include <sys/socket.h>

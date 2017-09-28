@@ -8,12 +8,12 @@
 #include "ipmgr.h"
 #include "routemgr.h"
 #include "socket.h"
+#include "if.h"
 
 #include <stdint.h>
 #include <stdlib.h>
 #include <stddef.h>
 #include <arpa/inet.h>
-#include <net/if.h>
 #include <linux/rtnetlink.h>
 
 struct l3ctx {
