@@ -63,7 +63,7 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
 			mac_addr_n2a(macbuf, nla_data(tb[NL80211_ATTR_MAC]));
 
 			printf("new wifi station [%s] found on interface %s\n", macbuf, ifname);
-			ifindex = ctx->l3ctx->icmp6_ctx.ifindex;
+			ifindex = CTX(routemgr)->clientif_index;
 			clientmgr_notify_mac(CTX(clientmgr), nla_data(tb[NL80211_ATTR_MAC]), ifindex);
 			break;
 		case NL80211_CMD_DEL_STATION:
