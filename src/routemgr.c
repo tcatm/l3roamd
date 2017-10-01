@@ -3,9 +3,8 @@
 #include "l3roamd.h"
 
 #include "clientmgr.h"
-#include "if.h"
 #include <unistd.h>
-#include "icmp6.h"
+#include <if.h>
 
 static void rtnl_change_address(routemgr_ctx *ctx, struct in6_addr *address, int type, int flags);
 static void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh);
@@ -218,11 +217,51 @@ void routemgr_destroy(routemgr_ctx *ctx) {
 	close(ctx->fd);
 }
 
+void routemgr_send_solicitation(routemgr_ctx *ctx, struct in6_addr *address) {
+	int family = AF_INET6;
+	size_t addr_len = 16;
+	void *addr = address->s6_addr;
+
+	if (clientmgr_is_ipv4(CTX(clientmgr), address)) {
+		printf("v4!\n");
+		addr = address->s6_addr + 12;
+		addr_len = 4;
+		family = AF_INET;
+	} else {
+		printf("v6!\n");
+	}
+
+	uint8_t mac[6] = {};
+
+	struct nlneighreq req = {
+		.nl = {
+			.nlmsg_type = RTM_NEWNEIGH,
+			.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_REPLACE,
+			.nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg)),
+		},
+		.nd = {
+
+			.ndm_family = family,
+			.ndm_state = NUD_PROBE,
+			.ndm_ifindex = ctx->clientif_index,
+		},
+	};
+
+	rtnl_addattr(&req.nl, sizeof(req), NDA_DST, addr, addr_len);
+	rtnl_addattr(&req.nl, sizeof(req), NDA_LLADDR, mac, sizeof(mac));
+
+	rtmgr_rtnl_talk(ctx, (struct nlmsghdr *)&req);
+}
+
 void routemgr_init(routemgr_ctx *ctx) {
 	printf("initializing routemgr\n");
 	ctx->fd = socket(AF_NETLINK, SOCK_RAW|SOCK_NONBLOCK, NETLINK_ROUTE);
 	if (ctx->fd < 0)
 		exit_error("can't open RTNL socket");
+
+	ctx->clientif_index = if_nametoindex(ctx->clientif);
+	if (!ctx->clientif_index)
+		exit_error("if_nametoindex");
 
 	struct sockaddr_nl snl = {
 		.nl_family = AF_NETLINK,

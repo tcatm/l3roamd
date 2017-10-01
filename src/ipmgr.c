@@ -119,10 +119,7 @@ void seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
 
 	printf("\x1b[36mLooking for %s\x1b[0m\n", str);
 
-	if (clientmgr_is_ipv4(CTX(clientmgr), addr))
-		arp_send_request(CTX(arp), addr);
-	else
-		icmp6_send_solicitation(CTX(icmp6), addr);
+	routemgr_send_solicitation(CTX(routemgr), addr);
 
 	// schedule an intercom-seek operation that in turn will only be executed if there is no local client known
 	struct ip_task *data = calloc(1, sizeof(struct ip_task));
