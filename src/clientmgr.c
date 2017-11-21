@@ -179,10 +179,11 @@ void client_add_route(clientmgr_ctx *ctx, struct client *client, struct client_i
 
 		routemgr_insert_route(CTX(routemgr), ctx->export_table, ctx->nat46ifindex, &ip->addr);
 		routemgr_insert_route4(CTX(routemgr), ctx->export_table, client->ifindex, &ip4);
-		routemgr_insert_neighbor4(CTX(routemgr), client->ifindex, &ip4, client->mac);
+	//	routemgr_insert_neighbor4(CTX(routemgr), client->ifindex, &ip4, client->mac);
 	} else {
 		routemgr_insert_route(CTX(routemgr), ctx->export_table, client->ifindex, &ip->addr);
-		routemgr_insert_neighbor(CTX(routemgr), client->ifindex, &ip->addr, client->mac);
+		// Let the kernel do its job verifying the neighbour. => commenting out next line to try this.
+	//	routemgr_insert_neighbor(CTX(routemgr), client->ifindex, &ip->addr, client->mac);
 	}
 }
 

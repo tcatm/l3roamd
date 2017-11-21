@@ -239,13 +239,13 @@ int main(int argc, char *argv[]) {
 			default:
 				fprintf(stderr, "Invalid parameter %c ignored.\n", c);
 		}
-
+/*
 	if (!ctx.routemgr_ctx.client_bridge) {
 		printf("-b is mandatory\n\n");
 		usage();
 		exit(EXIT_SUCCESS);
 	}
-
+*/
 
 	socket_init(&ctx.socket_ctx, socketpath);
 	routemgr_init(&ctx.routemgr_ctx);
