@@ -75,9 +75,9 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 		if_indextoname(rta_getattr_u32(tb[NDA_MASTER]),brifname);
 
 	// FIXME use interface ids
-	if ( !strncmp(ctx->clientif,ifname,strlen(ifname)) ||
-	     !strncmp(ctx->client_bridge,ifname,strlen(ctx->client_bridge)) ||
-	     !strncmp(ctx->client_bridge,brifname,strlen(ctx->client_bridge))
+	if ( !strncmp(CTX(icmp6)->clientif,ifname,strlen(ifname)) ||
+	     !strncmp(ctx->client_bridge,ifname,strlen(ifname)) ||
+	     ( strlen(brifname) && !strncmp(ctx->client_bridge,brifname,strlen(brifname)) )
 	     ) {
 		printf("neighbour [%s] changed on interface %s\n", mac_str, ifname);
 		if (tb[NDA_MASTER]) {

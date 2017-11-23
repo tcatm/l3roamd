@@ -111,7 +111,7 @@ void loop(struct l3ctx *ctx) {
 }
 
 void usage() {
-	puts("Usage: l3roamd [-h] -b <client-bridge> -a <ip6> -p <prefix> -i <clientif> -m <meshif> ... -t <export table> -4 [prefix] -t <nat46if>");
+	puts("Usage: l3roamd [-h] [-b <client-bridge>] -a <ip6> -p <prefix> -i <clientif> -m <meshif> ... -t <export table> -4 [prefix] -t <nat46if>");
 	puts("  -a <ip6>           ip address of this node");
 	puts("  -b <client-bridge> this is the bridge where all clients are connected");
 	puts("  -c <file>          configuration file");
@@ -170,11 +170,13 @@ int main(int argc, char *argv[]) {
 	ctx.socket_ctx.l3ctx = &ctx;
 
 	intercom_init(&ctx.intercom_ctx);
+	ctx.routemgr_ctx.client_bridge = strdupa("\0");
 
 	int c;
 	while ((c = getopt(argc, argv, "ha:b:p:i:m:t:c:4:n:s:")) != -1)
 		switch (c) {
 			case 'b':
+				free(ctx.routemgr_ctx.client_bridge);
 				ctx.routemgr_ctx.client_bridge = strdupa(optarg);
 				break;
 			case 'h':
@@ -219,13 +221,6 @@ int main(int argc, char *argv[]) {
 			default:
 				fprintf(stderr, "Invalid parameter %c ignored.\n", c);
 		}
-/*
-	if (!ctx.routemgr_ctx.client_bridge) {
-		printf("-b is mandatory\n\n");
-		usage();
-		exit(EXIT_SUCCESS);
-	}
-*/
 
 	socket_init(&ctx.socket_ctx, socketpath);
 	routemgr_init(&ctx.routemgr_ctx);

@@ -47,7 +47,7 @@ typedef struct {
 	int fd;
 	int clientif_index;
 	char *clientif;
-	const char *client_bridge;
+	char *client_bridge;
 } routemgr_ctx;
 
 void handle_route(routemgr_ctx *ctx, struct kernel_route *route);
