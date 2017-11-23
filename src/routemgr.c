@@ -90,6 +90,7 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 						break;
 					case RTM_DELNEIGH:
 						// client has roamed or was turned off 5 minutes ago
+						//
 						printf("REMOVING neighbour on %s [%s]\n", ifname, mac_str);
 						clientmgr_delete_client(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]));
 						break;
@@ -250,9 +251,10 @@ void routemgr_init(routemgr_ctx *ctx) {
 		exit_error("can't open RTNL socket");
 
 	ctx->clientif_index = if_nametoindex(ctx->clientif);
-	if (!ctx->clientif_index)
-		exit_error("if_nametoindex");
-
+	if (!ctx->clientif_index) {
+		fprintf(stderr, "warning: we were started without -i - not initializing any client interfaces.\n");
+		return;
+	}
 	struct sockaddr_nl snl = {
 		.nl_family = AF_NETLINK,
 		.nl_groups = RTMGRP_IPV6_ROUTE | RTMGRP_LINK | RTMGRP_NEIGH,
