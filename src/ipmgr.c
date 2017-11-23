@@ -115,7 +115,7 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 	printf("Got packet to %s\n", str);
 
 	if (!clientmgr_valid_address(CTX(clientmgr), &dst)) {
-		printf("Ignoring packet\n");
+		printf("The destination of the packet (%s) is not within the client prefixes. Ignoring packet\n", str);
 		return;
 	}
 

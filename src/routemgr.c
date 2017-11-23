@@ -54,7 +54,6 @@ int parse_rtattr(struct rtattr *tb[], int max, struct rtattr *rta, int len)
 	return parse_rtattr_flags(tb, max, rta, len, 0);
 }
 
-
 void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	struct ndmsg *msg = NLMSG_DATA(nh);
 	char ifname[IFNAMSIZ];
@@ -75,7 +74,7 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 		if_indextoname(rta_getattr_u32(tb[NDA_MASTER]),brifname);
 
 	// FIXME use interface ids
-	if ( !strncmp(CTX(icmp6)->clientif,ifname,strlen(ifname)) ||
+	if ( !strncmp(ctx->clientif,ifname,strlen(ifname)) ||
 	     !strncmp(ctx->client_bridge,ifname,strlen(ifname)) ||
 	     ( strlen(brifname) && !strncmp(ctx->client_bridge,brifname,strlen(brifname)) )
 	     ) {
@@ -105,11 +104,12 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 			switch (nh->nlmsg_type) {
 				case RTM_NEWNEIGH:
 					if (tb[NDA_DST] && tb[NDA_LLADDR] && msg->ndm_family == AF_INET6) {
+						printf(" ADDING neighbour on %s [%s]\n", ifname, mac_str) ;
 						clientmgr_add_address(CTX(clientmgr),  RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
 					}
 					break;
 				case RTM_DELNEIGH:
-					printf("NEIGHBOUR DISAPPEARED\n");
+					printf("NEIGHBOUR DISAPPEARED - TODO if this happens, we should handle it properly.\n");
 				default:
 					break;
 			}
@@ -221,8 +221,6 @@ void routemgr_send_solicitation(routemgr_ctx *ctx, struct in6_addr *address) {
 		printf("v6!\n");
 	}
 
-	uint8_t mac[6] = {};
-
 	struct nlneighreq req = {
 		.nl = {
 			.nlmsg_type = RTM_NEWNEIGH,
@@ -238,7 +236,6 @@ void routemgr_send_solicitation(routemgr_ctx *ctx, struct in6_addr *address) {
 	};
 
 	rtnl_addattr(&req.nl, sizeof(req), NDA_DST, addr, addr_len);
-	rtnl_addattr(&req.nl, sizeof(req), NDA_LLADDR, mac, sizeof(mac));
 
 	rtmgr_rtnl_talk(ctx, (struct nlmsghdr *)&req);
 }

@@ -125,7 +125,7 @@ void usage() {
 	puts("  -h                 this help\n");
 }
 
-bool parse_prefix(struct prefix *prefix, const char *str) {
+bool set_prefix(struct prefix *prefix, const char *str) {
 	char *saveptr;
 	char *tmp = strdupa(str);
 	char *ptr = strtok_r(tmp, "/", &saveptr);
@@ -191,7 +191,7 @@ int main(int argc, char *argv[]) {
 				parse_config(optarg);
 				break;
 			case 'p':
-				if (!parse_prefix(&ctx.clientmgr_ctx.prefix, optarg))
+				if (!set_prefix(&ctx.clientmgr_ctx.prefix, optarg))
 					exit_error("Can not parse prefix");
 
 				printf("prefix length: %i\n", ctx.clientmgr_ctx.prefix.plen);
@@ -210,7 +210,7 @@ int main(int argc, char *argv[]) {
 				socketpath = optarg;
 				break;
 			case '4':
-				if (!parse_prefix(&ctx.clientmgr_ctx.v4prefix, optarg))
+				if (!set_prefix(&ctx.clientmgr_ctx.v4prefix, optarg))
 					exit_error("Can not parse IPv4 prefix");
 
 				if (ctx.clientmgr_ctx.v4prefix.plen != 96)
