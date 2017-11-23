@@ -5,9 +5,7 @@
 #include "wifistations.h"
 #include "clientmgr.h"
 #include "taskqueue.h"
-#include "icmp6.h"
 #include "ipmgr.h"
-#include "arp.h"
 #include "routemgr.h"
 #include "socket.h"
 
@@ -23,9 +21,7 @@ struct l3ctx {
 	intercom_ctx intercom_ctx;
 	wifistations_ctx wifistations_ctx;
 	clientmgr_ctx clientmgr_ctx;
-	icmp6_ctx icmp6_ctx;
 	ipmgr_ctx ipmgr_ctx;
-	arp_ctx arp_ctx;
 	routemgr_ctx routemgr_ctx;
 	socket_ctx socket_ctx;
 };

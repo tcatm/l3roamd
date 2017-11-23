@@ -50,6 +50,8 @@ struct kernel_route {
 typedef struct {
 	struct l3ctx *l3ctx;
 	int fd;
+	int clientif_index;
+	char *clientif;
 	const char *client_bridge;
 } routemgr_ctx;
 
@@ -67,3 +69,4 @@ void routemgr_insert_route4(routemgr_ctx *ctx, const int table, const int ifinde
 void routemgr_remove_route4(routemgr_ctx *ctx, const int table, struct in_addr *address);
 void rtnl_add_address(routemgr_ctx *ctx, struct in6_addr *address);
 void rtnl_remove_address(routemgr_ctx *ctx, struct in6_addr *address);
+void routemgr_send_solicitation(routemgr_ctx *ctx, struct in6_addr *address);

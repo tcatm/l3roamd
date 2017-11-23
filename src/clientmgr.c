@@ -1,6 +1,5 @@
 #include "clientmgr.h"
 #include "routemgr.h"
-#include "icmp6.h"
 #include "timespec.h"
 #include "error.h"
 #include "l3roamd.h"
@@ -412,7 +411,7 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 	}
 
 	struct in6_addr address = mac2ipv6(client->mac);
-	icmp6_send_solicitation(CTX(icmp6), &address);
+	routemgr_send_solicitation(CTX(routemgr), (struct in6_addr *) &address);
 }
 
 /** Handle info request.

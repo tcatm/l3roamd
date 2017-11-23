@@ -28,7 +28,6 @@
 #include "ipmgr.h"
 #include "l3roamd.h"
 #include "error.h"
-#include "icmp6.h"
 #include "routemgr.h"
 #include "intercom.h"
 #include "config.h"
@@ -68,9 +67,6 @@ void loop(struct l3ctx *ctx) {
 
 	add_fd(efd, ctx->ipmgr_ctx.fd, EPOLLIN | EPOLLET);
 	add_fd(efd, ctx->routemgr_ctx.fd, EPOLLIN | EPOLLET);
-	add_fd(efd, ctx->icmp6_ctx.fd, EPOLLIN);
-	add_fd(efd, ctx->icmp6_ctx.nsfd, EPOLLIN);
-	add_fd(efd, ctx->arp_ctx.fd, EPOLLIN);
 	add_fd(efd, ctx->intercom_ctx.fd, EPOLLIN | EPOLLET);
 
 	if (ctx->socket_ctx.fd >= 0) {
@@ -100,15 +96,6 @@ void loop(struct l3ctx *ctx) {
 			} else if (ctx->ipmgr_ctx.fd == events[i].data.fd) {
 				if (events[i].events & EPOLLIN)
 					ipmgr_handle_in(&ctx->ipmgr_ctx, events[i].data.fd);
-			} else if (ctx->icmp6_ctx.fd == events[i].data.fd) {
-				if (events[i].events & EPOLLIN)
-					icmp6_handle_in(&ctx->icmp6_ctx, events[i].data.fd);
-			} else if (ctx->icmp6_ctx.nsfd == events[i].data.fd) {
-				if (events[i].events & EPOLLIN)
-					icmp6_handle_ns_in(&ctx->icmp6_ctx, events[i].data.fd);
-			} else if (ctx->arp_ctx.fd == events[i].data.fd) {
-				if (events[i].events & EPOLLIN)
-					arp_handle_in(&ctx->arp_ctx, events[i].data.fd);
 			} else if (ctx->intercom_ctx.fd == events[i].data.fd) {
 				if (events[i].events & EPOLLIN)
 					intercom_handle_in(&ctx->intercom_ctx, events[i].data.fd);
@@ -167,8 +154,6 @@ bool parse_prefix(struct prefix *prefix, const char *str) {
 void interfaces_changed(struct l3ctx *ctx, int type, const struct ifinfomsg *msg) {
 	printf("interfaces changed\n");
 	intercom_update_interfaces(&ctx->intercom_ctx);
-	icmp6_interface_changed(&ctx->icmp6_ctx, type, msg);
-	arp_interface_changed(&ctx->arp_ctx, type, msg);
 }
 
 int main(int argc, char *argv[]) {
@@ -180,9 +165,7 @@ int main(int argc, char *argv[]) {
 	ctx.wifistations_ctx.l3ctx = &ctx;
 	ctx.clientmgr_ctx.l3ctx = &ctx;
 	ctx.intercom_ctx.l3ctx = &ctx;
-	ctx.icmp6_ctx.l3ctx = &ctx;
 	ctx.ipmgr_ctx.l3ctx = &ctx;
-	ctx.arp_ctx.l3ctx = &ctx;
 	ctx.routemgr_ctx.l3ctx = &ctx;
 	ctx.socket_ctx.l3ctx = &ctx;
 
@@ -211,8 +194,7 @@ int main(int argc, char *argv[]) {
 				printf("prefix length: %i\n", ctx.clientmgr_ctx.prefix.plen);
 				break;
 			case 'i':
-				ctx.icmp6_ctx.clientif = strdupa(optarg);
-				ctx.arp_ctx.clientif = strdupa(optarg);
+				ctx.routemgr_ctx.clientif = strdupa(optarg);
 				break;
 			case 'm':
 				intercom_add_interface(&ctx.intercom_ctx, strdupa(optarg));
@@ -229,8 +211,6 @@ int main(int argc, char *argv[]) {
 
 				if (ctx.clientmgr_ctx.v4prefix.plen != 96)
 					exit_error("IPv4 prefix must be /96");
-
-				ctx.arp_ctx.prefix = ctx.clientmgr_ctx.v4prefix.prefix;
 
 				break;
 			case 'n':
@@ -250,8 +230,6 @@ int main(int argc, char *argv[]) {
 	socket_init(&ctx.socket_ctx, socketpath);
 	routemgr_init(&ctx.routemgr_ctx);
 	ipmgr_init(&ctx.ipmgr_ctx, "l3roam0", 9000);
-	icmp6_init(&ctx.icmp6_ctx);
-	arp_init(&ctx.arp_ctx);
 	wifistations_init(&ctx.wifistations_ctx);
 
 	loop(&ctx);
