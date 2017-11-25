@@ -4,6 +4,7 @@
 
 #include "clientmgr.h"
 #include "if.h"
+#include <unistd.h>
 
 static void rtnl_change_address(routemgr_ctx *ctx, struct in6_addr *address, int type, int flags);
 static void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh);
@@ -242,6 +243,9 @@ void routemgr_send_solicitation(routemgr_ctx *ctx, struct in6_addr *address, uin
 	rtmgr_rtnl_talk(ctx, (struct nlmsghdr *)&req);
 }
 
+void routemgr_destroy(routemgr_ctx *ctx) {
+	close(ctx->fd);
+}
 
 void routemgr_init(routemgr_ctx *ctx) {
 	printf("initializing routemgr\n");

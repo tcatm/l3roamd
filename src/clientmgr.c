@@ -229,9 +229,32 @@ struct client *get_or_create_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
 	return client;
 }
 
+/** Remove all client routes - used when exiting l3roamd
+**/
+void clientmgr_purge_clients(clientmgr_ctx *ctx) {
+	struct client *client;
+
+	for (int i=VECTOR_LEN(ctx->clients)-1;i>=0;i--) {
+		client=&VECTOR_INDEX(ctx->clients, i);
+		printf("\033[34mREMOVING client %02x:%02x:%02x:%02x:%02x:%02x and invalidating its IP-addresses\033[0m\n", client->mac[0], client->mac[1], client->mac[2], client->mac[3], client->mac[4], client->mac[5]);
+		print_client(client);
+		if (VECTOR_LEN(client->addresses) > 0) {
+			for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
+				struct client_ip *e = &VECTOR_INDEX(client->addresses, i);
+				client_ip_set_state(CTX(clientmgr), client, e, IP_INACTIVE);
+				char str[INET6_ADDRSTRLEN];
+				inet_ntop(AF_INET6, &e->addr, str, INET6_ADDRSTRLEN);
+			}
+		}
+
+		VECTOR_FREE(client->addresses);
+		VECTOR_DELETE(ctx->clients, i);
+	}
+}
+
 /** Given a MAC address deletes a client. Safe to call if the client is not
-    known.
-    */
+  known.
+  */
 void clientmgr_delete_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
 	struct client *client;
 
@@ -302,6 +325,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 					break;
 				case IP_TENTATIVE:
 					ip->timestamp = now;
+					// TODO: are we shure we want to do this just yet?
 					client_remove_route(ctx, client, ip);
 					break;
 			}
@@ -310,6 +334,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 			switch (state) {
 				case IP_INACTIVE:
 					ip->timestamp = now;
+					client_remove_route(ctx, client, ip);
 					break;
 				case IP_ACTIVE:
 					ip->timestamp = now;

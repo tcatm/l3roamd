@@ -25,15 +25,17 @@
 
 // TODO EPOLLOUT beim schreiben auf den tunfd
 
-#include "l3roamd.h"
+#include "vector.h"
 #include "ipmgr.h"
 #include "error.h"
 #include "routemgr.h"
 #include "intercom.h"
 #include "config.h"
 #include "socket.h"
-#include "vector.h"
 #include "prefix.h"
+#include "l3roamd.h"
+
+#define SIGTERM_MSG "Exiting. Removing routes for prefixes and clients.\n"
 
 #include <errno.h>
 #include <stdio.h>
@@ -45,6 +47,8 @@
 #include <sys/timerfd.h>
 #include <fcntl.h>
 #include <signal.h>
+
+struct l3ctx ctx = {};
 
 void add_fd(int efd, int fd, uint32_t events) {
 	struct epoll_event event = {};
@@ -139,11 +143,38 @@ void interfaces_changed(struct l3ctx *ctx, int type, const struct ifinfomsg *msg
 	intercom_update_interfaces(&ctx->intercom_ctx);
 }
 
+void sig_term_handler(int signum, siginfo_t *info, void *ptr)
+{
+	write(STDERR_FILENO, SIGTERM_MSG, sizeof(SIGTERM_MSG));
+	int j = VECTOR_LEN(ctx.clientmgr_ctx.prefixes);
+
+	struct prefix _prefix = {};
+	for (int i=j;i>0;i--) {
+		del_prefix(&ctx.clientmgr_ctx.prefixes, _prefix);
+		routemgr_remove_route(&ctx.routemgr_ctx, 254, (struct in6_addr*)(_prefix.prefix.s6_addr), _prefix.plen );
+	}
+	clientmgr_purge_clients(&ctx.clientmgr_ctx);
+	_exit(EXIT_SUCCESS);
+}
+
+
+void catch_sigterm()
+{
+	static struct sigaction _sigact;
+
+	memset(&_sigact, 0, sizeof(_sigact));
+	_sigact.sa_sigaction = sig_term_handler;
+	_sigact.sa_flags = SA_SIGINFO;
+
+	sigaction(SIGTERM, &_sigact, NULL);
+}
+
+
 int main(int argc, char *argv[]) {
-	struct l3ctx ctx = {};
 	char *socketpath = NULL;
 
 	signal(SIGPIPE, SIG_IGN);
+	catch_sigterm();
 
 	ctx.wifistations_ctx.l3ctx = &ctx;
 	ctx.clientmgr_ctx.l3ctx = &ctx;
