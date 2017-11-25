@@ -115,7 +115,7 @@ void usage() {
 	puts("Usage: l3roamd [-h] [-b <client-bridge>] -a <ip6> -p <prefix> [-i <clientif>] -m <meshif> ... -t <export table> -4 [prefix] -t <nat46if>");
 	puts("  -a <ip6>           ip address of this node");
 	puts("  -b <client-bridge> this is the bridge where all clients are connected");
-	puts("  -c <file>          configuration file");
+	puts("  -c <file>          configuration file"); // TODO: do we really need this?
 	puts("  -p <prefix>        clientprefix");
 	puts("  -s <socketpath>    provide statistics on this socket");
 	puts("  -i <clientif>      client interface");
@@ -182,7 +182,10 @@ int main(int argc, char *argv[]) {
 	intercom_init(&ctx.intercom_ctx);
 	ctx.routemgr_ctx.client_bridge = strdup("\0");
 	ctx.routemgr_ctx.clientif = strdup("\0");
-	ctx.clientmgr_ctx.export_table = 0;
+	ctx.clientmgr_ctx.export_table = 254;
+	bool v4_initialized=false;
+	bool a_initialized=false;
+	bool p_initialized=false;
 
 	int c;
 	while ((c = getopt(argc, argv, "ha:b:p:i:m:t:c:4:n:s:")) != -1)
@@ -197,6 +200,7 @@ int main(int argc, char *argv[]) {
 			case 'a':
 				if(inet_pton(AF_INET6, optarg, &ctx.intercom_ctx.ip) != 1)
 					exit_error("Can not parse IP address");
+				a_initialized=true;
 				break;
 			case 'c':
 				parse_config(optarg);
@@ -207,6 +211,7 @@ int main(int argc, char *argv[]) {
 
 				if (VECTOR_INDEX(ctx.clientmgr_ctx.prefixes, VECTOR_LEN(ctx.clientmgr_ctx.prefixes)-1).plen != 64)
 					exit_error("IPv6 prefix must be /64");
+				p_initialized=true;
 				break;
 			case 'i':
 				free(ctx.routemgr_ctx.clientif);
@@ -227,6 +232,8 @@ int main(int argc, char *argv[]) {
 
 				if (ctx.clientmgr_ctx.v4prefix.plen != 96)
 					exit_error("IPv4 prefix must be /96");
+
+				v4_initialized=true;
 				break;
 			case 'n':
 				ctx.clientmgr_ctx.nat46ifindex = if_nametoindex(optarg);
@@ -234,6 +241,14 @@ int main(int argc, char *argv[]) {
 			default:
 				fprintf(stderr, "Invalid parameter %c ignored.\n", c);
 		}
+
+
+	if (!v4_initialized)
+		exit_error("specifying -4 is mandatory even though it is untested and probably broken. If in doubt, use -4 0:0:0:0:0:ffff::/96");
+	if (!a_initialized)
+		exit_error("specifying -a is mandatory");
+	if (!p_initialized)
+		exit_error("specifying -p is mandatory");
 
 	socket_init(&ctx.socket_ctx, socketpath);
 	ipmgr_init(&ctx.ipmgr_ctx, "l3roam0", 9000);
