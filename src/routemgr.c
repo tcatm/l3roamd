@@ -56,14 +56,13 @@ int parse_rtattr(struct rtattr *tb[], int max, struct rtattr *rta, int len)
 
 void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	struct ndmsg *msg = NLMSG_DATA(nh);
-	char ifname[IFNAMSIZ];
-	char brifname[IFNAMSIZ];
+	char ifname[IFNAMSIZ] = "";
+	char brifname[IFNAMSIZ] = "";
 	struct rtattr * tb[NDA_MAX+1];
-	brifname[0]='\0';
 
 	parse_rtattr(tb, NDA_MAX, NDA_RTA(msg), nh->nlmsg_len - NLMSG_LENGTH(sizeof(*msg)));
 
-	char mac_str[64];
+	char mac_str[64] = "";
 	if (tb[NDA_LLADDR]) {
 		mac_addr_n2a(mac_str, RTA_DATA(tb[NDA_LLADDR]));
 	}
