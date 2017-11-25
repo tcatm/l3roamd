@@ -174,7 +174,7 @@ void intercom_recently_seen_add(intercom_ctx *ctx, intercom_packet_hdr *hdr) {
 }
 
 void intercom_handle_seek(intercom_ctx *ctx, intercom_packet_seek *packet) {
-	routemgr_send_solicitation(CTX(routemgr), packet->address);
+	routemgr_send_solicitation(CTX(routemgr), (struct in6_addr *) packet->address);
 }
 
 void intercom_handle_claim(intercom_ctx *ctx, intercom_packet_claim *packet) {
