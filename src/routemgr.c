@@ -3,7 +3,7 @@
 #include "l3roamd.h"
 
 #include "clientmgr.h"
-#include <net/if.h>
+#include "if.h"
 
 static void rtnl_change_address(routemgr_ctx *ctx, struct in6_addr *address, int type, int flags);
 static void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh);
@@ -244,6 +244,7 @@ void routemgr_send_solicitation(routemgr_ctx *ctx, struct in6_addr *address) {
 
 
 void routemgr_init(routemgr_ctx *ctx) {
+	printf("init\n");
 	ctx->fd = socket(AF_NETLINK, SOCK_RAW|SOCK_NONBLOCK, NETLINK_ROUTE);
 	if (ctx->fd < 0)
 		exit_error("can't open RTNL socket");

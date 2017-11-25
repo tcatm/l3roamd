@@ -1,12 +1,12 @@
 #pragma once
 
 #include "vector.h"
+#include "if.h"
 
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <arpa/inet.h>
-#include <net/if.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 

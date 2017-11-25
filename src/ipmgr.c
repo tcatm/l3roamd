@@ -2,10 +2,10 @@
 #include "ipmgr.h"
 #include "l3roamd.h"
 #include "timespec.h"
+#include "if.h"
 
 #include <fcntl.h>
 #include <unistd.h>
-#include <net/if.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
