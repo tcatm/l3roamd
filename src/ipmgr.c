@@ -11,12 +11,12 @@
 #include <netinet/in.h>
 #include <linux/if_tun.h>
 
-static void tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name);
+static bool tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name);
 static void schedule_ipcheck(ipmgr_ctx *ctx, struct entry *e);
 static void ipcheck_task(void *d);
 static bool ipcheck(ipmgr_ctx *ctx, struct entry *e);
 
-void tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name) {
+bool tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name) {
 	int ctl_sock = -1;
 	struct ifreq ifr = {};
 
@@ -27,14 +27,13 @@ void tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_
 	if (ifname)
 		strncpy(ifr.ifr_name, ifname, IFNAMSIZ-1);
 
-	ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
+	ifr.ifr_flags = IFF_TUN | IFF_NO_PI; 
 
 	if (ioctl(ctx->fd, TUNSETIFF, &ifr) < 0) {
 		puts("unable to open TUN/TAP interface: TUNSETIFF ioctl failed");
 		goto error;
 	}
 
-	// TODO this must be freed eventually
 	ctx->ifname = strndup(ifr.ifr_name, IFNAMSIZ-1);
 
 	ctl_sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -52,19 +51,27 @@ void tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_
 		}
 	}
 
+	ifr.ifr_flags = IFF_UP | IFF_RUNNING| IFF_MULTICAST | IFF_NOARP | IFF_POINTOPOINT;
+	if (ioctl(ctl_sock, SIOCSIFFLAGS, &ifr) < 0 ) {
+		puts("unable to set TUN/TAP interface UP: SIOCSIFFLAGS ioctl failed");
+		goto error;
+	}
+
 	if (close(ctl_sock))
 		puts("close");
 
-	return;
+	return true;
 
 error:
 	if (ctl_sock >= 0) {
 		if (close(ctl_sock))
 			puts("close");
 	}
+	free(ctx->ifname);
 
 	close(ctx->fd);
 	ctx->fd = -1;
+	return false;
 }
 
 struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {

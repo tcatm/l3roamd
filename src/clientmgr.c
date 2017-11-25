@@ -176,10 +176,10 @@ void client_add_route(clientmgr_ctx *ctx, struct client *client, struct client_i
 			.s_addr = ip->addr.s6_addr[12] << 24 | ip->addr.s6_addr[13] << 16 | ip->addr.s6_addr[14] << 8 | ip->addr.s6_addr[15]
 		};
 
-		routemgr_insert_route(CTX(routemgr), ctx->export_table, ctx->nat46ifindex, &ip->addr);
+		routemgr_insert_route(CTX(routemgr), ctx->export_table, ctx->nat46ifindex, &ip->addr, 128);
 		routemgr_insert_route4(CTX(routemgr), ctx->export_table, client->ifindex, &ip4);
 	} else {
-		routemgr_insert_route(CTX(routemgr), ctx->export_table, client->ifindex, &ip->addr);
+		routemgr_insert_route(CTX(routemgr), ctx->export_table, client->ifindex, &ip->addr, 128);
 	}
 }
 
@@ -191,11 +191,11 @@ void client_remove_route(clientmgr_ctx *ctx, struct client *client, struct clien
 			.s_addr = ip->addr.s6_addr[12] << 24 | ip->addr.s6_addr[13] << 16 | ip->addr.s6_addr[14] << 8 | ip->addr.s6_addr[15]
 		};
 
-		routemgr_remove_route(CTX(routemgr), ctx->export_table, &ip->addr);
+		routemgr_remove_route(CTX(routemgr), ctx->export_table, &ip->addr, 128);
 		routemgr_remove_route4(CTX(routemgr), ctx->export_table, &ip4);
 		routemgr_remove_neighbor4(CTX(routemgr), client->ifindex, &ip4, client->mac);
 	} else {
-		routemgr_remove_route(CTX(routemgr), ctx->export_table, &ip->addr);
+		routemgr_remove_route(CTX(routemgr), ctx->export_table, &ip->addr, 128);
 		routemgr_remove_neighbor(CTX(routemgr), client->ifindex, &ip->addr, client->mac);
 	}
 }
@@ -402,7 +402,7 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 	client->ifindex = ifindex;
 
 	if (!intercom_claim(CTX(intercom), NULL, client)) {
-		printf("Claim failed.\n");
+		fprintf(stderr, "Claim failed for %02x:%02x:%02x:%02x:%02x:%02x.\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5] );
 		add_special_ip(ctx, client);
 	}
 

@@ -116,7 +116,7 @@ void usage() {
 	puts("  -a <ip6>           ip address of this node");
 	puts("  -b <client-bridge> this is the bridge where all clients are connected");
 	puts("  -c <file>          configuration file");
-	puts("  -p <prefix>        clientprefix"); // TODO we should be able to handle multiple prefixes in the same instance
+	puts("  -p <prefix>        clientprefix");
 	puts("  -s <socketpath>    provide statistics on this socket");
 	puts("  -i <clientif>      client interface");
 	puts("  -m <meshif>        mesh interface. may be specified multiple times");
@@ -182,6 +182,7 @@ int main(int argc, char *argv[]) {
 	intercom_init(&ctx.intercom_ctx);
 	ctx.routemgr_ctx.client_bridge = strdup("\0");
 	ctx.routemgr_ctx.clientif = strdup("\0");
+	ctx.clientmgr_ctx.export_table = 0;
 
 	int c;
 	while ((c = getopt(argc, argv, "ha:b:p:i:m:t:c:4:n:s:")) != -1)
@@ -235,9 +236,10 @@ int main(int argc, char *argv[]) {
 		}
 
 	socket_init(&ctx.socket_ctx, socketpath);
-	routemgr_init(&ctx.routemgr_ctx);
 	ipmgr_init(&ctx.ipmgr_ctx, "l3roam0", 9000);
+	routemgr_init(&ctx.routemgr_ctx);
 	wifistations_init(&ctx.wifistations_ctx);
+
 
 	loop(&ctx);
 

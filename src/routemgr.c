@@ -242,7 +242,7 @@ void routemgr_send_solicitation(routemgr_ctx *ctx, struct in6_addr *address) {
 
 
 void routemgr_init(routemgr_ctx *ctx) {
-	printf("init\n");
+	printf("initializing routemgr\n");
 	ctx->fd = socket(AF_NETLINK, SOCK_RAW|SOCK_NONBLOCK, NETLINK_ROUTE);
 	if (ctx->fd < 0)
 		exit_error("can't open RTNL socket");
@@ -262,6 +262,15 @@ void routemgr_init(routemgr_ctx *ctx) {
 
 	routemgr_initial_neighbours(ctx, AF_INET);
 	routemgr_initial_neighbours(ctx, AF_INET6);
+
+	for (int i=0;i<VECTOR_LEN(CTX(clientmgr)->prefixes);i++) {
+		char str[INET6_ADDRSTRLEN+1];
+		struct prefix *prefix = &(VECTOR_INDEX(CTX(clientmgr)->prefixes, i));
+		inet_ntop(AF_INET6, prefix->prefix.s6_addr, str, INET6_ADDRSTRLEN);
+		printf("Activating route for prefix %s/%i on device %s(%i) in main routing-table\n", str, prefix->plen, CTX(ipmgr)->ifname, if_nametoindex(CTX(ipmgr)->ifname));
+
+		routemgr_insert_route(ctx, 254, if_nametoindex(CTX(ipmgr)->ifname), (struct in6_addr*)(prefix->prefix.s6_addr), prefix->plen );
+	}
 }
 
 
@@ -319,7 +328,7 @@ void routemgr_handle_in(routemgr_ctx *ctx, int fd) {
 				case NLMSG_DONE:
 					return;
 				case NLMSG_ERROR:
-					perror("netlink error");
+					perror("handling netlink error-message");
 				default:
 					rtnl_handle_msg(ctx, nh);
 			}
@@ -413,7 +422,7 @@ void routemgr_remove_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_a
 	rtmgr_rtnl_talk(ctx, (struct nlmsghdr*)&req);
 }
 
-void routemgr_insert_route(routemgr_ctx *ctx, const int table, const int ifindex, struct in6_addr *address) {
+void routemgr_insert_route(routemgr_ctx *ctx, const int table, const int ifindex, struct in6_addr *address, const int prefix_length) {
 	struct nlrtreq req = {
 		.nl = {
 			.nlmsg_type = RTM_NEWROUTE,
@@ -426,7 +435,7 @@ void routemgr_insert_route(routemgr_ctx *ctx, const int table, const int ifindex
 			.rtm_protocol = ROUTE_PROTO,
 			.rtm_scope = RT_SCOPE_UNIVERSE,
 			.rtm_type = RTN_UNICAST,
-			.rtm_dst_len = 128
+			.rtm_dst_len = prefix_length
 		},
 	};
 
@@ -436,7 +445,7 @@ void routemgr_insert_route(routemgr_ctx *ctx, const int table, const int ifindex
 	rtmgr_rtnl_talk(ctx, (struct nlmsghdr *)&req);
 }
 
-void routemgr_remove_route(routemgr_ctx *ctx, const int table, struct in6_addr *address) {
+void routemgr_remove_route(routemgr_ctx *ctx, const int table, struct in6_addr *address, const int prefix_length) {
 	struct nlrtreq req1 = {
 		.nl = {
 			.nlmsg_type = RTM_NEWROUTE,
@@ -447,7 +456,7 @@ void routemgr_remove_route(routemgr_ctx *ctx, const int table, struct in6_addr *
 			.rtm_family = AF_INET6,
 			.rtm_table = table,
 			.rtm_type = RTN_THROW,
-			.rtm_dst_len = 128
+			.rtm_dst_len = prefix_length
 		}
 	};
 
