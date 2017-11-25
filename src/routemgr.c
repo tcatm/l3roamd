@@ -319,7 +319,7 @@ void routemgr_handle_in(routemgr_ctx *ctx, int fd) {
 				case NLMSG_DONE:
 					return;
 				case NLMSG_ERROR:
-					perror("netlink error: ");
+					perror("netlink error");
 				default:
 					rtnl_handle_msg(ctx, nh);
 			}

@@ -334,7 +334,13 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 /** Check whether an IP address is contained in a client prefix.
   */
 bool clientmgr_valid_address(clientmgr_ctx *ctx, struct in6_addr *address) {
-	return prefix_contains(&ctx->prefix, address) | clientmgr_is_ipv4(ctx, address);
+	for (int i = 0; i < VECTOR_LEN(ctx->prefixes); i++) {
+		struct prefix *_prefix = &VECTOR_INDEX(ctx->prefixes, i);
+		if (prefix_contains(_prefix ,address))
+			return true;
+	}
+
+	return clientmgr_is_ipv4(ctx, address);
 }
 
 /** Check whether an IP address is contained in the IPv4 prefix.

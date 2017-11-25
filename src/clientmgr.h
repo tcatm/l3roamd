@@ -36,7 +36,7 @@ struct client {
 
 typedef struct {
 	struct l3ctx *l3ctx;
-	struct prefix prefix;
+	VECTOR(struct prefix) prefixes;
 	struct prefix v4prefix;
 	unsigned int export_table;
 	int nat46ifindex;

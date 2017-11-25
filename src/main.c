@@ -32,6 +32,7 @@
 #include "intercom.h"
 #include "config.h"
 #include "socket.h"
+#include "vector.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -125,7 +126,7 @@ void usage() {
 	puts("  -h                 this help\n");
 }
 
-bool set_prefix(struct prefix *prefix, const char *str) {
+bool parse_prefix(struct prefix *prefix, const char *str) {
 	char *saveptr;
 	char *tmp = strdupa(str);
 	char *ptr = strtok_r(tmp, "/", &saveptr);
@@ -133,20 +134,29 @@ bool set_prefix(struct prefix *prefix, const char *str) {
 	if (ptr == NULL)
 		return false;
 
-	int rc = inet_pton(AF_INET6, ptr, &prefix->prefix);
-
+	int rc = inet_pton(AF_INET6, ptr, &(prefix->prefix));
 	if (rc != 1)
 		return false;
 
 	ptr = strtok_r(NULL, "/", &saveptr);
-
 	if (ptr == NULL)
 		return false;
 
 	prefix->plen = atoi(ptr);
-
 	if (prefix->plen < 0 || prefix->plen > 128)
 		return false;
+
+	return true;
+}
+
+bool add_prefix(void *prefixes, const char *str) {
+	VECTOR(struct prefix) *_prefixes = prefixes;
+	struct prefix _prefix = {};
+
+	if (!parse_prefix(&_prefix, str))
+		return false;
+
+	VECTOR_ADD(*_prefixes, _prefix);
 
 	return true;
 }
@@ -191,10 +201,11 @@ int main(int argc, char *argv[]) {
 				parse_config(optarg);
 				break;
 			case 'p':
-				if (!set_prefix(&ctx.clientmgr_ctx.prefix, optarg))
+				if (!add_prefix(&ctx.clientmgr_ctx.prefixes, optarg))
 					exit_error("Can not parse prefix");
 
-				printf("prefix length: %i\n", ctx.clientmgr_ctx.prefix.plen);
+				if (VECTOR_INDEX(ctx.clientmgr_ctx.prefixes, VECTOR_LEN(ctx.clientmgr_ctx.prefixes)-1).plen != 64)
+					exit_error("IPv6 prefix must be /64");
 				break;
 			case 'i':
 				free(ctx.routemgr_ctx.clientif);
@@ -210,12 +221,11 @@ int main(int argc, char *argv[]) {
 				socketpath = optarg;
 				break;
 			case '4':
-				if (!set_prefix(&ctx.clientmgr_ctx.v4prefix, optarg))
+				if (!parse_prefix(&ctx.clientmgr_ctx.v4prefix, optarg))
 					exit_error("Can not parse IPv4 prefix");
 
 				if (ctx.clientmgr_ctx.v4prefix.plen != 96)
 					exit_error("IPv4 prefix must be /96");
-
 				break;
 			case 'n':
 				ctx.clientmgr_ctx.nat46ifindex = if_nametoindex(optarg);
