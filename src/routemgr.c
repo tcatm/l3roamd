@@ -77,19 +77,19 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	     !strncmp(ctx->client_bridge,ifname,strlen(ifname)) ||
 	     ( strlen(brifname) && !strncmp(ctx->client_bridge,brifname,strlen(brifname)) )
 	     ) {
-		printf("neighbour [%s] changed on interface %s\n", mac_str, ifname);
+		printf("neighbour [%s] changed on interface %s ...", mac_str, ifname);
 		if (tb[NDA_MASTER]) {
 			if_indextoname(rta_getattr_u32(tb[NDA_MASTER]),ifname);
 			if (! strncmp( ifname, ctx->client_bridge, strlen(ifname))) {
 				switch (nh->nlmsg_type) {
 					case RTM_NEWNEIGH:
-						printf("ADDING neighbour on %s [%s]\n", ifname, mac_str) ;
+						printf("ADDING on %s\n", ifname) ;
 						clientmgr_notify_mac(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]), rta_getattr_u32(tb[NDA_MASTER]));
 						break;
 					case RTM_DELNEIGH:
 						// client has roamed or was turned off 5 minutes ago
 						//
-						printf("REMOVING neighbour on %s [%s]\n", ifname, mac_str);
+						printf("REMOVING from %s\n", ifname);
 						clientmgr_delete_client(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]));
 						break;
 					case RTM_GETNEIGH:
@@ -103,7 +103,7 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 			switch (nh->nlmsg_type) {
 				case RTM_NEWNEIGH:
 					if (tb[NDA_DST] && tb[NDA_LLADDR] && msg->ndm_family == AF_INET6) {
-						printf(" ADDING neighbour on %s [%s]\n", ifname, mac_str) ;
+						printf(" ADDING on %s\n", ifname) ;
 						clientmgr_add_address(CTX(clientmgr),  RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
 					}
 					break;
@@ -325,11 +325,15 @@ void routemgr_handle_in(routemgr_ctx *ctx, int fd) {
 		break;
 
 		const struct nlmsghdr *nh;
+		struct nlmsgerr *ne;
 		for (nh = (struct nlmsghdr *)buf; NLMSG_OK(nh, count); nh = NLMSG_NEXT(nh, count)) {
 			switch (nh->nlmsg_type) {
 				case NLMSG_DONE:
 					return;
 				case NLMSG_ERROR:
+					ne = NLMSG_DATA(nh);
+					if (ne->error <= 0 )
+						return; // from netlink(7): negative errno or 0 for acknoledgement
 					perror("handling netlink error-message");
 				default:
 					rtnl_handle_msg(ctx, nh);
