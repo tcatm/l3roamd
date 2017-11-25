@@ -10,12 +10,12 @@
 
 #ifndef NDA_RTA
 #define NDA_RTA(r) \
-        ((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct ndmsg))))
+	((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct ndmsg))))
 #endif
 
 static inline __u32 rta_getattr_u32(const struct rtattr *rta)
 {
-        return *(__u32 *)RTA_DATA(rta);
+	return *(__u32 *)RTA_DATA(rta);
 }
 
 struct nlrtreq {
