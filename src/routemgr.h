@@ -64,4 +64,4 @@ void routemgr_insert_route4(routemgr_ctx *ctx, const int table, const int ifinde
 void routemgr_remove_route4(routemgr_ctx *ctx, const int table, struct in_addr *address);
 void rtnl_add_address(routemgr_ctx *ctx, struct in6_addr *address);
 void rtnl_remove_address(routemgr_ctx *ctx, struct in6_addr *address);
-void routemgr_send_solicitation(routemgr_ctx *ctx, struct in6_addr *address);
+void routemgr_send_solicitation(routemgr_ctx *ctx, struct in6_addr *address, uint8_t *mac);

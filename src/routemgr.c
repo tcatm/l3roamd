@@ -207,7 +207,9 @@ static void routemgr_initial_neighbours(routemgr_ctx *ctx, uint8_t family) {
 	rtmgr_rtnl_talk(ctx, (struct nlmsghdr *)&req);
 }
 
-void routemgr_send_solicitation(routemgr_ctx *ctx, struct in6_addr *address) {
+
+
+void routemgr_send_solicitation(routemgr_ctx *ctx, struct in6_addr *address, uint8_t *mac) {
 	int family = AF_INET6;
 	size_t addr_len = 16;
 	void *addr = address->s6_addr;
@@ -236,6 +238,7 @@ void routemgr_send_solicitation(routemgr_ctx *ctx, struct in6_addr *address) {
 	};
 
 	rtnl_addattr(&req.nl, sizeof(req), NDA_DST, addr, addr_len);
+	rtnl_addattr(&req.nl, sizeof(req), NDA_LLADDR, mac, sizeof(mac));
 
 	rtmgr_rtnl_talk(ctx, (struct nlmsghdr *)&req);
 }

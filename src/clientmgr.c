@@ -414,7 +414,7 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 	}
 
 	struct in6_addr address = mac2ipv6(client->mac);
-	routemgr_send_solicitation(CTX(routemgr), (struct in6_addr *) &address);
+	routemgr_send_solicitation(CTX(routemgr), (struct in6_addr *) &address, mac);
 }
 
 /** Handle info request.

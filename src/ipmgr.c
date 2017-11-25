@@ -97,12 +97,16 @@ void delete_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 }
 
 void seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
+	// FIXME: this whole context thing is broken. we are referring to all contexts from all over the place. it may just as well be one...
 	char str[INET6_ADDRSTRLEN];
 	inet_ntop(AF_INET6, addr, str, sizeof str);
 
 	printf("\x1b[36mLooking for %s\x1b[0m\n", str);
 
-	routemgr_send_solicitation(CTX(routemgr), addr);
+	uint8_t mac[6] = {};
+	routemgr_send_solicitation(CTX(routemgr), addr, mac);
+
+	// TODO: l3roamd should only query intercom, if the node really wasn't found locally.
 
 	intercom_seek(CTX(intercom), addr);
 }
