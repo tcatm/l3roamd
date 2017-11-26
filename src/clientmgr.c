@@ -357,6 +357,9 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 	if (!clientmgr_valid_address(ctx, address))
 		return;
 
+//	if (!mac)
+//		return;
+
 	struct client *client = get_or_create_client(ctx, mac);
 	struct client_ip *ip = get_client_ip(client, address);
 
@@ -364,7 +367,7 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 	bool ip_is_new = ip == NULL;
 
 	if (ip_is_new) {
-		printf("Add Address: %s to client %02x:%02x:%02x:%02x:%02x:%02x\n", str, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+		printf("Address: %s to client %02x:%02x:%02x:%02x:%02x:%02x\n", str, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 		struct client_ip _ip = {};
 		memcpy(&_ip.addr, address, sizeof(struct in6_addr));
 		VECTOR_ADD(client->addresses, _ip);

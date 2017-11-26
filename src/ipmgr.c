@@ -104,6 +104,7 @@ void seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
 	printf("\x1b[36mLooking for %s\x1b[0m\n", str);
 
 	uint8_t mac[6] = {};
+	//routemgr_remove_neighbor(CTX(routemgr), CTX(routemgr)->clientif_index, addr, mac);
 	routemgr_send_solicitation(CTX(routemgr), addr, mac);
 
 	// TODO: l3roamd should only query intercom, if the node really wasn't found locally.

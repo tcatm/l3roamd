@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <netinet/in.h>
 #include <time.h>
+#include "prefix.h"
 
 #define CLIENT_TIMEOUT 300
 #define NODE_CLIENT_PREFIX "fec0::"
@@ -15,10 +16,6 @@ enum ip_state {
 	IP_TENTATIVE
 };
 
-struct prefix {
-	struct in6_addr prefix;
-	int plen; /* in bits */
-};
 
 struct client_ip {
 	enum ip_state state;

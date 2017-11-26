@@ -33,6 +33,7 @@
 #include "config.h"
 #include "socket.h"
 #include "vector.h"
+#include "prefix.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -101,7 +102,7 @@ void loop(struct l3ctx *ctx) {
 				if (events[i].events & EPOLLIN)
 					intercom_handle_in(&ctx->intercom_ctx, events[i].data.fd);
 			} else if (ctx->socket_ctx.fd == events[i].data.fd) {
-				socket_handle_in(&ctx->socket_ctx, VECTOR_LEN(ctx->clientmgr_ctx.clients));
+				socket_handle_in(&ctx->socket_ctx);
 			} else if (ctx->wifistations_ctx.fd == events[i].data.fd) {
 				wifistations_handle_in(&ctx->wifistations_ctx);
 			}
@@ -116,50 +117,20 @@ void usage() {
 	puts("  -a <ip6>           ip address of this node");
 	puts("  -b <client-bridge> this is the bridge where all clients are connected");
 	puts("  -c <file>          configuration file"); // TODO: do we really need this?
-	puts("  -p <prefix>        clientprefix");
-	puts("  -s <socketpath>    provide statistics on this socket");
+	puts("  -p <prefix>        Accept queries for this prefix. May be provided multiple times.");
+	puts("  -s <socketpath>    provide statistics and allow control using this socket. See below for usage instructions.");
 	puts("  -i <clientif>      client interface");
 	puts("  -m <meshif>        mesh interface. may be specified multiple times");
 	puts("  -t <export table>  export routes to this table");
 	puts("  -4 <prefix>        IPv4 translation prefix");
 	puts("  -t <nat46if>       interface for nat46");
-	puts("  -h                 this help\n");
+	puts("  -h                 this help\n\n");
+	puts("The socket will accept the following commands:");
+	puts("get_clients          The daemon will reply with a json structure, currently providing client count.");
+	puts("add_prefix <prefix>  This will treat <prefix> as if it was added using -p");
+	puts("del_prefix <prefix>  This will remove <prefix> from the list of client-prefixes and stop accepting queries for clients within that prefix.");
 }
 
-bool parse_prefix(struct prefix *prefix, const char *str) {
-	char *saveptr;
-	char *tmp = strdupa(str);
-	char *ptr = strtok_r(tmp, "/", &saveptr);
-
-	if (ptr == NULL)
-		return false;
-
-	int rc = inet_pton(AF_INET6, ptr, &(prefix->prefix));
-	if (rc != 1)
-		return false;
-
-	ptr = strtok_r(NULL, "/", &saveptr);
-	if (ptr == NULL)
-		return false;
-
-	prefix->plen = atoi(ptr);
-	if (prefix->plen < 0 || prefix->plen > 128)
-		return false;
-
-	return true;
-}
-
-bool add_prefix(void *prefixes, const char *str) {
-	VECTOR(struct prefix) *_prefixes = prefixes;
-	struct prefix _prefix = {};
-
-	if (!parse_prefix(&_prefix, str))
-		return false;
-
-	VECTOR_ADD(*_prefixes, _prefix);
-
-	return true;
-}
 
 void interfaces_changed(struct l3ctx *ctx, int type, const struct ifinfomsg *msg) {
 	printf("interfaces changed\n");
@@ -206,12 +177,15 @@ int main(int argc, char *argv[]) {
 				parse_config(optarg);
 				break;
 			case 'p':
-				if (!add_prefix(&ctx.clientmgr_ctx.prefixes, optarg))
-					exit_error("Can not parse prefix");
-
-				if (VECTOR_INDEX(ctx.clientmgr_ctx.prefixes, VECTOR_LEN(ctx.clientmgr_ctx.prefixes)-1).plen != 64)
-					exit_error("IPv6 prefix must be /64");
 				p_initialized=true;
+
+				struct prefix _prefix = {};
+				if (!parse_prefix(&_prefix, optarg))
+					exit_error("Can not parse prefix");
+				if (_prefix.plen != 64)
+					exit_error("IPv6 prefix must be /64");
+
+				add_prefix(&ctx.clientmgr_ctx.prefixes, _prefix);
 				break;
 			case 'i':
 				free(ctx.routemgr_ctx.clientif);
@@ -254,7 +228,6 @@ int main(int argc, char *argv[]) {
 	ipmgr_init(&ctx.ipmgr_ctx, "l3roam0", 9000);
 	routemgr_init(&ctx.routemgr_ctx);
 	wifistations_init(&ctx.wifistations_ctx);
-
 
 	loop(&ctx);
 

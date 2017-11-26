@@ -31,15 +31,15 @@ struct nlneighreq {
 };
 
 struct kernel_route {
-		struct in6_addr prefix;
-		int plen;
-		struct in6_addr src_prefix;
-		int src_plen; /* no source prefix <=> src_plen == 0 */
-		int metric;
-		unsigned int ifindex;
-		int proto;
-		struct in6_addr gw;
-		unsigned int table;
+	struct in6_addr prefix;
+	int plen;
+	struct in6_addr src_prefix;
+	int src_plen; /* no source prefix <=> src_plen == 0 */
+	int metric;
+	unsigned int ifindex;
+	int proto;
+	struct in6_addr gw;
+	unsigned int table;
 };
 
 typedef struct {
