@@ -70,7 +70,7 @@ void loop(struct l3ctx *ctx) {
 	add_fd(efd, ctx->ipmgr_ctx.fd, EPOLLIN | EPOLLET);
 	add_fd(efd, ctx->routemgr_ctx.fd, EPOLLIN | EPOLLET);
 	add_fd(efd, ctx->intercom_ctx.fd, EPOLLIN | EPOLLET);
-
+	add_fd(efd, ctx->taskqueue_ctx.fd, EPOLLIN);
 	if (ctx->socket_ctx.fd >= 0) {
 		add_fd(efd, ctx->socket_ctx.fd, EPOLLIN);
 	}
@@ -92,6 +92,8 @@ void loop(struct l3ctx *ctx) {
 				close(events[i].data.fd);
 				// TODO: routemgr is handling routes from kernel AND direct neighbours from fdb.
 				// Refactor this at is actually a netlink-handler
+			} else if (ctx->taskqueue_ctx.fd == events[i].data.fd) {
+				taskqueue_run(&ctx->taskqueue_ctx);
 			} else if (ctx->routemgr_ctx.fd == events[i].data.fd) {
 				if (events[i].events & EPOLLIN)
 					routemgr_handle_in(&ctx->routemgr_ctx, events[i].data.fd);
@@ -149,6 +151,7 @@ int main(int argc, char *argv[]) {
 	ctx.ipmgr_ctx.l3ctx = &ctx;
 	ctx.routemgr_ctx.l3ctx = &ctx;
 	ctx.socket_ctx.l3ctx = &ctx;
+	ctx.taskqueue_ctx.l3ctx = &ctx;
 
 	intercom_init(&ctx.intercom_ctx);
 	ctx.routemgr_ctx.client_bridge = strdup("\0");
@@ -228,6 +231,7 @@ int main(int argc, char *argv[]) {
 	ipmgr_init(&ctx.ipmgr_ctx, "l3roam0", 9000);
 	routemgr_init(&ctx.routemgr_ctx);
 	wifistations_init(&ctx.wifistations_ctx);
+	taskqueue_init(&ctx.taskqueue_ctx);
 
 	loop(&ctx);
 

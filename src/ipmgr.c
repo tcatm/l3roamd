@@ -97,14 +97,13 @@ void delete_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 }
 
 void seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
-	// FIXME: this whole context thing is broken. we are referring to all contexts from all over the place. it may just as well be one...
+	// FIXME: this whole context thing is broken. we are referring to all contexts from all over the place.
 	char str[INET6_ADDRSTRLEN];
 	inet_ntop(AF_INET6, addr, str, sizeof str);
 
 	printf("\x1b[36mLooking for %s\x1b[0m\n", str);
 
-	uint8_t mac[6] = {};
-	//routemgr_remove_neighbor(CTX(routemgr), CTX(routemgr)->clientif_index, addr, mac);
+	uint8_t mac[6] = {}; // we are only seeking an address if we have not previously seen it. setting an empty mac is ok.
 	routemgr_send_solicitation(CTX(routemgr), addr, mac);
 
 	// TODO: l3roamd should only query intercom, if the node really wasn't found locally.
@@ -136,9 +135,9 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 
 	struct entry *e = find_entry(ctx, &dst);
 
-	bool new = !e;
+	bool new_unknown_dst = !e;
 
-	if (!e) {
+	if (new_unknown_dst) {
 		struct entry entry = {
 			.address = dst,
 			.timestamp = now,
@@ -161,7 +160,7 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 	struct timespec then = now;
 	then.tv_sec -= SEEK_TIMEOUT;
 
-	if (timespec_cmp(e->timestamp, then) <= 0 || new) {
+	if (timespec_cmp(e->timestamp, then) <= 0 || new_unknown_dst) {
 		seek_address(ctx, &dst);
 		e->timestamp = now;
 	}
@@ -186,6 +185,10 @@ void ipcheck_task(void *d) {
 
 	if (!e)
 		return;
+
+	char str[INET6_ADDRSTRLEN] = "";
+	inet_ntop(AF_INET6, &data->address, str, sizeof str);
+	printf("running an ipcheck on %s\n", str);
 
 	e->check_task = NULL;
 
@@ -242,8 +245,8 @@ void ipmgr_handle_in(ipmgr_ctx *ctx, int fd) {
 			break;
 		}
 
-		if (count < 40)
-			continue;
+	//	if (count < 40)
+	//		continue;
 
 		// We're only interested in ip6 packets
 		if ((buf[0] & 0xf0) != 0x60)
