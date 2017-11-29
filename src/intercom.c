@@ -3,10 +3,11 @@
 #include "l3roamd.h"
 #include "if.h"
 #include "icmp6.h"
+#include "syscallwrappers.h"
 
 #include <time.h>
-#include <stdlib.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/types.h>
@@ -105,8 +106,9 @@ void intercom_init(intercom_ctx *ctx) {
 
 void intercom_seek(intercom_ctx *ctx, const struct in6_addr *address) {
 	intercom_packet_seek packet;
+	uint32_t nonce;
 
-	uint32_t nonce = rand();
+	obtainrandom(&nonce, sizeof(uint32_t), 0);
 
 	packet.hdr = (intercom_packet_hdr) {
 		.type = INTERCOM_SEEK,
@@ -265,9 +267,10 @@ void intercom_handle_in(intercom_ctx *ctx, int fd) {
 /* recipient = NULL -> send to neighbours */
 void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client, bool relinquished) {
 	intercom_packet_info *packet = malloc(sizeof(intercom_packet_info) + INFO_MAX * sizeof(intercom_packet_info_entry));
-	int i;
+	int i=0;
+	uint32_t nonce;
 
-	uint32_t nonce = rand();
+	obtainrandom(&nonce, sizeof(uint32_t), 0);
 
 	packet->hdr = (intercom_packet_hdr) {
 		.type = INTERCOM_INFO,
@@ -304,8 +307,9 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 
 bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client) {
 	intercom_packet_claim packet;
+	uint32_t nonce;
 
-	uint32_t nonce = rand();
+	obtainrandom(&nonce, sizeof(uint32_t), 0);
 
 	packet.hdr = (intercom_packet_hdr) {
 		.type = INTERCOM_CLAIM,
