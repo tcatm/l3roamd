@@ -215,6 +215,29 @@ struct client *get_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
 	return NULL;
 }
 
+bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address) {
+	char a1[INET6_ADDRSTRLEN+1]={};
+	inet_ntop(AF_INET6, address, a1, INET6_ADDRSTRLEN);
+	printf("seeking address %s.\n",a1);
+	for (int i = 0; i < VECTOR_LEN(ctx->clients); i++) {
+		struct client *c = &VECTOR_INDEX(ctx->clients, i);
+		for (int j = 0; j< VECTOR_LEN(c->addresses);j++) {
+			struct client_ip *a = &VECTOR_INDEX(c->addresses, j);
+			char a2[INET6_ADDRSTRLEN+1]={};
+			inet_ntop(AF_INET6, &a->addr, a2, INET6_ADDRSTRLEN);
+			printf("comparing %s and %s yielded the result: ",a1, a2);
+			if (memcmp(address, &a->addr, sizeof(struct in6_addr))) {
+				printf("equal\n");
+				return true;
+			} else {
+				printf("not equal\n");
+			}
+		}
+	}
+	printf(" -- %s is not connected as a local client.\n",a1);
+	return false;
+}
+
 /** Get a client or create a new, empty one.
   */
 struct client *get_or_create_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
@@ -390,9 +413,6 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 	if (!clientmgr_valid_address(ctx, address))
 		return;
 
-//	if (!mac)
-//		return;
-
 	struct client *client = get_or_create_client(ctx, mac);
 	struct client_ip *ip = get_client_ip(client, address);
 
@@ -507,6 +527,5 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bo
 
 	printf("Merged ");
 	print_client(client);
-
 }
 

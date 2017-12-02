@@ -1,8 +1,9 @@
 #include "error.h"
 #include "ipmgr.h"
-#include "l3roamd.h"
 #include "timespec.h"
 #include "if.h"
+#include "intercom.h"
+#include "l3roamd.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -14,6 +15,7 @@
 static bool tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name);
 static void schedule_ipcheck(ipmgr_ctx *ctx, struct entry *e);
 static void ipcheck_task(void *d);
+static void seek_task(void *d);
 static bool ipcheck(ipmgr_ctx *ctx, struct entry *e);
 
 /* open l3roamd's tun device that is used to obtain packets for unknown clients */
@@ -112,8 +114,14 @@ void seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
 	else
 		icmp6_send_solicitation(CTX(icmp6), addr);
 
-	// TODO: l3roamd should only query intercom, if the node really wasn't found locally.
-	intercom_seek(CTX(intercom), addr);
+	// schedule an intercom-seek operation that in turn will only be executed if there is no local client known
+	struct ip_task *data = calloc(1, sizeof(struct ip_task));
+
+	data->ctx = ctx;
+	data->address = *addr;
+
+	// TODO: Scheduling this task 1s in the future seems to be a long time. find a way to cut this time to 300ms or so.
+	post_task(CTX(taskqueue), 1, seek_task, free, data);
 }
 
 void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
@@ -183,6 +191,25 @@ void schedule_ipcheck(ipmgr_ctx *ctx, struct entry *e) {
 		e->check_task = post_task(CTX(taskqueue), IPCHECK_INTERVAL, ipcheck_task, free, data);
 }
 
+void seek_task(void *d) {
+	struct ip_task *data = d;
+	struct entry *e = find_entry(data->ctx, &data->address);
+	printf("Control flow is in in seek_task now\n");
+
+	if (!e) {
+		char str[INET6_ADDRSTRLEN+1];
+		inet_ntop(AF_INET6, &data->address, str, INET6_ADDRSTRLEN);
+		printf("seek task was scheduled but no remaining packets for host (%s) available.\n", str);
+		return;
+	}
+	e->check_task = NULL;
+
+	if (!clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &data->address)) {
+		printf("ADDRESS WAS NOT FOUND, QUERYING INTERCOM\n");
+		intercom_seek(&l3ctx.intercom_ctx, (const struct in6_addr*) &(data->address));
+	}
+}
+
 void ipcheck_task(void *d) {
 	struct ip_task *data = d;
 
@@ -213,6 +240,7 @@ bool ipcheck(ipmgr_ctx *ctx, struct entry *e) {
 
 		if (timespec_cmp(p->timestamp, then) <= 0) {
 			free(p->data);
+			printf("deleting old packet");
 			VECTOR_DELETE(e->packets, i);
 			i--;
 		}
@@ -250,8 +278,8 @@ void ipmgr_handle_in(ipmgr_ctx *ctx, int fd) {
 			break;
 		}
 
-	//	if (count < 40)
-	//		continue;
+		if (count < 40)
+			continue;
 
 		// We're only interested in ip6 packets
 		if ((buf[0] & 0xf0) != 0x60)
@@ -276,7 +304,7 @@ void ipmgr_handle_out(ipmgr_ctx *ctx, int fd) {
 
 		if (count == -1) {
 			if (errno != EAGAIN)
-				perror("write failed");
+				perror("Could not send packet to newly visible client");
 
 			break;
 		}
