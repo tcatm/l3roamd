@@ -375,6 +375,12 @@ bool clientmgr_is_ipv4(clientmgr_ctx *ctx, struct in6_addr *address) {
 	return prefix_contains(&ctx->v4prefix, address);
 }
 
+/** Remove an address from a client identified by its MAC.
+**/
+void clientmgr_remove_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex) {
+	printf("TODO: clientmgr_remove_address - currently not implemented\n");
+}
+
 /** Add a new address to a client identified by its MAC.
  */
 void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex) {

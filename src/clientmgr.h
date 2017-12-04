@@ -48,6 +48,7 @@ struct client_task {
 bool clientmgr_valid_address(clientmgr_ctx *ctx, struct in6_addr *ip);
 bool clientmgr_is_ipv4(clientmgr_ctx *ctx, struct in6_addr *ip);
 void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex);
+void clientmgr_remove_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex);
 void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex);
 void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[6]);
 void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bool relinquished);
