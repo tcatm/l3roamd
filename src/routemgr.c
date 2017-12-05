@@ -84,8 +84,10 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 			if (! strncmp( ifname, ctx->client_bridge, strlen(ifname))) {
 				switch (nh->nlmsg_type) {
 					case RTM_NEWNEIGH:
-						printf("ADDING\n") ;
-						clientmgr_notify_mac(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]), rta_getattr_u32(tb[NDA_MASTER]));
+						if (msg->ndm_state == NUD_REACHABLE) {
+							printf("MAC-(STATUS)-CHANGE\n") ;
+							clientmgr_notify_mac(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]), rta_getattr_u32(tb[NDA_MASTER]));
+						}
 						break;
 					case RTM_DELNEIGH:
 						// client has roamed or was turned off 5 minutes ago
@@ -104,8 +106,10 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 			switch (nh->nlmsg_type) {
 				case RTM_NEWNEIGH:
 					if (tb[NDA_DST] && tb[NDA_LLADDR] && msg->ndm_family == AF_INET6) {
-						printf("ADDING\n") ;
-						clientmgr_add_address(CTX(clientmgr),  RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
+						if (msg->ndm_state == NUD_REACHABLE) {
+							printf("ADDING address\n") ;
+							clientmgr_add_address(CTX(clientmgr),  RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
+						}
 					}
 					break;
 				case RTM_DELNEIGH:
@@ -237,9 +241,16 @@ void routemgr_send_solicitation(routemgr_ctx *ctx, struct in6_addr *address, uin
 			.ndm_ifindex = ctx->clientif_index,
 		},
 	};
-
+	char str[INET6_ADDRSTRLEN+1];
+	inet_ntop(AF_INET6, address,str, INET6_ADDRSTRLEN);
+	printf("looking for: %s\n", str );
 	rtnl_addattr(&req.nl, sizeof(req), NDA_DST, addr, addr_len);
-	rtnl_addattr(&req.nl, sizeof(req), NDA_LLADDR, mac, sizeof(mac));
+//	if (mac[0] + mac[1] + mac[2] + mac[3] + mac[4] + mac[5] == 0) {
+//		printf("not including mac-address in request for neighbour-solicitation\n");
+//	} else {
+		printf("including mac-address in request for neighbour-solicitation\n");
+		rtnl_addattr(&req.nl, sizeof(req), NDA_LLADDR, mac, sizeof(mac));
+//	}
 
 	rtmgr_rtnl_talk(ctx, (struct nlmsghdr *)&req);
 }
