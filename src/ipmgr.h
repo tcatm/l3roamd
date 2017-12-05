@@ -26,6 +26,7 @@
 
 #include "vector.h"
 #include "taskqueue.h"
+#include "types.h"
 
 #include <stdint.h>
 #include <netinet/in.h>

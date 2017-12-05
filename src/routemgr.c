@@ -133,7 +133,7 @@ void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 			break;
 	}
 
-	interfaces_changed(ctx->l3ctx, nh->nlmsg_type, msg);
+	interfaces_changed(nh->nlmsg_type, msg);
 }
 
 void handle_kernel_routes(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
@@ -169,6 +169,7 @@ void handle_kernel_routes(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	if (route.plen != 128)
 		return;
 
+	// TODO: We should check here whether the route is in the correct prefix for minor efficiency gain
 	ipmgr_route_appeared(CTX(ipmgr), &route.prefix);
 }
 

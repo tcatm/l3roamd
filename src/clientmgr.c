@@ -379,6 +379,7 @@ bool clientmgr_is_ipv4(clientmgr_ctx *ctx, struct in6_addr *address) {
 void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex) {
 	char str[INET6_ADDRSTRLEN];
 	inet_ntop(AF_INET6, address, str, INET6_ADDRSTRLEN);
+	printf("clientmgr_add_address: %s\n",str);
 	if (!clientmgr_valid_address(ctx, address))
 		return;
 

@@ -16,6 +16,7 @@ static void schedule_ipcheck(ipmgr_ctx *ctx, struct entry *e);
 static void ipcheck_task(void *d);
 static bool ipcheck(ipmgr_ctx *ctx, struct entry *e);
 
+/* open l3roamd's tun device that is used to obtain packets for unknown clients */
 bool tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name) {
 	int ctl_sock = -1;
 	struct ifreq ifr = {};
@@ -74,6 +75,8 @@ error:
 	return false;
 }
 
+
+/* find an entry in the ipmgr's unknown-clients list*/
 struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 	for (int i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
 		struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
@@ -85,6 +88,7 @@ struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 	return NULL;
 }
 
+/** This will remove an entry from the ipmgr unknown-clients list */
 void delete_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 	for (int i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
 		struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
@@ -96,8 +100,8 @@ void delete_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 	}
 }
 
+/** This will seek an address by checking locally and if needed querying the network by scheduling a task */
 void seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
-	// FIXME: this whole context thing is broken. we are referring to all contexts from all over the place.
 	char str[INET6_ADDRSTRLEN];
 	inet_ntop(AF_INET6, addr, str, sizeof str);
 
@@ -265,7 +269,7 @@ void ipmgr_handle_out(ipmgr_ctx *ctx, int fd) {
 		struct packet *packet = &VECTOR_INDEX(ctx->output_queue, 0);
 		count = write(fd, packet->data, packet->len);
 
-// TODO refactor to use epoll. do we have to put the packet back in case of EAGAIN?
+		// TODO refactor to use epoll. do we have to put the packet back in case of EAGAIN?
 		free(packet->data);
 		VECTOR_DELETE(ctx->output_queue, 0);
 

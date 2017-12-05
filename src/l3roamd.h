@@ -9,6 +9,7 @@
 #include "routemgr.h"
 #include "socket.h"
 #include "if.h"
+#include "types.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -26,6 +27,8 @@ struct l3ctx {
 	socket_ctx socket_ctx;
 };
 
-void interfaces_changed(struct l3ctx *ctx, int type, const struct ifinfomsg *msg);
+extern l3ctx_t l3ctx;
+
+void interfaces_changed(int type, const struct ifinfomsg *msg);
 
 #define CTX(tgt) (&ctx->l3ctx->tgt ## _ctx)
