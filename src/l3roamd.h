@@ -5,10 +5,13 @@
 #include "wifistations.h"
 #include "clientmgr.h"
 #include "taskqueue.h"
+#include "icmp6.h"
 #include "ipmgr.h"
+#include "arp.h"
 #include "routemgr.h"
 #include "socket.h"
 #include "if.h"
+#include "types.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -21,11 +24,15 @@ struct l3ctx {
 	intercom_ctx intercom_ctx;
 	wifistations_ctx wifistations_ctx;
 	clientmgr_ctx clientmgr_ctx;
+	icmp6_ctx icmp6_ctx;
 	ipmgr_ctx ipmgr_ctx;
+	arp_ctx arp_ctx;
 	routemgr_ctx routemgr_ctx;
 	socket_ctx socket_ctx;
 };
 
-void interfaces_changed(struct l3ctx *ctx, int type, const struct ifinfomsg *msg);
+extern l3ctx_t l3ctx;
+
+void interfaces_changed(int type, const struct ifinfomsg *msg);
 
 #define CTX(tgt) (&ctx->l3ctx->tgt ## _ctx)

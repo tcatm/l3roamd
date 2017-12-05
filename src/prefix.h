@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2015, Nils Schneider <nils@nilsschneider.net>
+  Copyright (c) 2017, Christof Schulze <christof.schulze@gmx.net>
   All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
@@ -25,43 +25,15 @@
 #pragma once
 
 #include "vector.h"
-#include "taskqueue.h"
-#include "types.h"
-
-#include <stdint.h>
+#include <stdbool.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 
-#define IPCHECK_INTERVAL 2
-#define PACKET_TIMEOUT 2
-#define SEEK_TIMEOUT 10
-
-struct packet {
-	struct timespec timestamp;
-	ssize_t len;
-	uint8_t *data;
+struct prefix {
+	struct in6_addr prefix;
+	int plen; /* in bits */
 };
 
-struct entry {
-	struct in6_addr address;
-	struct timespec timestamp;
-	taskqueue_t *check_task;
-	VECTOR(struct packet*) packets;
-};
-
-typedef struct {
-	int fd;
-	char *ifname;
-	struct l3ctx *l3ctx;
-	VECTOR(struct entry) addrs;
-	VECTOR(struct packet) output_queue;
-} ipmgr_ctx;
-
-struct ip_task {
-	ipmgr_ctx *ctx;
-	struct in6_addr address;
-};
-
-void ipmgr_init(ipmgr_ctx *ctx, char *tun_name, unsigned int mtu);
-void ipmgr_route_appeared(ipmgr_ctx *ctx, const struct in6_addr *destination);
-void ipmgr_handle_in(ipmgr_ctx *ctx, int fd);
-void ipmgr_handle_out(ipmgr_ctx *ctx, int fd);
+bool add_prefix(void *prefixes, struct prefix prefix);
+bool del_prefix(void *prefixes, struct prefix prefix);
+bool parse_prefix(struct prefix *prefix, const char *str);

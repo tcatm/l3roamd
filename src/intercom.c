@@ -2,6 +2,7 @@
 #include "error.h"
 #include "l3roamd.h"
 #include "if.h"
+#include "icmp6.h"
 
 #include <time.h>
 #include <stdlib.h>
@@ -174,7 +175,10 @@ void intercom_recently_seen_add(intercom_ctx *ctx, intercom_packet_hdr *hdr) {
 }
 
 void intercom_handle_seek(intercom_ctx *ctx, intercom_packet_seek *packet) {
-	routemgr_send_solicitation(CTX(routemgr), (struct in6_addr *) packet->address);
+	if (clientmgr_is_ipv4(CTX(clientmgr), (struct in6_addr *)packet->address))
+		arp_send_request(CTX(arp), (struct in6_addr *)packet->address);
+	else
+		icmp6_send_solicitation(CTX(icmp6), (struct in6_addr *)packet->address);
 }
 
 void intercom_handle_claim(intercom_ctx *ctx, intercom_packet_claim *packet) {

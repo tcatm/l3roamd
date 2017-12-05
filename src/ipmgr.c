@@ -11,12 +11,13 @@
 #include <netinet/in.h>
 #include <linux/if_tun.h>
 
-static void tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name);
+static bool tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name);
 static void schedule_ipcheck(ipmgr_ctx *ctx, struct entry *e);
 static void ipcheck_task(void *d);
 static bool ipcheck(ipmgr_ctx *ctx, struct entry *e);
 
-void tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name) {
+/* open l3roamd's tun device that is used to obtain packets for unknown clients */
+bool tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name) {
 	int ctl_sock = -1;
 	struct ifreq ifr = {};
 
@@ -27,14 +28,13 @@ void tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_
 	if (ifname)
 		strncpy(ifr.ifr_name, ifname, IFNAMSIZ-1);
 
-	ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
+	ifr.ifr_flags = IFF_TUN | IFF_NO_PI; 
 
 	if (ioctl(ctx->fd, TUNSETIFF, &ifr) < 0) {
 		puts("unable to open TUN/TAP interface: TUNSETIFF ioctl failed");
 		goto error;
 	}
 
-	// TODO this must be freed eventually
 	ctx->ifname = strndup(ifr.ifr_name, IFNAMSIZ-1);
 
 	ctl_sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -52,21 +52,31 @@ void tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_
 		}
 	}
 
+	ifr.ifr_flags = IFF_UP | IFF_RUNNING| IFF_MULTICAST | IFF_NOARP | IFF_POINTOPOINT;
+	if (ioctl(ctl_sock, SIOCSIFFLAGS, &ifr) < 0 ) {
+		puts("unable to set TUN/TAP interface UP: SIOCSIFFLAGS ioctl failed");
+		goto error;
+	}
+
 	if (close(ctl_sock))
 		puts("close");
 
-	return;
+	return true;
 
 error:
 	if (ctl_sock >= 0) {
 		if (close(ctl_sock))
 			puts("close");
 	}
+	free(ctx->ifname);
 
 	close(ctx->fd);
 	ctx->fd = -1;
+	return false;
 }
 
+
+/* find an entry in the ipmgr's unknown-clients list*/
 struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 	for (int i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
 		struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
@@ -78,6 +88,7 @@ struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 	return NULL;
 }
 
+/** This will remove an entry from the ipmgr unknown-clients list */
 void delete_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 	for (int i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
 		struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
@@ -89,14 +100,19 @@ void delete_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 	}
 }
 
+/** This will seek an address by checking locally and if needed querying the network by scheduling a task */
 void seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
 	char str[INET6_ADDRSTRLEN];
 	inet_ntop(AF_INET6, addr, str, sizeof str);
 
 	printf("\x1b[36mLooking for %s\x1b[0m\n", str);
 
-	routemgr_send_solicitation(CTX(routemgr), addr);
+	if (clientmgr_is_ipv4(CTX(clientmgr), addr))
+		arp_send_request(CTX(arp), addr);
+	else
+		icmp6_send_solicitation(CTX(icmp6), addr);
 
+	// TODO: l3roamd should only query intercom, if the node really wasn't found locally.
 	intercom_seek(CTX(intercom), addr);
 }
 
@@ -115,7 +131,7 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 	printf("Got packet to %s\n", str);
 
 	if (!clientmgr_valid_address(CTX(clientmgr), &dst)) {
-		printf("Ignoring packet\n");
+		printf("The destination of the packet (%s) is not within the client prefixes. Ignoring packet\n", str);
 		return;
 	}
 
@@ -124,9 +140,9 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 
 	struct entry *e = find_entry(ctx, &dst);
 
-	bool new = !e;
+	bool new_unknown_dst = !e;
 
-	if (!e) {
+	if (new_unknown_dst) {
 		struct entry entry = {
 			.address = dst,
 			.timestamp = now,
@@ -149,7 +165,7 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 	struct timespec then = now;
 	then.tv_sec -= SEEK_TIMEOUT;
 
-	if (timespec_cmp(e->timestamp, then) <= 0 || new) {
+	if (timespec_cmp(e->timestamp, then) <= 0 || new_unknown_dst) {
 		seek_address(ctx, &dst);
 		e->timestamp = now;
 	}
@@ -174,6 +190,10 @@ void ipcheck_task(void *d) {
 
 	if (!e)
 		return;
+
+	char str[INET6_ADDRSTRLEN] = "";
+	inet_ntop(AF_INET6, &data->address, str, sizeof str);
+	printf("running an ipcheck on %s\n", str);
 
 	e->check_task = NULL;
 
@@ -230,8 +250,8 @@ void ipmgr_handle_in(ipmgr_ctx *ctx, int fd) {
 			break;
 		}
 
-		if (count < 40)
-			continue;
+	//	if (count < 40)
+	//		continue;
 
 		// We're only interested in ip6 packets
 		if ((buf[0] & 0xf0) != 0x60)
@@ -250,7 +270,7 @@ void ipmgr_handle_out(ipmgr_ctx *ctx, int fd) {
 		struct packet *packet = &VECTOR_INDEX(ctx->output_queue, 0);
 		count = write(fd, packet->data, packet->len);
 
-// TODO refactor to use epoll. do we have to put the packet back in case of EAGAIN?
+		// TODO refactor to use epoll. do we have to put the packet back in case of EAGAIN?
 		free(packet->data);
 		VECTOR_DELETE(ctx->output_queue, 0);
 

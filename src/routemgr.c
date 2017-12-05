@@ -4,6 +4,8 @@
 
 #include "clientmgr.h"
 #include "if.h"
+#include <unistd.h>
+#include "icmp6.h"
 
 static void rtnl_change_address(routemgr_ctx *ctx, struct in6_addr *address, int type, int flags);
 static void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh);
@@ -54,17 +56,15 @@ int parse_rtattr(struct rtattr *tb[], int max, struct rtattr *rta, int len)
 	return parse_rtattr_flags(tb, max, rta, len, 0);
 }
 
-
 void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	struct ndmsg *msg = NLMSG_DATA(nh);
-	char ifname[IFNAMSIZ];
-	char brifname[IFNAMSIZ];
+	char ifname[IFNAMSIZ] = "";
+	char brifname[IFNAMSIZ] = "";
 	struct rtattr * tb[NDA_MAX+1];
-	brifname[0]='\0';
 
 	parse_rtattr(tb, NDA_MAX, NDA_RTA(msg), nh->nlmsg_len - NLMSG_LENGTH(sizeof(*msg)));
 
-	char mac_str[64];
+	char mac_str[64] = "";
 	if (tb[NDA_LLADDR]) {
 		mac_addr_n2a(mac_str, RTA_DATA(tb[NDA_LLADDR]));
 	}
@@ -76,21 +76,24 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 
 	// FIXME use interface ids
 	if ( !strncmp(ctx->clientif,ifname,strlen(ifname)) ||
-	     !strncmp(ctx->client_bridge,ifname,strlen(ctx->client_bridge)) ||
-	     !strncmp(ctx->client_bridge,brifname,strlen(ctx->client_bridge))
+	     !strncmp(ctx->client_bridge,ifname,strlen(ifname)) ||
+	     ( strlen(brifname) && !strncmp(ctx->client_bridge,brifname,strlen(brifname)) )
 	     ) {
-		printf("neighbour [%s] changed on interface %s\n", mac_str, ifname);
+		printf("neighbour [%s] changed on interface %s ... ", mac_str, ifname);
 		if (tb[NDA_MASTER]) {
 			if_indextoname(rta_getattr_u32(tb[NDA_MASTER]),ifname);
 			if (! strncmp( ifname, ctx->client_bridge, strlen(ifname))) {
 				switch (nh->nlmsg_type) {
 					case RTM_NEWNEIGH:
-						printf("ADDING neighbour on %s [%s]\n", ifname, mac_str) ;
-						clientmgr_notify_mac(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]), rta_getattr_u32(tb[NDA_MASTER]));
+						if (msg->ndm_state == NUD_REACHABLE) {
+							printf("MAC-(STATUS)-CHANGE\n") ;
+							clientmgr_notify_mac(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]), rta_getattr_u32(tb[NDA_MASTER]));
+						}
 						break;
 					case RTM_DELNEIGH:
 						// client has roamed or was turned off 5 minutes ago
-						printf("REMOVING neighbour on %s [%s]\n", ifname, mac_str);
+						//
+						printf("REMOVING\n");
 						clientmgr_delete_client(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]));
 						break;
 					case RTM_GETNEIGH:
@@ -104,11 +107,14 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 			switch (nh->nlmsg_type) {
 				case RTM_NEWNEIGH:
 					if (tb[NDA_DST] && tb[NDA_LLADDR] && msg->ndm_family == AF_INET6) {
-						clientmgr_add_address(CTX(clientmgr),  RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
+						if (msg->ndm_state == NUD_REACHABLE) {
+							printf("ADDING address\n") ;
+							clientmgr_add_address(CTX(clientmgr),  RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
+						}
 					}
 					break;
 				case RTM_DELNEIGH:
-					printf("NEIGHBOUR DISAPPEARED\n");
+					printf("NEIGHBOUR DISAPPEARED - TODO if this happens, we should handle it properly.\n");
 				default:
 					break;
 			}
@@ -132,7 +138,7 @@ void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 			break;
 	}
 
-	interfaces_changed(ctx->l3ctx, nh->nlmsg_type, msg);
+	interfaces_changed(nh->nlmsg_type, msg);
 }
 
 void handle_kernel_routes(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
@@ -168,6 +174,7 @@ void handle_kernel_routes(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	if (route.plen != 128)
 		return;
 
+	// TODO: We should check here whether the route is in the correct prefix for minor efficiency gain
 	ipmgr_route_appeared(CTX(ipmgr), &route.prefix);
 }
 
@@ -206,53 +213,21 @@ static void routemgr_initial_neighbours(routemgr_ctx *ctx, uint8_t family) {
 	rtmgr_rtnl_talk(ctx, (struct nlmsghdr *)&req);
 }
 
-void routemgr_send_solicitation(routemgr_ctx *ctx, struct in6_addr *address) {
-	int family = AF_INET6;
-	size_t addr_len = 16;
-	void *addr = address->s6_addr;
-
-	if (clientmgr_is_ipv4(CTX(clientmgr), address)) {
-		printf("v4!\n");
-		addr = address->s6_addr + 12;
-		addr_len = 4;
-		family = AF_INET;
-	} else {
-		printf("v6!\n");
-	}
-
-	uint8_t mac[6] = {};
-
-	struct nlneighreq req = {
-		.nl = {
-			.nlmsg_type = RTM_NEWNEIGH,
-			.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_REPLACE,
-			.nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg)),
-		},
-		.nd = {
-
-			.ndm_family = family,
-			.ndm_state = NUD_PROBE,
-			.ndm_ifindex = ctx->clientif_index,
-		},
-	};
-
-	rtnl_addattr(&req.nl, sizeof(req), NDA_DST, addr, addr_len);
-	rtnl_addattr(&req.nl, sizeof(req), NDA_LLADDR, mac, sizeof(mac));
-
-	rtmgr_rtnl_talk(ctx, (struct nlmsghdr *)&req);
+void routemgr_destroy(routemgr_ctx *ctx) {
+	close(ctx->fd);
 }
 
-
 void routemgr_init(routemgr_ctx *ctx) {
-	printf("init\n");
+	printf("initializing routemgr\n");
 	ctx->fd = socket(AF_NETLINK, SOCK_RAW|SOCK_NONBLOCK, NETLINK_ROUTE);
 	if (ctx->fd < 0)
 		exit_error("can't open RTNL socket");
 
 	ctx->clientif_index = if_nametoindex(ctx->clientif);
-	if (!ctx->clientif_index)
-		exit_error("if_nametoindex");
-
+	if (!ctx->clientif_index) {
+		fprintf(stderr, "warning: we were started without -i - not initializing any client interfaces.\n");
+		return;
+	}
 	struct sockaddr_nl snl = {
 		.nl_family = AF_NETLINK,
 		.nl_groups = RTMGRP_IPV6_ROUTE | RTMGRP_LINK | RTMGRP_NEIGH,
@@ -263,6 +238,15 @@ void routemgr_init(routemgr_ctx *ctx) {
 
 	routemgr_initial_neighbours(ctx, AF_INET);
 	routemgr_initial_neighbours(ctx, AF_INET6);
+
+	for (int i=0;i<VECTOR_LEN(CTX(clientmgr)->prefixes);i++) {
+		char str[INET6_ADDRSTRLEN+1];
+		struct prefix *prefix = &(VECTOR_INDEX(CTX(clientmgr)->prefixes, i));
+		inet_ntop(AF_INET6, prefix->prefix.s6_addr, str, INET6_ADDRSTRLEN);
+		printf("Activating route for prefix %s/%i on device %s(%i) in main routing-table\n", str, prefix->plen, CTX(ipmgr)->ifname, if_nametoindex(CTX(ipmgr)->ifname));
+
+		routemgr_insert_route(ctx, 254, if_nametoindex(CTX(ipmgr)->ifname), (struct in6_addr*)(prefix->prefix.s6_addr), prefix->plen );
+	}
 }
 
 
@@ -315,12 +299,16 @@ void routemgr_handle_in(routemgr_ctx *ctx, int fd) {
 		break;
 
 		const struct nlmsghdr *nh;
+		struct nlmsgerr *ne;
 		for (nh = (struct nlmsghdr *)buf; NLMSG_OK(nh, count); nh = NLMSG_NEXT(nh, count)) {
 			switch (nh->nlmsg_type) {
 				case NLMSG_DONE:
 					return;
 				case NLMSG_ERROR:
-					perror("netlink error: ");
+					ne = NLMSG_DATA(nh);
+					if (ne->error <= 0 )
+						return; // from netlink(7): negative errno or 0 for acknoledgement
+					perror("handling netlink error-message");
 				default:
 					rtnl_handle_msg(ctx, nh);
 			}
@@ -414,7 +402,7 @@ void routemgr_remove_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_a
 	rtmgr_rtnl_talk(ctx, (struct nlmsghdr*)&req);
 }
 
-void routemgr_insert_route(routemgr_ctx *ctx, const int table, const int ifindex, struct in6_addr *address) {
+void routemgr_insert_route(routemgr_ctx *ctx, const int table, const int ifindex, struct in6_addr *address, const int prefix_length) {
 	struct nlrtreq req = {
 		.nl = {
 			.nlmsg_type = RTM_NEWROUTE,
@@ -427,7 +415,7 @@ void routemgr_insert_route(routemgr_ctx *ctx, const int table, const int ifindex
 			.rtm_protocol = ROUTE_PROTO,
 			.rtm_scope = RT_SCOPE_UNIVERSE,
 			.rtm_type = RTN_UNICAST,
-			.rtm_dst_len = 128
+			.rtm_dst_len = prefix_length
 		},
 	};
 
@@ -437,7 +425,7 @@ void routemgr_insert_route(routemgr_ctx *ctx, const int table, const int ifindex
 	rtmgr_rtnl_talk(ctx, (struct nlmsghdr *)&req);
 }
 
-void routemgr_remove_route(routemgr_ctx *ctx, const int table, struct in6_addr *address) {
+void routemgr_remove_route(routemgr_ctx *ctx, const int table, struct in6_addr *address, const int prefix_length) {
 	struct nlrtreq req1 = {
 		.nl = {
 			.nlmsg_type = RTM_NEWROUTE,
@@ -448,7 +436,7 @@ void routemgr_remove_route(routemgr_ctx *ctx, const int table, struct in6_addr *
 			.rtm_family = AF_INET6,
 			.rtm_table = table,
 			.rtm_type = RTN_THROW,
-			.rtm_dst_len = 128
+			.rtm_dst_len = prefix_length
 		}
 	};
 
@@ -483,8 +471,7 @@ void rtmgr_rtnl_talk(routemgr_ctx *ctx, struct nlmsghdr *req) {
 	iov.iov_len = req->nlmsg_len;
 
 	while (sendmsg(ctx->fd, &msg, 0) <= 0) {
-		printf("retrying, just got an error saying:");
-		perror("nl_sendmsg");
+		perror("retrying, sendmsg on rtmgr_rtnl_talk()");
 	}
 }
 

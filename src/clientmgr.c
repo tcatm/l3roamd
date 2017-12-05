@@ -1,5 +1,6 @@
 #include "clientmgr.h"
 #include "routemgr.h"
+#include "icmp6.h"
 #include "timespec.h"
 #include "error.h"
 #include "l3roamd.h"
@@ -176,13 +177,10 @@ void client_add_route(clientmgr_ctx *ctx, struct client *client, struct client_i
 			.s_addr = ip->addr.s6_addr[12] << 24 | ip->addr.s6_addr[13] << 16 | ip->addr.s6_addr[14] << 8 | ip->addr.s6_addr[15]
 		};
 
-		routemgr_insert_route(CTX(routemgr), ctx->export_table, ctx->nat46ifindex, &ip->addr);
+		routemgr_insert_route(CTX(routemgr), ctx->export_table, ctx->nat46ifindex, &ip->addr, 128);
 		routemgr_insert_route4(CTX(routemgr), ctx->export_table, client->ifindex, &ip4);
-	//	routemgr_insert_neighbor4(CTX(routemgr), client->ifindex, &ip4, client->mac);
 	} else {
-		routemgr_insert_route(CTX(routemgr), ctx->export_table, client->ifindex, &ip->addr);
-		// Let the kernel do its job verifying the neighbour. => commenting out next line to try this.
-	//	routemgr_insert_neighbor(CTX(routemgr), client->ifindex, &ip->addr, client->mac);
+		routemgr_insert_route(CTX(routemgr), ctx->export_table, client->ifindex, &ip->addr, 128);
 	}
 }
 
@@ -194,11 +192,11 @@ void client_remove_route(clientmgr_ctx *ctx, struct client *client, struct clien
 			.s_addr = ip->addr.s6_addr[12] << 24 | ip->addr.s6_addr[13] << 16 | ip->addr.s6_addr[14] << 8 | ip->addr.s6_addr[15]
 		};
 
-		routemgr_remove_route(CTX(routemgr), ctx->export_table, &ip->addr);
+		routemgr_remove_route(CTX(routemgr), ctx->export_table, &ip->addr, 128);
 		routemgr_remove_route4(CTX(routemgr), ctx->export_table, &ip4);
 		routemgr_remove_neighbor4(CTX(routemgr), client->ifindex, &ip4, client->mac);
 	} else {
-		routemgr_remove_route(CTX(routemgr), ctx->export_table, &ip->addr);
+		routemgr_remove_route(CTX(routemgr), ctx->export_table, &ip->addr, 128);
 		routemgr_remove_neighbor(CTX(routemgr), client->ifindex, &ip->addr, client->mac);
 	}
 }
@@ -232,9 +230,32 @@ struct client *get_or_create_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
 	return client;
 }
 
+/** Remove all client routes - used when exiting l3roamd
+**/
+void clientmgr_purge_clients(clientmgr_ctx *ctx) {
+	struct client *client;
+
+	for (int i=VECTOR_LEN(ctx->clients)-1;i>=0;i--) {
+		client=&VECTOR_INDEX(ctx->clients, i);
+		printf("\033[34mREMOVING client %02x:%02x:%02x:%02x:%02x:%02x and invalidating its IP-addresses\033[0m\n", client->mac[0], client->mac[1], client->mac[2], client->mac[3], client->mac[4], client->mac[5]);
+		print_client(client);
+		if (VECTOR_LEN(client->addresses) > 0) {
+			for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
+				struct client_ip *e = &VECTOR_INDEX(client->addresses, i);
+				client_ip_set_state(CTX(clientmgr), client, e, IP_INACTIVE);
+				char str[INET6_ADDRSTRLEN];
+				inet_ntop(AF_INET6, &e->addr, str, INET6_ADDRSTRLEN);
+			}
+		}
+
+		VECTOR_FREE(client->addresses);
+		VECTOR_DELETE(ctx->clients, i);
+	}
+}
+
 /** Given a MAC address deletes a client. Safe to call if the client is not
-    known.
-    */
+  known.
+  */
 void clientmgr_delete_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
 	struct client *client;
 
@@ -305,6 +326,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 					break;
 				case IP_TENTATIVE:
 					ip->timestamp = now;
+					// TODO: are we shure we want to do this just yet?
 					client_remove_route(ctx, client, ip);
 					break;
 			}
@@ -313,6 +335,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 			switch (state) {
 				case IP_INACTIVE:
 					ip->timestamp = now;
+					client_remove_route(ctx, client, ip);
 					break;
 				case IP_ACTIVE:
 					ip->timestamp = now;
@@ -337,7 +360,13 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 /** Check whether an IP address is contained in a client prefix.
   */
 bool clientmgr_valid_address(clientmgr_ctx *ctx, struct in6_addr *address) {
-	return prefix_contains(&ctx->prefix, address) | clientmgr_is_ipv4(ctx, address);
+	for (int i = 0; i < VECTOR_LEN(ctx->prefixes); i++) {
+		struct prefix *_prefix = &VECTOR_INDEX(ctx->prefixes, i);
+		if (prefix_contains(_prefix ,address))
+			return true;
+	}
+
+	return clientmgr_is_ipv4(ctx, address);
 }
 
 /** Check whether an IP address is contained in the IPv4 prefix.
@@ -351,11 +380,12 @@ bool clientmgr_is_ipv4(clientmgr_ctx *ctx, struct in6_addr *address) {
 void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex) {
 	char str[INET6_ADDRSTRLEN];
 	inet_ntop(AF_INET6, address, str, INET6_ADDRSTRLEN);
+	printf("clientmgr_add_address: %s\n",str);
 	if (!clientmgr_valid_address(ctx, address))
 		return;
 
-	printf("Add Address: %s (MAC %02x:%02x:%02x:%02x:%02x:%02x)\n", str, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-
+//	if (!mac)
+//		return;
 
 	struct client *client = get_or_create_client(ctx, mac);
 	struct client_ip *ip = get_client_ip(client, address);
@@ -363,7 +393,8 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 	bool was_active = client_is_active(client);
 	bool ip_is_new = ip == NULL;
 
-	if (ip == NULL) {
+	if (ip_is_new) {
+		printf("Address: %s to client %02x:%02x:%02x:%02x:%02x:%02x\n", str, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 		struct client_ip _ip = {};
 		memcpy(&_ip.addr, address, sizeof(struct in6_addr));
 		VECTOR_ADD(client->addresses, _ip);
@@ -399,7 +430,7 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 	client->ifindex = ifindex;
 
 	if (!intercom_claim(CTX(intercom), NULL, client)) {
-		printf("Claim failed.\n");
+		fprintf(stderr, "Claim failed for %02x:%02x:%02x:%02x:%02x:%02x.\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5] );
 		add_special_ip(ctx, client);
 	}
 
@@ -411,7 +442,7 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 	}
 
 	struct in6_addr address = mac2ipv6(client->mac);
-	routemgr_send_solicitation(CTX(routemgr), (struct in6_addr *) &address);
+	icmp6_send_solicitation(CTX(icmp6), &address);
 }
 
 /** Handle info request.

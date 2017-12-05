@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vector.h"
+#include "prefix.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <netinet/in.h>
@@ -15,10 +16,6 @@ enum ip_state {
 	IP_TENTATIVE
 };
 
-struct prefix {
-	struct in6_addr prefix;
-	int plen; /* in bits */
-};
 
 struct client_ip {
 	enum ip_state state;
@@ -36,7 +33,7 @@ struct client {
 
 typedef struct {
 	struct l3ctx *l3ctx;
-	struct prefix prefix;
+	VECTOR(struct prefix) prefixes;
 	struct prefix v4prefix;
 	unsigned int export_table;
 	int nat46ifindex;
@@ -54,6 +51,7 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex);
 void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[6]);
 void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bool relinquished);
+void clientmgr_purge_clients(clientmgr_ctx *ctx);
 void clientmgr_delete_client(clientmgr_ctx *ctx, const uint8_t mac[6]);
 void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip, enum ip_state state);
 struct client *get_client(clientmgr_ctx *ctx, const uint8_t mac[6]);

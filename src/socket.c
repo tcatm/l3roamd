@@ -28,6 +28,7 @@
 
 #include "socket.h"
 #include "error.h"
+#include "l3roamd.h"
 
 void socket_init(socket_ctx *ctx, char *path) {
 	if (!path) {
@@ -35,7 +36,7 @@ void socket_init(socket_ctx *ctx, char *path) {
 		return;
 	}
 
-	printf("initialize unix socket on path %s\n", path);
+	printf("Initializing unix socket: %s\n", path);
 
 	unlink(path);
 
@@ -65,8 +66,66 @@ void socket_init(socket_ctx *ctx, char *path) {
 	}
 }
 
-void socket_handle_in(socket_ctx *ctx, size_t count) {
+bool parse_command(char *cmd, enum socket_command *scmd) {
+	if (!strncmp(cmd, "get_clients", 11)) {
+		*scmd = GET_CLIENTS;
+		return true;
+	}
+	if (!strncmp(cmd, "del_prefix", 10)) {
+		*scmd = DEL_PREFIX;
+		return true;
+	}
+	if (!strncmp(cmd, "add_prefix", 10)) {
+		*scmd = ADD_PREFIX;
+		return true;
+	}
+	return false;
+}
+
+void socket_handle_in(socket_ctx *ctx) {
 	int fd = accept(ctx->fd, NULL, NULL);
-	dprintf(fd, "{\"clients\":%zu}", count);
+	char line[LINEBUFFER_SIZE];
+
+	int len=0;
+	int fill=0;
+	// TODO: it would be nice to be able to set a timeout here after which the fd is closed
+	while (fill<LINEBUFFER_SIZE) {
+		len = read(fd, &(line[fill]), 1);
+		if (line[fill] == '\n' || line[fill] == '\r') {
+			line[fill]='\0';
+			break;
+		}
+		fill+=len;
+	}
+
+	enum socket_command cmd;
+	if (!parse_command(line, &cmd) ) {
+		fprintf(stderr, "Could not parse command on socket (%s)\n",line);
+		goto end;
+	}
+
+	struct prefix _prefix = {};
+
+	switch (cmd) {
+		case GET_CLIENTS:
+			dprintf(fd, "{\"clients\":%zu}", VECTOR_LEN(CTX(clientmgr)->clients));
+			break;
+		case ADD_PREFIX:
+			if (parse_prefix(&_prefix, &line[11])) {
+				add_prefix(&CTX(clientmgr)->prefixes, _prefix);
+				routemgr_insert_route(CTX(routemgr), 254, if_nametoindex(CTX(ipmgr)->ifname), (struct in6_addr*)(_prefix.prefix.s6_addr), _prefix.plen );
+				dprintf(fd, "Added prefix: %s", &line[11]);
+			}
+			break;
+		case DEL_PREFIX:
+			if (parse_prefix(&_prefix, &line[11])) {
+				del_prefix(&CTX(clientmgr)->prefixes, _prefix);
+				routemgr_remove_route(CTX(routemgr), 254, (struct in6_addr*)(_prefix.prefix.s6_addr), _prefix.plen );
+				dprintf(fd, "Deleted prefix: %s", &line[11]);
+			}
+			break;
+	}
+
+end:
 	close(fd);
 }
