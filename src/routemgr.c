@@ -5,6 +5,7 @@
 #include "clientmgr.h"
 #include "if.h"
 #include <unistd.h>
+#include "icmp6.h"
 
 static void rtnl_change_address(routemgr_ctx *ctx, struct in6_addr *address, int type, int flags);
 static void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh);
@@ -209,57 +210,6 @@ static void routemgr_initial_neighbours(routemgr_ctx *ctx, uint8_t family) {
 		}
 
 	};
-	rtmgr_rtnl_talk(ctx, (struct nlmsghdr *)&req);
-}
-
-
-
-void routemgr_send_solicitation(routemgr_ctx *ctx, struct in6_addr *address, uint8_t *mac) {
-	int family = AF_INET6;
-	size_t addr_len = 16;
-	void *addr = address->s6_addr;
-
-	if (clientmgr_is_ipv4(CTX(clientmgr), address)) {
-		printf("v4!\n");
-		addr = address->s6_addr + 12;
-		addr_len = 4;
-		family = AF_INET;
-	} else {
-		printf("v6!\n");
-	}
-
-	struct nlneighreq req = {
-		.nl = {
-			.nlmsg_type = RTM_NEWNEIGH,
-			.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_REPLACE,
-			.nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg)),
-		},
-		.nd = {
-
-			.ndm_family = family,
-			.ndm_state = NUD_PROBE,
-			.ndm_ifindex = ctx->clientif_index,
-		},
-	};
-	char str[INET6_ADDRSTRLEN+1];
-	inet_ntop(AF_INET6, address,str, INET6_ADDRSTRLEN);
-	printf("looking for: %s\n", str );
-
-	rtnl_addattr(&req.nl, sizeof(req), NDA_DST, addr, addr_len);
-
-	if (mac[0] + mac[1] + mac[2] + mac[3] + mac[4] + mac[5] == 0) {
-		printf("mac-address was not provided, using ipv6-all-nodes broadcast mac-address\n");
-		mac[0]=0x33;
-		mac[1]=0x33;
-		mac[2]=0x00;
-		mac[3]=0x00;
-		mac[4]=0x00;
-		mac[5]=0x01;
-	} else {
-		printf("including mac-address in request for neighbour-solicitation\n");
-	}
-		rtnl_addattr(&req.nl, sizeof(req), NDA_LLADDR, mac, sizeof(mac));
-
 	rtmgr_rtnl_talk(ctx, (struct nlmsghdr *)&req);
 }
 

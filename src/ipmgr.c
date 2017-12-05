@@ -107,11 +107,12 @@ void seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
 
 	printf("\x1b[36mLooking for %s\x1b[0m\n", str);
 
-	uint8_t mac[6] = {}; // we are only seeking an address if we have not previously seen it. setting an empty mac is ok.
-	routemgr_send_solicitation(CTX(routemgr), addr, mac);
+	if (clientmgr_is_ipv4(CTX(clientmgr), addr))
+		arp_send_request(CTX(arp), addr);
+	else
+		icmp6_send_solicitation(CTX(icmp6), addr);
 
 	// TODO: l3roamd should only query intercom, if the node really wasn't found locally.
-
 	intercom_seek(CTX(intercom), addr);
 }
 
