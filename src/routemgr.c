@@ -244,13 +244,21 @@ void routemgr_send_solicitation(routemgr_ctx *ctx, struct in6_addr *address, uin
 	char str[INET6_ADDRSTRLEN+1];
 	inet_ntop(AF_INET6, address,str, INET6_ADDRSTRLEN);
 	printf("looking for: %s\n", str );
+
 	rtnl_addattr(&req.nl, sizeof(req), NDA_DST, addr, addr_len);
-//	if (mac[0] + mac[1] + mac[2] + mac[3] + mac[4] + mac[5] == 0) {
-//		printf("not including mac-address in request for neighbour-solicitation\n");
-//	} else {
+
+	if (mac[0] + mac[1] + mac[2] + mac[3] + mac[4] + mac[5] == 0) {
+		printf("mac-address was not provided, using ipv6-all-nodes broadcast mac-address\n");
+		mac[0]=0x33;
+		mac[1]=0x33;
+		mac[2]=0x00;
+		mac[3]=0x00;
+		mac[4]=0x00;
+		mac[5]=0x01;
+	} else {
 		printf("including mac-address in request for neighbour-solicitation\n");
+	}
 		rtnl_addattr(&req.nl, sizeof(req), NDA_LLADDR, mac, sizeof(mac));
-//	}
 
 	rtmgr_rtnl_talk(ctx, (struct nlmsghdr *)&req);
 }
