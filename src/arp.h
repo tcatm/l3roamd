@@ -26,7 +26,7 @@ typedef struct {
 	bool ok;
 	struct in6_addr prefix;
 	uint8_t mac[6];
-	const char *clientif;
+	char *clientif;
 	unsigned int ifindex;
 } arp_ctx;
 

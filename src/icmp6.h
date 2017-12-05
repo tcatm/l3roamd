@@ -11,7 +11,7 @@ typedef struct {
 	int nsfd;
 	bool ok;
 	uint8_t mac[6];
-	const char *clientif;
+	char *clientif;
 	unsigned int ifindex;
 } icmp6_ctx;
 

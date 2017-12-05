@@ -230,6 +230,9 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 }
 
 void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
+	if (!strlen(ctx->clientif))
+		return;
+
 	struct sol_packet packet;
 
 	packet.hdr.nd_ns_hdr.icmp6_type = ND_NEIGHBOR_SOLICIT;

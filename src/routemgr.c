@@ -223,11 +223,6 @@ void routemgr_init(routemgr_ctx *ctx) {
 	if (ctx->fd < 0)
 		exit_error("can't open RTNL socket");
 
-	ctx->clientif_index = if_nametoindex(ctx->clientif);
-	if (!ctx->clientif_index) {
-		fprintf(stderr, "warning: we were started without -i - not initializing any client interfaces.\n");
-		return;
-	}
 	struct sockaddr_nl snl = {
 		.nl_family = AF_NETLINK,
 		.nl_groups = RTMGRP_IPV6_ROUTE | RTMGRP_LINK | RTMGRP_NEIGH,
@@ -235,9 +230,6 @@ void routemgr_init(routemgr_ctx *ctx) {
 
 	if (bind(ctx->fd, (struct sockaddr *)&snl, sizeof(snl)) < 0)
 		exit_error("can't bind RTNL socket");
-
-	routemgr_initial_neighbours(ctx, AF_INET);
-	routemgr_initial_neighbours(ctx, AF_INET6);
 
 	for (int i=0;i<VECTOR_LEN(CTX(clientmgr)->prefixes);i++) {
 		char str[INET6_ADDRSTRLEN+1];
@@ -247,6 +239,14 @@ void routemgr_init(routemgr_ctx *ctx) {
 
 		routemgr_insert_route(ctx, 254, if_nametoindex(CTX(ipmgr)->ifname), (struct in6_addr*)(prefix->prefix.s6_addr), prefix->plen );
 	}
+
+	ctx->clientif_index = if_nametoindex(ctx->clientif);
+	if (!ctx->clientif_index) {
+		fprintf(stderr, "warning: we were started without -i - not initializing any client interfaces.\n");
+		return;
+	}
+	routemgr_initial_neighbours(ctx, AF_INET);
+	routemgr_initial_neighbours(ctx, AF_INET6);
 }
 
 

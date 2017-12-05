@@ -75,11 +75,19 @@ void loop() {
 
 	add_fd(efd, l3ctx.ipmgr_ctx.fd, EPOLLIN | EPOLLET);
 	add_fd(efd, l3ctx.routemgr_ctx.fd, EPOLLIN | EPOLLET);
-	add_fd(efd, l3ctx.icmp6_ctx.fd, EPOLLIN);
-	add_fd(efd, l3ctx.icmp6_ctx.nsfd, EPOLLIN);
-	add_fd(efd, l3ctx.arp_ctx.fd, EPOLLIN);
+
+	if (strlen(l3ctx.icmp6_ctx.clientif)) {	
+		add_fd(efd, l3ctx.icmp6_ctx.fd, EPOLLIN);
+		add_fd(efd, l3ctx.icmp6_ctx.nsfd, EPOLLIN);
+	}
+
+	if (strlen(l3ctx.arp_ctx.clientif)) {
+		add_fd(efd, l3ctx.arp_ctx.fd, EPOLLIN);
+	}
+
 	add_fd(efd, l3ctx.intercom_ctx.fd, EPOLLIN | EPOLLET);
 	add_fd(efd, l3ctx.taskqueue_ctx.fd, EPOLLIN);
+
 	if (l3ctx.socket_ctx.fd >= 0) {
 		add_fd(efd, l3ctx.socket_ctx.fd, EPOLLIN);
 	}
@@ -206,6 +214,8 @@ int main(int argc, char *argv[]) {
 	intercom_init(&l3ctx.intercom_ctx);
 	l3ctx.routemgr_ctx.client_bridge = strdup("\0");
 	l3ctx.routemgr_ctx.clientif = strdup("\0");
+	l3ctx.icmp6_ctx.clientif = strdup("\0");
+	l3ctx.arp_ctx.clientif = strdup("\0");
 	l3ctx.clientmgr_ctx.export_table = 254;
 	bool v4_initialized=false;
 	bool a_initialized=false;
@@ -244,6 +254,8 @@ int main(int argc, char *argv[]) {
 				break;
 			case 'i':
 				free(l3ctx.routemgr_ctx.clientif);
+				free(l3ctx.icmp6_ctx.clientif);
+				free(l3ctx.arp_ctx.clientif);
 				l3ctx.routemgr_ctx.clientif = strdupa(optarg);
 				l3ctx.icmp6_ctx.clientif = strdupa(optarg);
 				l3ctx.arp_ctx.clientif = strdupa(optarg);
@@ -289,8 +301,10 @@ int main(int argc, char *argv[]) {
 	wifistations_init(&l3ctx.wifistations_ctx);
 	taskqueue_init(&l3ctx.taskqueue_ctx);
 
-	icmp6_init(&l3ctx.icmp6_ctx);
-	arp_init(&l3ctx.arp_ctx);
+	if (strlen(l3ctx.routemgr_ctx.clientif)) {
+		icmp6_init(&l3ctx.icmp6_ctx);
+		arp_init(&l3ctx.arp_ctx);
+	}
 
 	loop();
 
