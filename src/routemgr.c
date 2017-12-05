@@ -470,8 +470,10 @@ void rtmgr_rtnl_talk(routemgr_ctx *ctx, struct nlmsghdr *req) {
 
 	iov.iov_len = req->nlmsg_len;
 
-	while (sendmsg(ctx->fd, &msg, 0) <= 0) {
-		perror("retrying, sendmsg on rtmgr_rtnl_talk()");
+	int count=0;
+	while (sendmsg(ctx->fd, &msg, 0) <= 0 && count < 5) {
+		printf("retrying(%i/5) ", ++count);
+		perror("sendmsg on rtmgr_rtnl_talk()");
 	}
 }
 
