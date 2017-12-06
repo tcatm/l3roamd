@@ -77,11 +77,13 @@ void loop() {
 	add_fd(efd, l3ctx.routemgr_ctx.fd, EPOLLIN | EPOLLET);
 
 	if (strlen(l3ctx.icmp6_ctx.clientif)) {	
+		printf("adding icmp6-fd to epoll\n");
 		add_fd(efd, l3ctx.icmp6_ctx.fd, EPOLLIN);
 		add_fd(efd, l3ctx.icmp6_ctx.nsfd, EPOLLIN);
 	}
 
 	if (strlen(l3ctx.arp_ctx.clientif)) {
+		printf("adding arp-fd to epoll\n");
 		add_fd(efd, l3ctx.arp_ctx.fd, EPOLLIN);
 	}
 
@@ -98,6 +100,7 @@ void loop() {
 
 	/* Buffer where events are returned */
 	events = calloc(maxevents, sizeof(struct epoll_event));
+	printf("starting loop\n");
 
 	/* The event loop */
 	while (1) {
@@ -253,15 +256,23 @@ int main(int argc, char *argv[]) {
 				add_prefix(&l3ctx.clientmgr_ctx.prefixes, _prefix);
 				break;
 			case 'i':
-				free(l3ctx.routemgr_ctx.clientif);
-				free(l3ctx.icmp6_ctx.clientif);
-				free(l3ctx.arp_ctx.clientif);
-				l3ctx.routemgr_ctx.clientif = strdupa(optarg);
-				l3ctx.icmp6_ctx.clientif = strdupa(optarg);
-				l3ctx.arp_ctx.clientif = strdupa(optarg);
+				if (if_nametoindex(optarg)) {
+					free(l3ctx.routemgr_ctx.clientif);
+					free(l3ctx.icmp6_ctx.clientif);
+					free(l3ctx.arp_ctx.clientif);
+					l3ctx.routemgr_ctx.clientif = strdupa(optarg);
+					l3ctx.icmp6_ctx.clientif = strdupa(optarg);
+					l3ctx.arp_ctx.clientif = strdupa(optarg);
+				} else {
+					fprintf(stderr, "ignoring unknown client-interface %s\n", optarg);
+				}
 				break;
 			case 'm':
-				intercom_add_interface(&l3ctx.intercom_ctx, strdupa(optarg));
+				if (if_nametoindex(optarg)) {
+					intercom_add_interface(&l3ctx.intercom_ctx, strdupa(optarg));
+				} else {
+					fprintf(stderr, "ignoring unknown mesh-interface %s\n", optarg);
+				}
 				break;
 			case 't':
 				l3ctx.clientmgr_ctx.export_table = atoi(optarg);
@@ -302,6 +313,7 @@ int main(int argc, char *argv[]) {
 	taskqueue_init(&l3ctx.taskqueue_ctx);
 
 	if (strlen(l3ctx.routemgr_ctx.clientif)) {
+		printf("initializing icmp and arp\n");
 		icmp6_init(&l3ctx.icmp6_ctx);
 		arp_init(&l3ctx.arp_ctx);
 	}

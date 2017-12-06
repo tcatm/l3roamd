@@ -63,6 +63,9 @@ void icmp6_init(icmp6_ctx *ctx) {
 }
 
 void icmp6_setup_interface(icmp6_ctx *ctx) {
+	if (!strlen(ctx->clientif))
+		return;
+
 	ctx->ok = false;
 
 	int rc = setsockopt(ctx->fd, SOL_SOCKET, SO_BINDTODEVICE, ctx->clientif, strnlen(ctx->clientif, IFNAMSIZ-1));
