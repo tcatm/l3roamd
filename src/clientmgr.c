@@ -4,6 +4,7 @@
 #include "timespec.h"
 #include "error.h"
 #include "l3roamd.h"
+#include "util.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -215,27 +216,29 @@ struct client *get_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
 	return NULL;
 }
 
+/** Given an ip-address, this returns true if there is a local client connected having this IP-address and false otherwise
+*/
 bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address) {
-	char a1[INET6_ADDRSTRLEN+1]={};
-	inet_ntop(AF_INET6, address, a1, INET6_ADDRSTRLEN);
-	printf("seeking address %s.\n",a1);
 	for (int i = 0; i < VECTOR_LEN(ctx->clients); i++) {
 		struct client *c = &VECTOR_INDEX(ctx->clients, i);
 		for (int j = 0; j< VECTOR_LEN(c->addresses);j++) {
 			struct client_ip *a = &VECTOR_INDEX(c->addresses, j);
-			char a2[INET6_ADDRSTRLEN+1]={};
-			inet_ntop(AF_INET6, &a->addr, a2, INET6_ADDRSTRLEN);
-			printf("comparing %s and %s yielded the result: ",a1, a2);
-			if (memcmp(address, &a->addr, sizeof(struct in6_addr))) {
-				printf("equal\n");
-				return true;
-			} else {
-				printf("not equal\n");
+			if (l3ctx.debug) {
+				printf("comparing ");
+				print_ip(address);
+				printf(" and ");
+				print_ip(&a->addr);
+			}
+			if (!memcmp(address, &a->addr, sizeof(struct in6_addr))) {
+				if (l3ctx.debug) {
+					printf(" => match found.\n");
+					return true;
+				}
 			}
 		}
+		printf(" => no match found.\n");
+		return false;
 	}
-	printf(" -- %s is not connected as a local client.\n",a1);
-	return false;
 }
 
 /** Get a client or create a new, empty one.

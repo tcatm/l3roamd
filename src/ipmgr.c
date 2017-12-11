@@ -4,6 +4,7 @@
 #include "if.h"
 #include "intercom.h"
 #include "l3roamd.h"
+#include "util.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -30,7 +31,7 @@ bool tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_
 	if (ifname)
 		strncpy(ifr.ifr_name, ifname, IFNAMSIZ-1);
 
-	ifr.ifr_flags = IFF_TUN | IFF_NO_PI; 
+	ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
 
 	if (ioctl(ctx->fd, TUNSETIFF, &ifr) < 0) {
 		puts("unable to open TUN/TAP interface: TUNSETIFF ioctl failed");
@@ -77,12 +78,17 @@ error:
 	return false;
 }
 
-
 /* find an entry in the ipmgr's unknown-clients list*/
 struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 	for (int i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
 		struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
-
+		if (l3ctx.debug) {
+			printf("looking for ip ");
+			print_ip(k);
+			printf(" comparing with ");
+			print_ip(&e->address);
+			printf("\n");
+		}
 		if (memcmp(k, &(e->address), sizeof(struct in6_addr)) == 0)
 			return e;
 	}
@@ -139,7 +145,7 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 	printf("Got packet to %s\n", str);
 
 	if (!clientmgr_valid_address(CTX(clientmgr), &dst)) {
-		printf("The destination of the packet (%s) is not within the client prefixes. Ignoring packet\n", str);
+		fprintf(stderr, "The destination of the packet (%s) is not within the client prefixes. Ignoring packet\n", str);
 		return;
 	}
 
@@ -194,18 +200,21 @@ void schedule_ipcheck(ipmgr_ctx *ctx, struct entry *e) {
 void seek_task(void *d) {
 	struct ip_task *data = d;
 	struct entry *e = find_entry(data->ctx, &data->address);
-	printf("Control flow is in in seek_task now\n");
 
 	if (!e) {
-		char str[INET6_ADDRSTRLEN+1];
-		inet_ntop(AF_INET6, &data->address, str, INET6_ADDRSTRLEN);
-		printf("seek task was scheduled but no remaining packets for host (%s) available.\n", str);
+		if (l3ctx.debug) {
+			printf("INFO: seek task was scheduled but no remaining packets available for host:");
+			print_ip(&data->address);
+		}
 		return;
 	}
 	e->check_task = NULL;
 
 	if (!clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &data->address)) {
-		printf("ADDRESS WAS NOT FOUND, QUERYING INTERCOM\n");
+		if (l3ctx.debug) {
+			printf("seeking on intercom for client");
+			print_ip(&data->address);
+		}
 		intercom_seek(&l3ctx.intercom_ctx, (const struct in6_addr*) &(data->address));
 	}
 }
@@ -267,17 +276,18 @@ void ipmgr_handle_in(ipmgr_ctx *ctx, int fd) {
 
 		if (count == -1) {
 			/* If errno == EAGAIN, that means we have read all
-				 data. So go back to the main loop. */
+			   data. So go back to the main loop. */
 			if (errno != EAGAIN) {
 				perror("read");
 			}
 			break;
 		} else if (count == 0) {
 			/* End of file. The remote has closed the
-				 connection. */
+			   connection. */
 			break;
 		}
 
+		// so why again ware we not allowing packets with less than 40 bytes?
 		if (count < 40)
 			continue;
 
