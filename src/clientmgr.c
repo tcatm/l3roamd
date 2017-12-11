@@ -236,9 +236,9 @@ bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address) {
 				}
 			}
 		}
-		printf(" => no match found.\n");
-		return false;
 	}
+	printf(" => no match found.\n");
+	return false;
 }
 
 /** Get a client or create a new, empty one.
