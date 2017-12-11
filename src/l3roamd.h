@@ -29,6 +29,7 @@ struct l3ctx {
 	arp_ctx arp_ctx;
 	routemgr_ctx routemgr_ctx;
 	socket_ctx socket_ctx;
+	bool debug;
 };
 
 extern l3ctx_t l3ctx;

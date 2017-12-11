@@ -224,10 +224,10 @@ int main(int argc, char *argv[]) {
 	bool a_initialized=false;
 	bool p_initialized=false;
 
-
+	l3ctx.debug = false;
 
 	int c;
-	while ((c = getopt(argc, argv, "ha:b:p:i:m:t:c:4:n:s:")) != -1)
+	while ((c = getopt(argc, argv, "dha:b:p:i:m:t:c:4:n:s:d")) != -1)
 		switch (c) {
 			case 'b':
 				free(l3ctx.routemgr_ctx.client_bridge);
@@ -279,6 +279,9 @@ int main(int argc, char *argv[]) {
 				break;
 			case 's':
 				socketpath = optarg;
+				break;
+			case 'd':
+				l3ctx.debug = true;
 				break;
 			case '4':
 				if (!parse_prefix(&l3ctx.clientmgr_ctx.v4prefix, optarg))
