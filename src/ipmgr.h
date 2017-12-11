@@ -30,7 +30,7 @@
 
 #include <stdint.h>
 #include <netinet/in.h>
-
+#include "intercom.h"
 #define IPCHECK_INTERVAL 2
 #define PACKET_TIMEOUT 2
 #define SEEK_TIMEOUT 10
@@ -41,10 +41,16 @@ struct packet {
 	uint8_t *data;
 };
 
+enum tasktype {
+	TASK_CHECK =0,
+	TASK_SEEK
+};
+
 struct entry {
 	struct in6_addr address;
 	struct timespec timestamp;
 	taskqueue_t *check_task;
+	enum tasktype type;
 	VECTOR(struct packet*) packets;
 };
 

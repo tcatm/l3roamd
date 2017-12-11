@@ -123,6 +123,7 @@ void intercom_seek(intercom_ctx *ctx, const struct in6_addr *address) {
 	intercom_recently_seen_add(ctx, &packet.hdr);
 
 	intercom_send_packet(ctx, (uint8_t*)&packet, sizeof(packet));
+
 }
 
 bool intercom_send_packet_unicast(intercom_ctx *ctx, const struct in6_addr *recipient, uint8_t *packet, ssize_t packet_len) {

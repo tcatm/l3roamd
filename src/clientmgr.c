@@ -4,6 +4,7 @@
 #include "timespec.h"
 #include "error.h"
 #include "l3roamd.h"
+#include "util.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -215,6 +216,31 @@ struct client *get_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
 	return NULL;
 }
 
+/** Given an ip-address, this returns true if there is a local client connected having this IP-address and false otherwise
+*/
+bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address) {
+	for (int i = 0; i < VECTOR_LEN(ctx->clients); i++) {
+		struct client *c = &VECTOR_INDEX(ctx->clients, i);
+		for (int j = 0; j< VECTOR_LEN(c->addresses);j++) {
+			struct client_ip *a = &VECTOR_INDEX(c->addresses, j);
+			if (l3ctx.debug) {
+				printf("comparing ");
+				print_ip(address);
+				printf(" and ");
+				print_ip(&a->addr);
+			}
+			if (!memcmp(address, &a->addr, sizeof(struct in6_addr))) {
+				if (l3ctx.debug) {
+					printf(" => match found.\n");
+					return true;
+				}
+			}
+		}
+		printf(" => no match found.\n");
+		return false;
+	}
+}
+
 /** Get a client or create a new, empty one.
   */
 struct client *get_or_create_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
@@ -375,6 +401,12 @@ bool clientmgr_is_ipv4(clientmgr_ctx *ctx, struct in6_addr *address) {
 	return prefix_contains(&ctx->v4prefix, address);
 }
 
+/** Remove an address from a client identified by its MAC.
+**/
+void clientmgr_remove_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex) {
+	printf("TODO: clientmgr_remove_address - currently not implemented\n");
+}
+
 /** Add a new address to a client identified by its MAC.
  */
 void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex) {
@@ -383,9 +415,6 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 	printf("clientmgr_add_address: %s\n",str);
 	if (!clientmgr_valid_address(ctx, address))
 		return;
-
-//	if (!mac)
-//		return;
 
 	struct client *client = get_or_create_client(ctx, mac);
 	struct client_ip *ip = get_client_ip(client, address);
@@ -501,6 +530,5 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bo
 
 	printf("Merged ");
 	print_client(client);
-
 }
 

@@ -1,8 +1,10 @@
 #include "error.h"
 #include "ipmgr.h"
-#include "l3roamd.h"
 #include "timespec.h"
 #include "if.h"
+#include "intercom.h"
+#include "l3roamd.h"
+#include "util.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -14,6 +16,7 @@
 static bool tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name);
 static void schedule_ipcheck(ipmgr_ctx *ctx, struct entry *e);
 static void ipcheck_task(void *d);
+static void seek_task(void *d);
 static bool ipcheck(ipmgr_ctx *ctx, struct entry *e);
 
 /* open l3roamd's tun device that is used to obtain packets for unknown clients */
@@ -28,7 +31,7 @@ bool tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_
 	if (ifname)
 		strncpy(ifr.ifr_name, ifname, IFNAMSIZ-1);
 
-	ifr.ifr_flags = IFF_TUN | IFF_NO_PI; 
+	ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
 
 	if (ioctl(ctx->fd, TUNSETIFF, &ifr) < 0) {
 		puts("unable to open TUN/TAP interface: TUNSETIFF ioctl failed");
@@ -75,12 +78,17 @@ error:
 	return false;
 }
 
-
 /* find an entry in the ipmgr's unknown-clients list*/
 struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 	for (int i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
 		struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
-
+		if (l3ctx.debug) {
+			printf("looking for ip ");
+			print_ip(k);
+			printf(" comparing with ");
+			print_ip(&e->address);
+			printf("\n");
+		}
 		if (memcmp(k, &(e->address), sizeof(struct in6_addr)) == 0)
 			return e;
 	}
@@ -112,8 +120,14 @@ void seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
 	else
 		icmp6_send_solicitation(CTX(icmp6), addr);
 
-	// TODO: l3roamd should only query intercom, if the node really wasn't found locally.
-	intercom_seek(CTX(intercom), addr);
+	// schedule an intercom-seek operation that in turn will only be executed if there is no local client known
+	struct ip_task *data = calloc(1, sizeof(struct ip_task));
+
+	data->ctx = ctx;
+	data->address = *addr;
+
+	// TODO: Scheduling this task 1s in the future seems to be a long time. find a way to cut this time to 300ms or so.
+	post_task(CTX(taskqueue), 1, seek_task, free, data);
 }
 
 void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
@@ -131,7 +145,7 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 	printf("Got packet to %s\n", str);
 
 	if (!clientmgr_valid_address(CTX(clientmgr), &dst)) {
-		printf("The destination of the packet (%s) is not within the client prefixes. Ignoring packet\n", str);
+		fprintf(stderr, "The destination of the packet (%s) is not within the client prefixes. Ignoring packet\n", str);
 		return;
 	}
 
@@ -183,6 +197,28 @@ void schedule_ipcheck(ipmgr_ctx *ctx, struct entry *e) {
 		e->check_task = post_task(CTX(taskqueue), IPCHECK_INTERVAL, ipcheck_task, free, data);
 }
 
+void seek_task(void *d) {
+	struct ip_task *data = d;
+	struct entry *e = find_entry(data->ctx, &data->address);
+
+	if (!e) {
+		if (l3ctx.debug) {
+			printf("INFO: seek task was scheduled but no remaining packets available for host:");
+			print_ip(&data->address);
+		}
+		return;
+	}
+	e->check_task = NULL;
+
+	if (!clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &data->address)) {
+		if (l3ctx.debug) {
+			printf("seeking on intercom for client");
+			print_ip(&data->address);
+		}
+		intercom_seek(&l3ctx.intercom_ctx, (const struct in6_addr*) &(data->address));
+	}
+}
+
 void ipcheck_task(void *d) {
 	struct ip_task *data = d;
 
@@ -213,6 +249,7 @@ bool ipcheck(ipmgr_ctx *ctx, struct entry *e) {
 
 		if (timespec_cmp(p->timestamp, then) <= 0) {
 			free(p->data);
+			printf("deleting old packet");
 			VECTOR_DELETE(e->packets, i);
 			i--;
 		}
@@ -239,19 +276,20 @@ void ipmgr_handle_in(ipmgr_ctx *ctx, int fd) {
 
 		if (count == -1) {
 			/* If errno == EAGAIN, that means we have read all
-				 data. So go back to the main loop. */
+			   data. So go back to the main loop. */
 			if (errno != EAGAIN) {
 				perror("read");
 			}
 			break;
 		} else if (count == 0) {
 			/* End of file. The remote has closed the
-				 connection. */
+			   connection. */
 			break;
 		}
 
-	//	if (count < 40)
-	//		continue;
+		// so why again ware we not allowing packets with less than 40 bytes?
+		if (count < 40)
+			continue;
 
 		// We're only interested in ip6 packets
 		if ((buf[0] & 0xf0) != 0x60)
@@ -276,7 +314,7 @@ void ipmgr_handle_out(ipmgr_ctx *ctx, int fd) {
 
 		if (count == -1) {
 			if (errno != EAGAIN)
-				perror("write failed");
+				perror("Could not send packet to newly visible client");
 
 			break;
 		}

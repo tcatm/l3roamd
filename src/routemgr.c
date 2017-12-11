@@ -79,7 +79,7 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	     !strncmp(ctx->client_bridge,ifname,strlen(ifname)) ||
 	     ( strlen(brifname) && !strncmp(ctx->client_bridge,brifname,strlen(brifname)) )
 	     ) {
-		printf("neighbour [%s] changed on interface %s ... ", mac_str, ifname);
+		printf("neighbour [%s] changed on interface %s, state: %i ... ", mac_str, ifname, msg->ndm_state); // see include/uapi/linux/neighbour.h NUD_REACHABLE for numeric values
 		if (tb[NDA_MASTER]) {
 			if_indextoname(rta_getattr_u32(tb[NDA_MASTER]),ifname);
 			if (! strncmp( ifname, ctx->client_bridge, strlen(ifname))) {
@@ -91,13 +91,14 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 						}
 						break;
 					case RTM_DELNEIGH:
-						// client has roamed or was turned off 5 minutes ago
-						//
-						printf("REMOVING\n");
-						clientmgr_delete_client(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]));
+						if (msg->ndm_state == NUD_FAILED) {
+							// client has roamed or was turned off 5 minutes ago
+							printf("REMOVING\n");
+							clientmgr_delete_client(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]));
+						}
 						break;
 					case RTM_GETNEIGH:
-						printf("GETNEIGH\n");
+						printf("GETNEIGH - not handler registered.\n");
 						break;
 					default:
 						break;
@@ -114,7 +115,11 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 					}
 					break;
 				case RTM_DELNEIGH:
-					printf("NEIGHBOUR DISAPPEARED - TODO if this happens, we should handle it properly.\n");
+					if (msg->ndm_state == NUD_FAILED) {
+						// client has roamed or was turned off 5 minutes ago
+						printf("REMOVING\n");
+						clientmgr_remove_address(CTX(clientmgr), RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
+					}
 				default:
 					break;
 			}
