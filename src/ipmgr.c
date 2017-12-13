@@ -80,6 +80,7 @@ error:
 
 /* find an entry in the ipmgr's unknown-clients list*/
 struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
+	// TODO: make use of VECTOR_BSEARCH here.
 	for (int i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
 		struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
 		if (l3ctx.debug) {
@@ -126,7 +127,6 @@ void seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
 	data->ctx = ctx;
 	data->address = *addr;
 
-	// TODO: Scheduling this task 1s in the future seems to be a long time. find a way to cut this time to 300ms or so.
 	post_task(CTX(taskqueue), 1, seek_task, free, data);
 }
 
@@ -229,7 +229,8 @@ void ipcheck_task(void *d) {
 
 	char str[INET6_ADDRSTRLEN] = "";
 	inet_ntop(AF_INET6, &data->address, str, sizeof str);
-	printf("running an ipcheck on %s\n", str);
+	if (l3ctx.debug)
+		printf("running an ipcheck on %s\n", str);
 
 	e->check_task = NULL;
 
@@ -248,8 +249,9 @@ bool ipcheck(ipmgr_ctx *ctx, struct entry *e) {
 		struct packet *p = VECTOR_INDEX(e->packets, i);
 
 		if (timespec_cmp(p->timestamp, then) <= 0) {
+			if (l3ctx.debug)
+				printf("deleting old packet\n");
 			free(p->data);
-			printf("deleting old packet");
 			VECTOR_DELETE(e->packets, i);
 			i--;
 		}

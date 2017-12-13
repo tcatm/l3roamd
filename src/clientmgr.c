@@ -404,7 +404,7 @@ bool clientmgr_is_ipv4(clientmgr_ctx *ctx, struct in6_addr *address) {
 /** Remove an address from a client identified by its MAC.
 **/
 void clientmgr_remove_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex) {
-	printf("TODO: clientmgr_remove_address - currently not implemented\n");
+	fprintf(stderr, "TODO: clientmgr_remove_address - currently not implemented\n");
 }
 
 /** Add a new address to a client identified by its MAC.
@@ -528,7 +528,7 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bo
 	if (relinquished)
 		add_special_ip(ctx, client);
 
-	printf("Merged ");
+	printf("Client info merged ");
 	print_client(client);
 }
 

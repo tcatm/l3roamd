@@ -110,8 +110,7 @@ void loop() {
 			if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)) {
 				fprintf(stderr, "epoll error\n");
 				close(events[i].data.fd);
-				// TODO: routemgr is handling routes from kernel AND direct neighbours from fdb.
-				// Refactor this at is actually a netlink-handler
+				// TODO: routemgr is handling routes from kernel AND direct neighbours from fdb. Refactor this at is actually a netlink-handler
 			} else if (l3ctx.taskqueue_ctx.fd == events[i].data.fd) {
 				taskqueue_run(&l3ctx.taskqueue_ctx);
 			} else if (l3ctx.routemgr_ctx.fd == events[i].data.fd) {
