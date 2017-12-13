@@ -203,7 +203,7 @@ void seek_task(void *d) {
 
 	if (!e) {
 		if (l3ctx.debug) {
-			printf("INFO: seek task was scheduled but no remaining packets available for host:");
+			printf("INFO: seek task was scheduled but no remaining packets available for host: ");
 			print_ip(&data->address);
 		}
 		return;
@@ -212,7 +212,7 @@ void seek_task(void *d) {
 
 	if (!clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &data->address)) {
 		if (l3ctx.debug) {
-			printf("seeking on intercom for client");
+			printf("seeking on intercom for client ");
 			print_ip(&data->address);
 		}
 		intercom_seek(&l3ctx.intercom_ctx, (const struct in6_addr*) &(data->address));
