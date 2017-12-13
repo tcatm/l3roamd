@@ -352,8 +352,6 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 					break;
 				case IP_TENTATIVE:
 					ip->timestamp = now;
-					// TODO: are we shure we want to do this just yet?
-					client_remove_route(ctx, client, ip);
 					break;
 			}
 			break;
@@ -498,7 +496,7 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
 
 		if (ip->state == IP_ACTIVE || ip->state == IP_TENTATIVE)
-			client_ip_set_state(ctx, client, ip, IP_TENTATIVE);
+			client_ip_set_state(ctx, client, ip, IP_INACTIVE);
 	}
 
 }
