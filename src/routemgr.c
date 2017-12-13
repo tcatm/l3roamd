@@ -59,7 +59,6 @@ int parse_rtattr(struct rtattr *tb[], int max, struct rtattr *rta, int len)
 void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	struct ndmsg *msg = NLMSG_DATA(nh);
 	char ifname[IFNAMSIZ] = "";
-	char brifname[IFNAMSIZ] = "";
 	struct rtattr * tb[NDA_MAX+1];
 
 	parse_rtattr(tb, NDA_MAX, NDA_RTA(msg), nh->nlmsg_len - NLMSG_LENGTH(sizeof(*msg)));
@@ -70,14 +69,11 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	}
 
 	if_indextoname(msg->ndm_ifindex, ifname);
+	unsigned int br_index = if_nametoindex(ctx->client_bridge);
 
-	if (tb[NDA_MASTER])
-		if_indextoname(rta_getattr_u32(tb[NDA_MASTER]),brifname);
-
-	// FIXME use interface ids
-	if ( !strncmp(ctx->clientif,ifname,strlen(ifname)) ||
-	     !strncmp(ctx->client_bridge,ifname,strlen(ifname)) ||
-	     ( strlen(brifname) && !strncmp(ctx->client_bridge,brifname,strlen(brifname)) )
+	if ( ctx->clientif_index == msg->ndm_ifindex ||
+	     br_index == msg->ndm_ifindex ||
+	     ( tb[NDA_MASTER] && br_index == rta_getattr_u32(tb[NDA_MASTER]) )
 	     ) {
 		printf("neighbour [%s] changed on interface %s, state: %i ... ", mac_str, ifname, msg->ndm_state); // see include/uapi/linux/neighbour.h NUD_REACHABLE for numeric values
 		if (tb[NDA_MASTER]) {
@@ -477,7 +473,7 @@ void rtmgr_rtnl_talk(routemgr_ctx *ctx, struct nlmsghdr *req) {
 
 	int count=0;
 	while (sendmsg(ctx->fd, &msg, 0) <= 0 && count < 5) {
-		printf("retrying(%i/5) ", ++count);
+		fprintf(stderr, "retrying(%i/5) ", ++count);
 		perror("sendmsg on rtmgr_rtnl_talk()");
 	}
 }
