@@ -24,12 +24,14 @@ struct client_ip {
 	struct timespec timestamp;
 };
 
-struct client {
+typedef struct client {
 	unsigned int ifindex;
 	struct timespec timeout;
 	uint8_t mac[6];
 	VECTOR(struct client_ip) addresses;
-};
+} client_t;
+
+
 
 typedef struct {
 	struct l3ctx *l3ctx;
