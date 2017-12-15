@@ -252,6 +252,7 @@ bool ipcheck(ipmgr_ctx *ctx, struct entry *e) {
 			if (l3ctx.debug)
 				printf("deleting old packet\n");
 			free(p->data);
+			free(p);
 			VECTOR_DELETE(e->packets, i);
 			i--;
 		}
