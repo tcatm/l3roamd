@@ -378,6 +378,8 @@ void schedule_claim_retry(struct claim_task *data) {
 
 	if (data->check_task == NULL)
 		data->check_task = post_task(&l3ctx.taskqueue_ctx, 3, claim_retry_task, free_claim_task, ndata);
+	else
+		free_claim_task(ndata);
 }
 
 bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client) {
