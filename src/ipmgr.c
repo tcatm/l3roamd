@@ -195,6 +195,8 @@ void schedule_ipcheck(ipmgr_ctx *ctx, struct entry *e) {
 
 	if (e->check_task == NULL)
 		e->check_task = post_task(CTX(taskqueue), IPCHECK_INTERVAL, ipcheck_task, free, data);
+	else
+		free(data);
 }
 
 void seek_task(void *d) {
@@ -224,8 +226,9 @@ void ipcheck_task(void *d) {
 
 	struct entry *e = find_entry(data->ctx, &data->address);
 
-	if (!e)
+	if (!e) {
 		return;
+	}
 
 	char str[INET6_ADDRSTRLEN] = "";
 	inet_ntop(AF_INET6, &data->address, str, sizeof str);
@@ -234,8 +237,9 @@ void ipcheck_task(void *d) {
 
 	e->check_task = NULL;
 
-	if (ipcheck(data->ctx, e))
+	if (ipcheck(data->ctx, e)) {
 		schedule_ipcheck(data->ctx, e);
+	}
 }
 
 bool ipcheck(ipmgr_ctx *ctx, struct entry *e) {
@@ -304,6 +308,7 @@ void ipmgr_handle_in(ipmgr_ctx *ctx, int fd) {
 
 void ipmgr_handle_out(ipmgr_ctx *ctx, int fd) {
 	ssize_t count;
+
 	while (1) {
 		if (VECTOR_LEN(ctx->output_queue) == 0)
 			break;
