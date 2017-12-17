@@ -65,6 +65,7 @@ typedef struct {
 struct ip_task {
 	ipmgr_ctx *ctx;
 	struct in6_addr address;
+	taskqueue_t *check_task;
 };
 
 void ipmgr_init(ipmgr_ctx *ctx, char *tun_name, unsigned int mtu);

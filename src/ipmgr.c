@@ -127,7 +127,10 @@ void seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
 	data->ctx = ctx;
 	data->address = *addr;
 
-	post_task(CTX(taskqueue), 1, seek_task, free, data);
+	if (data->check_task == NULL)
+		data->check_task = post_task(CTX(taskqueue), 1, seek_task, free, data);
+	else
+		free(data);
 }
 
 void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {

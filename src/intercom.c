@@ -144,9 +144,10 @@ bool intercom_send_packet_unicast(intercom_ctx *ctx, const struct in6_addr *reci
 		.sin6_addr = *recipient
 	};
 	ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, (struct sockaddr*)&addr, sizeof(addr));
-	printf("sent packet rc: %zi to ", rc);
-	print_ip(recipient);
-
+	if (l3ctx.debug) {
+		printf("sent packet rc: %zi to ", rc);
+		print_ip(recipient);
+	}
 	if (rc < 0)
 		perror("sendto failed");
 
@@ -165,7 +166,8 @@ void intercom_send_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len
 		groupaddr.sin6_scope_id = iface->ifindex;
 
 		ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, (struct sockaddr*)&groupaddr, sizeof(groupaddr));
-		printf("sent packet to %s on iface %s rc: %zi\n", INTERCOM_GROUP, iface->ifname,rc);
+		if (l3ctx.debug)
+			printf("sent packet to %s on iface %s rc: %zi\n", INTERCOM_GROUP, iface->ifname,rc);
 
 		if (rc < 0)
 			iface->ok = false;
@@ -352,10 +354,14 @@ void claim_retry_task(void *d) {
 		return;
 
 	if (data->recipient != NULL) {
-		printf("   verschicke Paket\n");
+		if (l3ctx.debug) {
+			printf("   sending unicast claim\n");
+		}
 		intercom_send_packet_unicast(&l3ctx.intercom_ctx, data->recipient, (uint8_t*)&data->packet, sizeof(data->packet));
 	} else {
-		printf("   verschicke Paket\n");
+		if (l3ctx.debug) {
+			printf("   sending multicast claim\n");
+		}
 		intercom_send_packet(&l3ctx.intercom_ctx, (uint8_t*)&data->packet, sizeof(data->packet));
 	}
 
