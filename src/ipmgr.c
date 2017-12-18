@@ -80,6 +80,7 @@ error:
 
 /* find an entry in the ipmgr's unknown-clients list*/
 struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
+	// TODO: make use of VECTOR_BSEARCH here.
 	for (int i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
 		struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
 		if (l3ctx.debug) {
@@ -126,8 +127,10 @@ void seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
 	data->ctx = ctx;
 	data->address = *addr;
 
-	// TODO: Scheduling this task 1s in the future seems to be a long time. find a way to cut this time to 300ms or so.
-	post_task(CTX(taskqueue), 1, seek_task, free, data);
+	if (data->check_task == NULL)
+		data->check_task = post_task(CTX(taskqueue), 1, seek_task, free, data);
+	else
+		free(data);
 }
 
 void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
@@ -195,6 +198,8 @@ void schedule_ipcheck(ipmgr_ctx *ctx, struct entry *e) {
 
 	if (e->check_task == NULL)
 		e->check_task = post_task(CTX(taskqueue), IPCHECK_INTERVAL, ipcheck_task, free, data);
+	else
+		free(data);
 }
 
 void seek_task(void *d) {
@@ -203,7 +208,7 @@ void seek_task(void *d) {
 
 	if (!e) {
 		if (l3ctx.debug) {
-			printf("INFO: seek task was scheduled but no remaining packets available for host:");
+			printf("INFO: seek task was scheduled but no remaining packets available for host: ");
 			print_ip(&data->address);
 		}
 		return;
@@ -212,7 +217,7 @@ void seek_task(void *d) {
 
 	if (!clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &data->address)) {
 		if (l3ctx.debug) {
-			printf("seeking on intercom for client");
+			printf("seeking on intercom for client ");
 			print_ip(&data->address);
 		}
 		intercom_seek(&l3ctx.intercom_ctx, (const struct in6_addr*) &(data->address));
@@ -224,17 +229,20 @@ void ipcheck_task(void *d) {
 
 	struct entry *e = find_entry(data->ctx, &data->address);
 
-	if (!e)
+	if (!e) {
 		return;
+	}
 
 	char str[INET6_ADDRSTRLEN] = "";
 	inet_ntop(AF_INET6, &data->address, str, sizeof str);
-	printf("running an ipcheck on %s\n", str);
+	if (l3ctx.debug)
+		printf("running an ipcheck on %s\n", str);
 
 	e->check_task = NULL;
 
-	if (ipcheck(data->ctx, e))
+	if (ipcheck(data->ctx, e)) {
 		schedule_ipcheck(data->ctx, e);
+	}
 }
 
 bool ipcheck(ipmgr_ctx *ctx, struct entry *e) {
@@ -248,8 +256,10 @@ bool ipcheck(ipmgr_ctx *ctx, struct entry *e) {
 		struct packet *p = VECTOR_INDEX(e->packets, i);
 
 		if (timespec_cmp(p->timestamp, then) <= 0) {
+			if (l3ctx.debug)
+				printf("deleting old packet\n");
 			free(p->data);
-			printf("deleting old packet");
+			free(p);
 			VECTOR_DELETE(e->packets, i);
 			i--;
 		}
@@ -301,6 +311,7 @@ void ipmgr_handle_in(ipmgr_ctx *ctx, int fd) {
 
 void ipmgr_handle_out(ipmgr_ctx *ctx, int fd) {
 	ssize_t count;
+
 	while (1) {
 		if (VECTOR_LEN(ctx->output_queue) == 0)
 			break;

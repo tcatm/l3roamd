@@ -4,6 +4,10 @@
 #include "if.h"
 #include "icmp6.h"
 #include "syscallwrappers.h"
+#include "util.h"
+
+//TODO this is used for print_client - remove
+#include "clientmgr.h"
 
 #include <time.h>
 #include <unistd.h>
@@ -16,6 +20,13 @@
 #define INTERCOM_PORT 5523
 #define INTERCOM_GROUP "ff02::5523"
 #define INTERCOM_MAX_RECENT 100
+
+#define CLAIM_RETRY_MAX 5
+
+// Announce at most 32 addresses per client
+#define INFO_MAX 32
+
+void schedule_claim_retry(struct claim_task*);
 
 bool join_mcast(const int sock, const struct in6_addr addr, intercom_if *iface) {
 	struct ipv6_mreq mreq;
@@ -132,9 +143,12 @@ bool intercom_send_packet_unicast(intercom_ctx *ctx, const struct in6_addr *reci
 		.sin6_port = htons(INTERCOM_PORT),
 		.sin6_addr = *recipient
 	};
-
 	ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, (struct sockaddr*)&addr, sizeof(addr));
-
+	if (l3ctx.debug) {
+		printf("sent intercom packet rc: %zi to ", rc);
+		print_ip(recipient);
+		printf("\n");
+	}
 	if (rc < 0)
 		perror("sendto failed");
 
@@ -153,7 +167,8 @@ void intercom_send_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len
 		groupaddr.sin6_scope_id = iface->ifindex;
 
 		ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, (struct sockaddr*)&groupaddr, sizeof(groupaddr));
-		printf("sent packet to %s on iface %s rc: %zi\n", INTERCOM_GROUP, iface->ifname,rc);
+		if (l3ctx.debug)
+			printf("sent intercom packet to %s on iface %s rc: %zi\n", INTERCOM_GROUP, iface->ifname,rc);
 
 		if (rc < 0)
 			iface->ok = false;
@@ -192,6 +207,29 @@ void intercom_handle_claim(intercom_ctx *ctx, intercom_packet_claim *packet) {
 	clientmgr_handle_claim(CTX(clientmgr), &sender, packet->mac);
 }
 
+
+
+/** Finds the entry for a peer with a specified ID in the array \e ctx.peers */
+/*
+static fastd_peer_t ** peer_p_find_by_id(uint64_t id) {
+	fastd_peer_t key = {.id = id};
+	fastd_peer_t *const keyp = &key;
+
+	return VECTOR_BSEARCH(&keyp, ctx.peers, peer_id_cmp);
+}
+*/
+
+bool find_repeatable_claim(uint8_t mac[6], int *index) {
+	// TODO: replace this with VECTOR_BSEARCH -- see the example above
+	for (*index=0;*index<VECTOR_LEN(l3ctx.intercom_ctx.repeatable_claims);(*index)++) {
+		struct client *client = &VECTOR_INDEX(l3ctx.intercom_ctx.repeatable_claims, *index);
+		if (!memcmp(client->mac, mac, 6))
+			return true;
+	}
+	return false;
+}
+
+
 void intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet) {
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
@@ -199,6 +237,11 @@ void intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet) {
 	struct client client = {};
 
 	memcpy(client.mac, &packet->mac, sizeof(uint8_t) * 6);
+
+	int i;
+
+	if (find_repeatable_claim(packet->mac, &i))
+		VECTOR_DELETE(ctx->repeatable_claims, i);
 
 	struct client_ip ip = {
 		.state = IP_INACTIVE
@@ -262,8 +305,6 @@ void intercom_handle_in(intercom_ctx *ctx, int fd) {
 	}
 }
 
-// Announce at most 32 addresses per client
-#define INFO_MAX 32
 
 /* recipient = NULL -> send to neighbours */
 void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client, bool relinquished) {
@@ -297,13 +338,60 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 	ssize_t packet_len = sizeof(intercom_packet_info) + i * sizeof(intercom_packet_info_entry);
 
 	if (recipient != NULL)
+		// TODO: consider adding resilience here. There *might* be an ACK sensible
 		intercom_send_packet_unicast(ctx, recipient, (uint8_t*)packet, packet_len);
 	else {
+		// forward packet to other l3roamd instances
 		intercom_recently_seen_add(ctx, &packet->hdr);
 
 		intercom_send_packet(ctx, (uint8_t*)packet, packet_len);
 	}
 	free(packet);
+}
+
+void claim_retry_task(void *d) {
+	struct claim_task *data = d;
+
+	int i;
+	if (!find_repeatable_claim(data->client->mac, &i))
+		return;
+
+	if (data->recipient != NULL) {
+		if (l3ctx.debug) {
+			printf("sending unicast claim for client %02x:%02x:%02x:%02x:%02x:%02x to ",  data->client->mac[0], data->client->mac[1], data->client->mac[2], data->client->mac[3], data->client->mac[4], data->client->mac[5]);
+			print_ip(data->recipient);
+			printf("\n");
+		}
+		intercom_send_packet_unicast(&l3ctx.intercom_ctx, data->recipient, (uint8_t*)&data->packet, sizeof(data->packet));
+	} else {
+		if (l3ctx.debug) {
+			printf("sending multicast claim for client %02x:%02x:%02x:%02x:%02x:%02x\n",  data->client->mac[0], data->client->mac[1], data->client->mac[2], data->client->mac[3], data->client->mac[4], data->client->mac[5]);
+		}
+		intercom_send_packet(&l3ctx.intercom_ctx, (uint8_t*)&data->packet, sizeof(data->packet));
+	}
+
+	if (data->retries_left > 0)
+		schedule_claim_retry(data);
+}
+void free_claim_task(void *d) {
+	struct claim_task *data = d;
+	free(data->client);
+	free(data);
+}
+
+void schedule_claim_retry(struct claim_task *data) {
+	struct claim_task *ndata = calloc(1, sizeof(struct claim_task));
+	ndata->client = malloc(sizeof(struct client));
+	memcpy(ndata->client, data->client,sizeof(struct client));
+	ndata->retries_left = data->retries_left -1;
+	ndata->packet = data->packet;
+	ndata->recipient = data->recipient;
+	ndata->check_task = data->check_task;
+
+	if (data->check_task == NULL && data->retries_left > 0)
+		data->check_task = post_task(&l3ctx.taskqueue_ctx, 3, claim_retry_task, free_claim_task, ndata);
+	else
+		free_claim_task(ndata);
 }
 
 bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client) {
@@ -324,10 +412,17 @@ bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct 
 
 	intercom_recently_seen_add(ctx, &packet.hdr);
 
-	if (recipient != NULL)
-		return intercom_send_packet_unicast(ctx, recipient, (uint8_t*)&packet, sizeof(packet));
-	else {
-		intercom_send_packet(ctx, (uint8_t*)&packet, sizeof(packet));
-		return true;
-	}
+	VECTOR_ADD(ctx->repeatable_claims, *client);
+
+	struct claim_task data ;
+	data.client = malloc(sizeof(struct client));
+	memcpy(data.client, client,sizeof(struct client));
+	data.retries_left = CLAIM_RETRY_MAX;
+	data.packet = packet;
+	data.recipient = recipient;
+	data.check_task=NULL;
+
+	claim_retry_task(&data);
+	free(data.client);
+	return true;
 }

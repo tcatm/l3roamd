@@ -4,7 +4,6 @@
 #include <arpa/inet.h>
 #include <stdio.h>
 
-// TODO: where should we put this?
 /* print a human-readable representation of an in6_addr struct to stdout
 ** */
 void print_ip(const struct in6_addr *addr) {

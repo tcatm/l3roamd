@@ -110,8 +110,7 @@ void loop() {
 			if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)) {
 				fprintf(stderr, "epoll error\n");
 				close(events[i].data.fd);
-				// TODO: routemgr is handling routes from kernel AND direct neighbours from fdb.
-				// Refactor this at is actually a netlink-handler
+				// TODO: routemgr is handling routes from kernel AND direct neighbours from fdb. Refactor this at is actually a netlink-handler
 			} else if (l3ctx.taskqueue_ctx.fd == events[i].data.fd) {
 				taskqueue_run(&l3ctx.taskqueue_ctx);
 			} else if (l3ctx.routemgr_ctx.fd == events[i].data.fd) {
@@ -144,9 +143,10 @@ void loop() {
 }
 
 void usage() {
-	puts("Usage: l3roamd [-h] [-b <client-bridge>] -a <ip6> -p <prefix> [-i <clientif>] -m <meshif> ... -t <export table> -4 [prefix] -t <nat46if>");
+	puts("Usage: l3roamd [-h] [-d] [-b <client-bridge>] -a <ip6> -p <prefix> [-i <clientif>] -m <meshif> ... -t <export table> [-4 prefix]");
 	puts("  -a <ip6>           ip address of this node");
 	puts("  -b <client-bridge> this is the bridge where all clients are connected");
+	puts("  -d                 use debug logging"); // TODO: do we really need this?
 	puts("  -c <file>          configuration file"); // TODO: do we really need this?
 	puts("  -p <prefix>        Accept queries for this prefix. May be provided multiple times.");
 	puts("  -s <socketpath>    provide statistics and allow control using this socket. See below for usage instructions.");
@@ -154,7 +154,6 @@ void usage() {
 	puts("  -m <meshif>        mesh interface. may be specified multiple times");
 	puts("  -t <export table>  export routes to this table");
 	puts("  -4 <prefix>        IPv4 translation prefix");
-	puts("  -t <nat46if>       interface for nat46");
 	puts("  -h                 this help\n\n");
 	puts("The socket will accept the following commands:");
 	puts("get_clients          The daemon will reply with a json structure, currently providing client count.");
@@ -302,8 +301,13 @@ int main(int argc, char *argv[]) {
 		}
 
 
-	if (!v4_initialized)
-		exit_error("specifying -4 is mandatory even though it is untested and probably broken. If in doubt, use -4 0:0:0:0:0:ffff::/96");
+	if (!v4_initialized) {
+		fprintf(stderr, "-4 was not specified. Defaulting to 0:0:0:0:0:ffff::/96");
+		parse_prefix(&l3ctx.clientmgr_ctx.v4prefix, "0:0:0:0:0:ffff::/96");
+		l3ctx.arp_ctx.prefix = l3ctx.clientmgr_ctx.v4prefix.prefix;
+		v4_initialized=true;
+	}
+
 	if (!a_initialized)
 		exit_error("specifying -a is mandatory");
 	if (!p_initialized)

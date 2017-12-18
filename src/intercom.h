@@ -2,6 +2,8 @@
 
 #include "vector.h"
 #include "if.h"
+#include "clientmgr.h"
+#include "taskqueue.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -46,6 +48,17 @@ typedef struct {
 	char *ifname;
 } intercom_if;
 
+struct claim_task {
+	struct client *client;
+	uint8_t retries_left;
+	const struct in6_addr *recipient;
+	intercom_packet_claim packet;
+	taskqueue_t *check_task;
+};
+
+typedef struct {
+} claim_t;
+
 typedef struct {
 	struct l3ctx *l3ctx;
 	int fd;
@@ -53,9 +66,11 @@ typedef struct {
 	struct in6_addr ip;
 	VECTOR(intercom_packet_hdr) recent_packets;
 	VECTOR(intercom_if) interfaces;
+	VECTOR(client_t) repeatable_claims;
 } intercom_ctx;
 
-struct client;
+
+// struct client;
 
 void intercom_recently_seen_add(intercom_ctx *ctx, intercom_packet_hdr *hdr);
 void intercom_send_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len);
