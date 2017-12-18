@@ -325,11 +325,13 @@ const char *state_str(enum ip_state state) {
 void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip, enum ip_state state) {
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
+	bool nop = false;
 
 	switch (ip->state) {
 		case IP_INACTIVE:
 			switch (state) {
 				case IP_INACTIVE:
+					nop = true;
 					// ignore
 					break;
 				case IP_ACTIVE:
@@ -348,6 +350,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 					client_remove_route(ctx, client, ip);
 					break;
 				case IP_ACTIVE:
+					nop = true;
 					ip->timestamp = now;
 					break;
 				case IP_TENTATIVE:
@@ -366,17 +369,17 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 					client_add_route(ctx, client, ip);
 					break;
 				case IP_TENTATIVE:
+					nop = true;
 					ip->timestamp = now;
 					break;
 			}
 			break;
 	}
 
-	char ip_str[INET6_ADDRSTRLEN];
-	inet_ntop(AF_INET6, &ip->addr, ip_str, INET6_ADDRSTRLEN);
-
-	printf("%s changes from %s to %s\n", ip_str, state_str(ip->state),
-	                                     state_str(state));
+	if (!nop || l3ctx.debug) {
+		print_ip(&ip->addr);
+		printf("changes from %s to %s\n", state_str(ip->state), state_str(state));
+	}
 
 	ip->state = state;
 }
@@ -410,9 +413,17 @@ void clientmgr_remove_address(clientmgr_ctx *ctx, struct in6_addr *address, uint
 void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex) {
 	char str[INET6_ADDRSTRLEN];
 	inet_ntop(AF_INET6, address, str, INET6_ADDRSTRLEN);
-	printf("clientmgr_add_address: %s\n",str);
-	if (!clientmgr_valid_address(ctx, address))
+
+	if (l3ctx.debug)
+		printf("clientmgr_add_address: %s is running",str);
+
+	if (!clientmgr_valid_address(ctx, address)) {
+		if (l3ctx.debug)
+			printf(" but address is not within a client-prefix\n");
 		return;
+	}
+	printf("\n");
+
 
 	struct client *client = get_or_create_client(ctx, mac);
 	struct client_ip *ip = get_client_ip(client, address);
@@ -421,7 +432,7 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 	bool ip_is_new = ip == NULL;
 
 	if (ip_is_new) {
-		printf("Address: %s to client %02x:%02x:%02x:%02x:%02x:%02x\n", str, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+		printf("ADDING Address: %s to client %02x:%02x:%02x:%02x:%02x:%02x\n", str, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 		struct client_ip _ip = {};
 		memcpy(&_ip.addr, address, sizeof(struct in6_addr));
 		VECTOR_ADD(client->addresses, _ip);
@@ -472,7 +483,7 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 	icmp6_send_solicitation(CTX(icmp6), &address);
 }
 
-/** Handle info request.
+/** Handle claim (info request).
   */
 void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[6]) {
 	struct client *client = get_client(ctx, mac);
@@ -490,7 +501,7 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 	if (!client_is_active(client))
 		return;
 
-	printf("Dropping client in response to claim\n");
+	printf("Dropping client %02x:%02x:%02x:%02x:%02x:%02x in response to claim\n",  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
 	for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
 		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
@@ -505,6 +516,10 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
   */
 void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bool relinquished) {
 	struct client *client = get_client(ctx, foreign_client->mac);
+	if (l3ctx.debug) {
+		printf("handling info message in clientmgr_handle_info() for foreign_client");
+		print_client(foreign_client);
+	}
 
 	if (client == NULL || !client_is_active(client))
 		return;
@@ -528,5 +543,6 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bo
 
 	printf("Client info merged ");
 	print_client(client);
+	printf("\n");
 }
 

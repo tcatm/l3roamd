@@ -145,8 +145,9 @@ bool intercom_send_packet_unicast(intercom_ctx *ctx, const struct in6_addr *reci
 	};
 	ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, (struct sockaddr*)&addr, sizeof(addr));
 	if (l3ctx.debug) {
-		printf("sent packet rc: %zi to ", rc);
+		printf("sent intercom packet rc: %zi to ", rc);
 		print_ip(recipient);
+		printf("\n");
 	}
 	if (rc < 0)
 		perror("sendto failed");
@@ -167,7 +168,7 @@ void intercom_send_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len
 
 		ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, (struct sockaddr*)&groupaddr, sizeof(groupaddr));
 		if (l3ctx.debug)
-			printf("sent packet to %s on iface %s rc: %zi\n", INTERCOM_GROUP, iface->ifname,rc);
+			printf("sent intercom packet to %s on iface %s rc: %zi\n", INTERCOM_GROUP, iface->ifname,rc);
 
 		if (rc < 0)
 			iface->ok = false;
@@ -337,8 +338,10 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 	ssize_t packet_len = sizeof(intercom_packet_info) + i * sizeof(intercom_packet_info_entry);
 
 	if (recipient != NULL)
+		// TODO: consider adding resilience here. There *might* be an ACK sensible
 		intercom_send_packet_unicast(ctx, recipient, (uint8_t*)packet, packet_len);
 	else {
+		// forward packet to other l3roamd instances
 		intercom_recently_seen_add(ctx, &packet->hdr);
 
 		intercom_send_packet(ctx, (uint8_t*)packet, packet_len);
@@ -355,17 +358,19 @@ void claim_retry_task(void *d) {
 
 	if (data->recipient != NULL) {
 		if (l3ctx.debug) {
-			printf("   sending unicast claim\n");
+			printf("sending unicast claim for client %02x:%02x:%02x:%02x:%02x:%02x to ",  data->client->mac[0], data->client->mac[1], data->client->mac[2], data->client->mac[3], data->client->mac[4], data->client->mac[5]);
+			print_ip(data->recipient);
+			printf("\n");
 		}
 		intercom_send_packet_unicast(&l3ctx.intercom_ctx, data->recipient, (uint8_t*)&data->packet, sizeof(data->packet));
 	} else {
 		if (l3ctx.debug) {
-			printf("   sending multicast claim\n");
+			printf("sending multicast claim for client %02x:%02x:%02x:%02x:%02x:%02x\n",  data->client->mac[0], data->client->mac[1], data->client->mac[2], data->client->mac[3], data->client->mac[4], data->client->mac[5]);
 		}
 		intercom_send_packet(&l3ctx.intercom_ctx, (uint8_t*)&data->packet, sizeof(data->packet));
 	}
 
-	if (data->retries_left )
+	if (data->retries_left > 0)
 		schedule_claim_retry(data);
 }
 void free_claim_task(void *d) {
@@ -381,8 +386,9 @@ void schedule_claim_retry(struct claim_task *data) {
 	ndata->retries_left = data->retries_left -1;
 	ndata->packet = data->packet;
 	ndata->recipient = data->recipient;
+	ndata->check_task = data->check_task;
 
-	if (data->check_task == NULL)
+	if (data->check_task == NULL && data->retries_left > 0)
 		data->check_task = post_task(&l3ctx.taskqueue_ctx, 3, claim_retry_task, free_claim_task, ndata);
 	else
 		free_claim_task(ndata);
