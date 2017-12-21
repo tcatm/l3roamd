@@ -378,7 +378,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 
 	if (!nop || l3ctx.debug) {
 		print_ip(&ip->addr);
-		printf("changes from %s to %s\n", state_str(ip->state), state_str(state));
+		printf(" changes from %s to %s\n", state_str(ip->state), state_str(state));
 	}
 
 	ip->state = state;
