@@ -1,6 +1,8 @@
 #include "icmp6.h"
 #include "l3roamd.h"
+#include "syscallwrappers.h"
 
+#include <linux/in6.h>
 #include <stddef.h>
 #include <sys/ioctl.h>
 #include <string.h>
@@ -26,8 +28,8 @@ int icmp6_init_packet() {
 	fprog.len = sizeof filter / sizeof filter[0];
 
 	sock = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_IPV6));
-	if (sock < 0)	{
-			perror("Can't create socket(PF_PACKET)");
+	if (sock < 0) {
+		perror("Can't create socket(PF_PACKET)");
 	}
 
 	// Tie the BSD-PF filter to the socket
@@ -49,6 +51,7 @@ void icmp6_init(icmp6_ctx *ctx) {
 	setsockopt_int(fd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, 255);
 	setsockopt_int(fd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, 1);
 	setsockopt_int(fd, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, 1);
+	setsockopt_int(fd, IPPROTO_IPV6, IPV6_AUTOFLOWLABEL, 0);
 
 	struct icmp6_filter filter;
 	ICMP6_FILTER_SETBLOCKALL(&filter);
@@ -129,6 +132,8 @@ void icmp6_interface_changed(icmp6_ctx *ctx, int type, const struct ifinfomsg *m
 
 struct __attribute__((__packed__)) sol_packet {
 	struct nd_neighbor_solicit hdr;
+//	struct nd_opt_hdr opt_nonce;
+//	uint8_t nonce_data[6];
 	struct nd_opt_hdr opt;
 	uint8_t hw_addr[6];
 };
@@ -236,26 +241,50 @@ void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 	if (!strlen(ctx->clientif))
 		return;
 
-	struct sol_packet packet;
+	struct sol_packet packet = {};
+//	uint8_t nonce[6] = {};
 
+//	obtainrandom(nonce, 6, 0);
+
+	memset(&packet, 0, sizeof(packet));
+	memset(&packet.hdr, 0, sizeof(packet.hdr));
+	
 	packet.hdr.nd_ns_hdr.icmp6_type = ND_NEIGHBOR_SOLICIT;
 	packet.hdr.nd_ns_hdr.icmp6_code = 0;
-	packet.hdr.nd_ns_hdr.icmp6_cksum = 0;
-	packet.hdr.nd_ns_reserved = 0;
+	packet.hdr.nd_ns_hdr.icmp6_cksum = htons(0);
+	packet.hdr.nd_ns_reserved = htonl(0);
+
 	memcpy(&packet.hdr.nd_ns_target, addr, 16);
 
 	packet.opt.nd_opt_type = ND_OPT_SOURCE_LINKADDR;
 	packet.opt.nd_opt_len = 1;
+
 	memcpy(packet.hw_addr, ctx->mac, 6);
 
 	struct sockaddr_in6 dst = {};
 	dst.sin6_family = AF_INET6;
-	memcpy(&dst.sin6_addr, addr, 16);
-	memcpy(&dst.sin6_addr, "\xff\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\xff", 13);
+	dst.sin6_flowinfo = 0;
 
+	// RFC2461 dst address are multicast when the node needs to resolve an address and unicast when the node seeks to verify the existence of a neighbor
+	// Whenever we send a solicitation, we never know whether it is a client, hence always using multi-cast
+// this tries the broadcast address for this very IP	
+//	memcpy(&dst.sin6_addr, addr, 16);
+//	memcpy(&dst.sin6_addr, "\xff\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\xff", 13);
+// this tries the all-nodes-address
+	memcpy(&dst.sin6_addr, "\xff\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01", 16);
+	
 	char str[INET6_ADDRSTRLEN];
 	inet_ntop(AF_INET6, &dst.sin6_addr, str, sizeof str);
-	printf("Send NS to %s\n", str);
 
-	sendto(ctx->fd, &packet, sizeof(packet), 0, &dst, sizeof(dst));
+	int len=0;
+	while (len <= 0 ){
+//		printf("nonce - size: %i %p\n", packet.opt_nonce.nd_opt_len, (void*)&packet.opt_nonce.nd_opt_len);
+		len = sendto(ctx->fd, &packet, sizeof(packet), 0, &dst, sizeof(dst));
+		printf("sending NS to %s %i\n", str, len);
+		if (len < 0)
+			perror("Error happened, retrying");
+	}
+
+	printf("Sent NS to %s %i\n", str, len);
+
 }
