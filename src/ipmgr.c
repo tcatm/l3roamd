@@ -90,8 +90,11 @@ struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 			print_ip(&e->address);
 			printf("\n");
 		}
-		if (memcmp(k, &(e->address), sizeof(struct in6_addr)) == 0)
+		if (memcmp(k, &(e->address), sizeof(struct in6_addr)) == 0) {
+			if (l3ctx.debug)
+				printf(" ... match\n");
 			return e;
+		}
 	}
 
 	return NULL;
