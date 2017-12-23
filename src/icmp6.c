@@ -199,7 +199,6 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 }
 
 void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
-	char str[INET6_ADDRSTRLEN];
 	struct msghdr msghdr;
 	memset (&msghdr, 0, sizeof (msghdr));
 
@@ -237,8 +236,6 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 	// and override bit is set (i.e. a MAC is supplied)
 	if ((packet.hdr.nd_na_hdr.icmp6_dataun.icmp6_un_data8[0] & 0x60) != 0x60)
 		return;
-
-	inet_ntop(AF_INET6, &packet.hdr.nd_na_target, str, INET6_ADDRSTRLEN);
 
 	clientmgr_add_address(CTX(clientmgr), &packet.hdr.nd_na_target, packet.hw_addr, ctx->ifindex);
 }
