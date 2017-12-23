@@ -1,6 +1,5 @@
 #include "icmp6.h"
 #include "l3roamd.h"
-#include "syscallwrappers.h"
 
 #include <linux/in6.h>
 #include <stddef.h>
@@ -134,8 +133,6 @@ void icmp6_interface_changed(icmp6_ctx *ctx, int type, const struct ifinfomsg *m
 
 struct __attribute__((__packed__)) sol_packet {
 	struct nd_neighbor_solicit hdr;
-//	struct nd_opt_hdr opt_nonce;
-//	uint8_t nonce_data[6];
 	struct nd_opt_hdr opt;
 	uint8_t hw_addr[6];
 };
@@ -247,15 +244,10 @@ void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 		return;
 
 	struct sol_packet packet = {};
-	uint8_t nonce[6] = {};
-
-	obtainrandom(nonce, 6, 0);
-
-//	obtainrandom(nonce, 6, 0);
 
 	memset(&packet, 0, sizeof(packet));
 	memset(&packet.hdr, 0, sizeof(packet.hdr));
-	
+
 	packet.hdr.nd_ns_hdr.icmp6_type = ND_NEIGHBOR_SOLICIT;
 	packet.hdr.nd_ns_hdr.icmp6_code = 0;
 	packet.hdr.nd_ns_hdr.icmp6_cksum = htons(0);
@@ -282,7 +274,6 @@ void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 
 	int len=0;
 	while (len <= 0 ){
-		printf("nonce - size: %i %p\n", packet.opt_nonce.nd_opt_len, (void*)&packet.opt_nonce.nd_opt_len);
 		len = sendto(ctx->fd, &packet, sizeof(packet), 0, (struct sockaddr*)&dst, sizeof(dst));
 		printf("sent NS to %s %i\n", str, len);
 		if (len < 0)
