@@ -98,6 +98,8 @@ void icmp6_setup_interface(icmp6_ctx *ctx) {
 	lladdr.sll_hatype = 0;
 	lladdr.sll_pkttype = 0;
 	lladdr.sll_halen = ETH_ALEN;
+
+	bind(ctx->fd, (struct sockaddr *)&lladdr, sizeof(lladdr));
 	bind(ctx->nsfd, (struct sockaddr *)&lladdr, sizeof(lladdr));
 
 	ctx->ifindex = req.ifr_ifindex;
@@ -281,8 +283,8 @@ void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 	int len=0;
 	while (len <= 0 ){
 		printf("nonce - size: %i %p\n", packet.opt_nonce.nd_opt_len, (void*)&packet.opt_nonce.nd_opt_len);
-		len = sendto(ctx->fd, &packet, sizeof(packet), 0, &dst, sizeof(dst));
-		printf("sending NS to %s %i\n", str, len);
+		len = sendto(ctx->fd, &packet, sizeof(packet), 0, (struct sockaddr*)&dst, sizeof(dst));
+		printf("sent NS to %s %i\n", str, len);
 		if (len < 0)
 			perror("Error happened, retrying");
 	}
