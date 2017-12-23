@@ -188,12 +188,6 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 		printf("  Target: %s\n", str);
 
 		clientmgr_add_address(CTX(clientmgr), &packet.sol.hdr.nd_ns_target, mac, ctx->ifindex);
-
-		if (clientmgr_valid_address(&l3ctx.clientmgr_ctx, &packet.hdr.ip6_src)) {
-			if (l3ctx.debug)
-				printf("Adding neighbor %s (MAC %02x:%02x:%02x:%02x:%02x:%02x)\n", str, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-			routemgr_insert_neighbor(&l3ctx.routemgr_ctx, l3ctx.routemgr_ctx.clientif_index, &packet.hdr.ip6_src, mac);
-		}
 	}
 }
 
