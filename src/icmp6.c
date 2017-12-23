@@ -269,12 +269,9 @@ void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 
 	// RFC2461 dst address are multicast when the node needs to resolve an address and unicast when the node seeks to verify the existence of a neighbor
 	// Whenever we send a solicitation, we never know whether it is a client, hence always using multi-cast
-// this tries the broadcast address for this very IP	
-//	memcpy(&dst.sin6_addr, addr, 16);
-//	memcpy(&dst.sin6_addr, "\xff\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\xff", 13);
-// this tries the all-nodes-address
-	memcpy(&dst.sin6_addr, "\xff\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01", 16);
-	
+	memcpy(&dst.sin6_addr, addr, 16);
+	memcpy(&dst.sin6_addr, "\xff\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\xff", 13);
+
 	char str[INET6_ADDRSTRLEN];
 	inet_ntop(AF_INET6, &dst.sin6_addr, str, sizeof str);
 
