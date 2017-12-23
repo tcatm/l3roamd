@@ -242,7 +242,9 @@ void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 		return;
 
 	struct sol_packet packet = {};
-//	uint8_t nonce[6] = {};
+	uint8_t nonce[6] = {};
+
+	obtainrandom(nonce, 6, 0);
 
 //	obtainrandom(nonce, 6, 0);
 
@@ -278,6 +280,7 @@ void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 
 	int len=0;
 	while (len <= 0 ){
+		printf("nonce - size: %i %p\n", packet.opt_nonce.nd_opt_len, (void*)&packet.opt_nonce.nd_opt_len);
 		len = sendto(ctx->fd, &packet, sizeof(packet), 0, &dst, sizeof(dst));
 		printf("sending NS to %s %i\n", str, len);
 		if (len < 0)
