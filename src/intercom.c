@@ -167,9 +167,11 @@ void intercom_send_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len
 		groupaddr.sin6_scope_id = iface->ifindex;
 
 		ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, (struct sockaddr*)&groupaddr, sizeof(groupaddr));
-		if (l3ctx.debug)
-			printf("sent intercom packet to %s on iface %s rc: %zi\n", INTERCOM_GROUP, iface->ifname,rc);
-
+		if (l3ctx.debug) {
+			char str[INET6_ADDRSTRLEN+1];
+			inet_ntop(AF_INET6, &groupaddr, str, INET6_ADDRSTRLEN);
+			printf("sent intercom packet to %s on iface %s rc: %zi\n",str , iface->ifname,rc);
+		}
 		if (rc < 0)
 			iface->ok = false;
 	}
