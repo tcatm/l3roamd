@@ -336,6 +336,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 					break;
 				case IP_ACTIVE:
 					client_add_route(ctx, client, ip);
+					routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr , client->mac);
 					ip->timestamp = now;
 					break;
 				case IP_TENTATIVE:
@@ -367,6 +368,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 				case IP_ACTIVE:
 					ip->timestamp = now;
 					client_add_route(ctx, client, ip);
+					routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr , client->mac);
 					break;
 				case IP_TENTATIVE:
 					nop = true;
