@@ -62,6 +62,21 @@ void add_fd(int efd, int fd, uint32_t events) {
 		exit_error("epoll_ctl");
 }
 
+void sig_term_handler(int signum, siginfo_t *info, void *ptr)
+{
+	write(STDERR_FILENO, SIGTERM_MSG, sizeof(SIGTERM_MSG));
+	int j = VECTOR_LEN(l3ctx.clientmgr_ctx.prefixes);
+
+	struct prefix _prefix = {};
+	for (int i=j;i>0;i--) {
+		del_prefix(&l3ctx.clientmgr_ctx.prefixes, _prefix);
+		routemgr_remove_route(&l3ctx.routemgr_ctx, 254, (struct in6_addr*)(_prefix.prefix.s6_addr), _prefix.plen );
+	}
+	clientmgr_purge_clients(&l3ctx.clientmgr_ctx);
+	_exit(EXIT_SUCCESS);
+}
+
+
 void loop() {
 	int efd;
 	int maxevents = 64;
@@ -108,8 +123,9 @@ void loop() {
 		n = epoll_wait(efd, events, maxevents, -1);
 		for(int i = 0; i < n; i++) {
 			if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)) {
-				fprintf(stderr, "epoll error\n");
+				fprintf(stderr, "epoll error. This could be a bug. Exiting now.\n");
 				close(events[i].data.fd);
+				sig_term_handler(0, 0, 0);
 				// TODO: routemgr is handling routes from kernel AND direct neighbours from fdb. Refactor this at is actually a netlink-handler
 			} else if (l3ctx.taskqueue_ctx.fd == events[i].data.fd) {
 				taskqueue_run(&l3ctx.taskqueue_ctx);
@@ -167,20 +183,6 @@ void interfaces_changed(int type, const struct ifinfomsg *msg) {
 	intercom_update_interfaces(&l3ctx.intercom_ctx);
 	icmp6_interface_changed(&l3ctx.icmp6_ctx, type, msg);
 	arp_interface_changed(&l3ctx.arp_ctx, type, msg);
-}
-
-void sig_term_handler(int signum, siginfo_t *info, void *ptr)
-{
-	write(STDERR_FILENO, SIGTERM_MSG, sizeof(SIGTERM_MSG));
-	int j = VECTOR_LEN(l3ctx.clientmgr_ctx.prefixes);
-
-	struct prefix _prefix = {};
-	for (int i=j;i>0;i--) {
-		del_prefix(&l3ctx.clientmgr_ctx.prefixes, _prefix);
-		routemgr_remove_route(&l3ctx.routemgr_ctx, 254, (struct in6_addr*)(_prefix.prefix.s6_addr), _prefix.plen );
-	}
-	clientmgr_purge_clients(&l3ctx.clientmgr_ctx);
-	_exit(EXIT_SUCCESS);
 }
 
 

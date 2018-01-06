@@ -1,6 +1,5 @@
 #include "icmp6.h"
 #include "l3roamd.h"
-#include "syscallwrappers.h"
 
 #include <linux/in6.h>
 #include <stddef.h>
@@ -98,6 +97,8 @@ void icmp6_setup_interface(icmp6_ctx *ctx) {
 	lladdr.sll_hatype = 0;
 	lladdr.sll_pkttype = 0;
 	lladdr.sll_halen = ETH_ALEN;
+
+	bind(ctx->fd, (struct sockaddr *)&lladdr, sizeof(lladdr));
 	bind(ctx->nsfd, (struct sockaddr *)&lladdr, sizeof(lladdr));
 
 	ctx->ifindex = req.ifr_ifindex;
@@ -132,8 +133,6 @@ void icmp6_interface_changed(icmp6_ctx *ctx, int type, const struct ifinfomsg *m
 
 struct __attribute__((__packed__)) sol_packet {
 	struct nd_neighbor_solicit hdr;
-//	struct nd_opt_hdr opt_nonce;
-//	uint8_t nonce_data[6];
 	struct nd_opt_hdr opt;
 	uint8_t hw_addr[6];
 };
@@ -193,7 +192,6 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 }
 
 void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
-	char str[INET6_ADDRSTRLEN];
 	struct msghdr msghdr;
 	memset (&msghdr, 0, sizeof (msghdr));
 
@@ -232,8 +230,6 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 	if ((packet.hdr.nd_na_hdr.icmp6_dataun.icmp6_un_data8[0] & 0x60) != 0x60)
 		return;
 
-	inet_ntop(AF_INET6, &packet.hdr.nd_na_target, str, INET6_ADDRSTRLEN);
-
 	clientmgr_add_address(CTX(clientmgr), &packet.hdr.nd_na_target, packet.hw_addr, ctx->ifindex);
 }
 
@@ -242,13 +238,10 @@ void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 		return;
 
 	struct sol_packet packet = {};
-//	uint8_t nonce[6] = {};
-
-//	obtainrandom(nonce, 6, 0);
 
 	memset(&packet, 0, sizeof(packet));
 	memset(&packet.hdr, 0, sizeof(packet.hdr));
-	
+
 	packet.hdr.nd_ns_hdr.icmp6_type = ND_NEIGHBOR_SOLICIT;
 	packet.hdr.nd_ns_hdr.icmp6_code = 0;
 	packet.hdr.nd_ns_hdr.icmp6_cksum = htons(0);
@@ -267,20 +260,16 @@ void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 
 	// RFC2461 dst address are multicast when the node needs to resolve an address and unicast when the node seeks to verify the existence of a neighbor
 	// Whenever we send a solicitation, we never know whether it is a client, hence always using multi-cast
-// this tries the broadcast address for this very IP	
-//	memcpy(&dst.sin6_addr, addr, 16);
-//	memcpy(&dst.sin6_addr, "\xff\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\xff", 13);
-// this tries the all-nodes-address
-	memcpy(&dst.sin6_addr, "\xff\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01", 16);
-	
+	memcpy(&dst.sin6_addr, addr, 16);
+	memcpy(&dst.sin6_addr, "\xff\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\xff", 13);
+
 	char str[INET6_ADDRSTRLEN];
 	inet_ntop(AF_INET6, &dst.sin6_addr, str, sizeof str);
 
 	int len=0;
 	while (len <= 0 ){
-//		printf("nonce - size: %i %p\n", packet.opt_nonce.nd_opt_len, (void*)&packet.opt_nonce.nd_opt_len);
-		len = sendto(ctx->fd, &packet, sizeof(packet), 0, &dst, sizeof(dst));
-		printf("sending NS to %s %i\n", str, len);
+		len = sendto(ctx->fd, &packet, sizeof(packet), 0, (struct sockaddr*)&dst, sizeof(dst));
+		printf("sent NS to %s %i\n", str, len);
 		if (len < 0)
 			perror("Error happened, retrying");
 	}

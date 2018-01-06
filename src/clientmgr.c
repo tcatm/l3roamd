@@ -336,6 +336,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 					break;
 				case IP_ACTIVE:
 					client_add_route(ctx, client, ip);
+					routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr , client->mac);
 					ip->timestamp = now;
 					break;
 				case IP_TENTATIVE:
@@ -367,6 +368,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 				case IP_ACTIVE:
 					ip->timestamp = now;
 					client_add_route(ctx, client, ip);
+					routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr , client->mac);
 					break;
 				case IP_TENTATIVE:
 					nop = true;
@@ -465,7 +467,9 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
 
-	client->ifindex = ifindex;
+	// TODO It is rather nasty to hard-code the client-interface here but it might work around an issue where clients in the neighbour table end up with NUD_FAILED
+	// this means that we cannot support multiple client interfaces and that we absolutely need the client bridge.
+	client->ifindex = l3ctx.routemgr_ctx.clientif_index;
 
 	if (!intercom_claim(CTX(intercom), NULL, client)) {
 		fprintf(stderr, "Claim failed for %02x:%02x:%02x:%02x:%02x:%02x.\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5] );
@@ -478,7 +482,7 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 		if (ip->state == IP_TENTATIVE || ip->state == IP_INACTIVE)
 			client_ip_set_state(ctx, client, ip, IP_TENTATIVE);
 	}
-
+// TODO we are called because nl80211 or neighbour code noticed a new neighbour. Do we really need to send a NS here?
 	struct in6_addr address = mac2ipv6(client->mac);
 	icmp6_send_solicitation(CTX(icmp6), &address);
 }
