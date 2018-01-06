@@ -25,6 +25,7 @@
 
 // TODO EPOLLOUT beim schreiben auf den tunfd
 
+#include "version.h"
 #include "vector.h"
 #include "ipmgr.h"
 #include "error.h"
@@ -170,6 +171,7 @@ void usage() {
 	puts("  -m <meshif>        mesh interface. may be specified multiple times");
 	puts("  -t <export table>  export routes to this table");
 	puts("  -4 <prefix>        IPv4 translation prefix");
+        puts("  -V                 show version information");
 	puts("  -h                 this help\n\n");
 	puts("The socket will accept the following commands:");
 	puts("get_clients          The daemon will reply with a json structure, currently providing client count.");
@@ -228,8 +230,15 @@ int main(int argc, char *argv[]) {
 	l3ctx.debug = false;
 
 	int c;
-	while ((c = getopt(argc, argv, "dha:b:p:i:m:t:c:4:n:s:d")) != -1)
+	while ((c = getopt(argc, argv, "dha:b:p:i:m:t:c:4:n:s:d:V")) != -1)
 		switch (c) {
+                        case 'V':
+                                printf("l3roamd %s\n", SOURCE_VERSION);
+#if defined(GIT_BRANCH) && defined(GIT_COMMIT_HASH)
+                                printf("branch: %s\n", GIT_BRANCH);
+                                printf("commit: %s\n", GIT_COMMIT_HASH);
+#endif
+                                exit(EXIT_SUCCESS);
 			case 'b':
 				free(l3ctx.routemgr_ctx.client_bridge);
 				l3ctx.routemgr_ctx.client_bridge = strdupa(optarg);
