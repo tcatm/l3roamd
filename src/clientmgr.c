@@ -139,7 +139,7 @@ void remove_special_ip(clientmgr_ctx *ctx, struct client *client) {
 	rtnl_remove_address(CTX(routemgr), &address);
 }
 
-/** Given an IP address returns the IP object of a client.
+/** Given an IP address returns the client-object of a client.
     Returns NULL if no object is found.
     */
 struct client_ip *get_client_ip(struct client *client, const struct in6_addr *address) {
