@@ -467,9 +467,10 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
 
-	// TODO It is rather nasty to hard-code the client-interface here but it might work around an issue where clients in the neighbour table end up with NUD_FAILED
+	// TODO It is rather nasty to hard-code the client-interface here. Still, all clients should appear on the client-interface, not anywhere else. Using the fdb detection mechanism, clients might end up appearing on the client bridge or somewhere else which should be prevented.
 	// this means that we cannot support multiple client interfaces and that we absolutely need the client bridge.
-	client->ifindex = l3ctx.routemgr_ctx.clientif_index;
+	// TODO: THIS IS NOW THE ONLY CHANGE IN CLIENT DETECTION CODE. IF NEXT VERSION DOES NOT BREAK FOR JASON,REMOVE THIS WHOLE COMMENTED SECTION
+	// client->ifindex = l3ctx.routemgr_ctx.clientif_index;
 
 	if (!intercom_claim(CTX(intercom), NULL, client)) {
 		fprintf(stderr, "Claim failed for %02x:%02x:%02x:%02x:%02x:%02x.\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5] );
