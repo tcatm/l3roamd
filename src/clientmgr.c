@@ -410,7 +410,18 @@ bool clientmgr_is_ipv4(clientmgr_ctx *ctx, struct in6_addr *address) {
 /** Remove an address from a client identified by its MAC.
 **/
 void clientmgr_remove_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex) {
-	fprintf(stderr, "TODO: clientmgr_remove_address - currently not implemented\n");
+	if (l3ctx.debug) {
+		char str[INET6_ADDRSTRLEN];
+		inet_ntop(AF_INET6, address, str, INET6_ADDRSTRLEN);
+		printf("clientmgr_remove_address: %s is running",str);
+	}
+
+	struct client *client = get_client(ctx, mac);
+	if (client) {
+		delete_client_ip(client, address);
+	}
+
+	routemgr_remove_neighbor(&l3ctx.routemgr_ctx, client->ifindex, address, mac);
 }
 
 /** Add a new address to a client identified by its MAC.
