@@ -13,25 +13,6 @@ static int rtnl_addattr(struct nlmsghdr *n, int maxlen, int type, void *data, in
 static void rtmgr_rtnl_talk(routemgr_ctx *ctx, struct nlmsghdr *req);
 
 
-void routemgr_remove_neighbour(routemgr_ctx *ctx, const int ifindex, uint8_t mac[6]) {
-	struct nlneighreq req = {
-		.nl = {
-			.nlmsg_type = RTM_DELNEIGH,
-			.nlmsg_flags = NLM_F_REQUEST,
-			.nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg)),
-		},
-		.nd = {
-			.ndm_family = AF_INET6,
-			.ndm_state = NUD_PERMANENT,
-			.ndm_ifindex = ifindex,
-		},
-	};
-
-	rtnl_addattr(&req.nl, sizeof(req), NDA_LLADDR, mac, sizeof(uint8_t) * 6);
-
-	rtmgr_rtnl_talk(ctx, (struct nlmsghdr*)&req);
-}
-
 
 
 int parse_rtattr_flags(struct rtattr *tb[], int max, struct rtattr *rta,
