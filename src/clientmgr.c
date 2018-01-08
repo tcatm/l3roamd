@@ -350,6 +350,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 				case IP_INACTIVE:
 					ip->timestamp = now;
 					client_remove_route(ctx, client, ip);
+					routemgr_remove_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr, client->mac);
 					break;
 				case IP_ACTIVE:
 					nop = true;
@@ -365,6 +366,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 				case IP_INACTIVE:
 					ip->timestamp = now;
 					client_remove_route(ctx, client, ip);
+					routemgr_remove_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr, client->mac);
 					break;
 				case IP_ACTIVE:
 					ip->timestamp = now;
