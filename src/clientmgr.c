@@ -525,14 +525,7 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 		return;
 
 	printf("Dropping client %02x:%02x:%02x:%02x:%02x:%02x in response to claim\n",  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-
-	for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
-		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
-
-		if (ip->state == IP_ACTIVE || ip->state == IP_TENTATIVE)
-			client_ip_set_state(ctx, client, ip, IP_INACTIVE);
-	}
-
+	clientmgr_delete_client(ctx, mac);
 }
 
 /** Handle incoming client info.
