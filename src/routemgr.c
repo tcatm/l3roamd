@@ -387,14 +387,15 @@ void routemgr_insert_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_a
 void routemgr_remove_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_addr *address, uint8_t mac[6]) {
 	struct nlneighreq req = {
 		.nl = {
-			.nlmsg_type = RTM_NEWNEIGH,
-			.nlmsg_flags = NLM_F_REQUEST,
+			.nlmsg_type = RTM_DELNEIGH,
+			.nlmsg_flags = NLM_F_REQUEST | NLM_F_REPLACE,
 			.nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg)),
 		},
 		.nd = {
 			.ndm_family = AF_INET6,
 			.ndm_state = NUD_NONE,
 			.ndm_ifindex = ifindex,
+			.ndm_flags = NTF_PROXY
 		},
 	};
 
