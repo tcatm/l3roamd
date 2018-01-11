@@ -35,9 +35,9 @@ void mac_addr_n2a(char *mac_addr, unsigned char *arg) {
 //	snprintf(&addr_str[0], INET6_ADDRSTRLEN, "ff02::1:ff%02x:%02x%02x", mac[3], mac[4], mac[5]);
 //}
 
-struct in6_addr mac2ipv6(uint8_t mac[6]) {
+struct in6_addr mac2ipv6(uint8_t mac[6], char * prefix) {
 	struct in6_addr address = {};
-	inet_pton(AF_INET6, NODE_CLIENT_PREFIX, &address);
+	inet_pton(AF_INET6, prefix, &address);
 
 	address.s6_addr[8] = mac[0] ^ 0x02;
 	address.s6_addr[9] = mac[1];
@@ -126,7 +126,7 @@ bool client_is_active(const struct client *client) {
 /** Adds the special node client IP address.
   */
 void add_special_ip(clientmgr_ctx *ctx, struct client *client) {
-	struct in6_addr address = mac2ipv6(client->mac);
+	struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
 	printf("Adding special address\n");
 	rtnl_add_address(CTX(routemgr), &address);
 }
@@ -134,7 +134,7 @@ void add_special_ip(clientmgr_ctx *ctx, struct client *client) {
 /** Removes the special node client IP address.
   */
 void remove_special_ip(clientmgr_ctx *ctx, struct client *client) {
-	struct in6_addr address = mac2ipv6(client->mac);
+	struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
 	printf("Removing special address\n");
 	rtnl_remove_address(CTX(routemgr), &address);
 }
@@ -462,7 +462,8 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 	client_ip_set_state(ctx, client, ip, IP_ACTIVE);
 
 	if (!was_active) {
-		if (!intercom_claim(CTX(intercom), NULL, client))
+		struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
+		if (!intercom_claim(CTX(intercom), &address, client))
 			add_special_ip(ctx, client);
 	}
 
@@ -482,15 +483,14 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 
 	printf("\033[34mnew client %s on %s\033[0m\n", mac_str, ifname);
 
-	struct timespec now;
-	clock_gettime(CLOCK_MONOTONIC, &now);
-
 	// TODO It is rather nasty to hard-code the client-interface here. Still, all clients should appear on the client-interface, not anywhere else. Using the fdb detection mechanism, clients might end up appearing on the client bridge or somewhere else which should be prevented.
 	// this means that we cannot support multiple client interfaces and that we absolutely need the client bridge.
 	// TODO: THIS IS NOW THE ONLY CHANGE IN CLIENT DETECTION CODE. IF NEXT VERSION DOES NOT BREAK FOR JASON,REMOVE THIS WHOLE COMMENTED SECTION
 	// client->ifindex = l3ctx.routemgr_ctx.clientif_index;
 
-	if (!intercom_claim(CTX(intercom), NULL, client)) {
+	struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
+
+	if (!intercom_claim(CTX(intercom), &address, client)) {
 		fprintf(stderr, "Claim failed for %s.\n", mac_str);
 		add_special_ip(ctx, client);
 	}
@@ -502,7 +502,7 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 			client_ip_set_state(ctx, client, ip, IP_TENTATIVE);
 	}
 // TODO we are called because nl80211 or neighbour code noticed a new neighbour. Do we really need to send a NS here?
-	struct in6_addr address = mac2ipv6(client->mac);
+// prefix does not matter here, icmp6_send_solicitation will overwrite the first 13 bytes of the address.
 	icmp6_send_solicitation(CTX(icmp6), &address);
 }
 
