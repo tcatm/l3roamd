@@ -25,6 +25,7 @@
 
 #include <stdio.h>
 #include <unistd.h>
+#include <json-c/json.h>
 
 #include "socket.h"
 #include "error.h"
@@ -82,6 +83,63 @@ bool parse_command(char *cmd, enum socket_command *scmd) {
 	return false;
 }
 
+/*
+void get_prefixes(struct json_object *obj) {
+	for (int i = 0; i < VECTOR_LEN(ctx->prefixes); i++) {
+		struct prefix *_prefix = &VECTOR_INDEX(ctx->prefixes, i);
+		if (prefix_contains(_prefix ,address))
+			return true;
+	}
+}
+*/
+
+void get_clients(struct json_object *obj) {
+	int i = 0, j = 0;
+	struct json_object *jclients = json_object_new_object();
+
+	json_object_object_add(obj, "clients", json_object_new_int(VECTOR_LEN(l3ctx.clientmgr_ctx.clients)));
+
+	for (i = 0; i < VECTOR_LEN(l3ctx.clientmgr_ctx.clients); i++) {
+		struct client *_client = &VECTOR_INDEX(l3ctx.clientmgr_ctx.clients, i);
+		struct json_object *jclient = json_object_new_object();
+
+		char mac[18] = {};
+		mac_addr_n2a(mac, _client->mac);
+		char ifname[IFNAMSIZ] = "";
+
+		if_indextoname(_client->ifindex, ifname);
+		json_object_object_add(jclient, "interface", json_object_new_string(ifname));
+
+		struct json_object *addresses = json_object_new_object();
+		for (j = 0;j<VECTOR_LEN(_client->addresses);j++) {
+			struct json_object *address = json_object_new_object();
+			struct client_ip *_client_ip = &VECTOR_INDEX(_client->addresses, j);
+			char ip_str[INET6_ADDRSTRLEN] = "";
+			inet_ntop(AF_INET6, &_client_ip->addr, ip_str, INET6_ADDRSTRLEN);
+			json_object_object_add(address, "state", json_object_new_int(_client_ip->state));
+
+			json_object_object_add(addresses , ip_str, address);
+		}
+
+		if (j) {
+			json_object_object_add(jclient, "addresses", addresses);
+		}
+		else {
+			json_object_put(addresses);
+		}
+
+		json_object_object_add(jclients,mac, jclient);
+	}
+
+	if (i) {
+		json_object_object_add(obj,"clients", jclients);
+	}
+	else {
+		json_object_put(jclients);
+	}
+
+}
+
 void socket_handle_in(socket_ctx *ctx) {
 	int fd = accept(ctx->fd, NULL, NULL);
 	char line[LINEBUFFER_SIZE];
@@ -105,10 +163,13 @@ void socket_handle_in(socket_ctx *ctx) {
 	}
 
 	struct prefix _prefix = {};
+	struct json_object *retval = json_object_new_object();
 
 	switch (cmd) {
 		case GET_CLIENTS:
-			dprintf(fd, "{\"clients\":%zu}", VECTOR_LEN(CTX(clientmgr)->clients));
+			get_clients(retval);
+			dprintf(fd, json_object_to_json_string(retval));
+			json_object_put(retval);
 			break;
 		case ADD_PREFIX:
 			if (parse_prefix(&_prefix, &line[11])) {
