@@ -128,10 +128,10 @@ void seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
 	struct ip_task *data = calloc(1, sizeof(struct ip_task));
 
 	data->ctx = ctx;
-	data->address = *addr;
+	memcpy(&data->address, addr, sizeof(struct in6_addr));
 
 	if (data->check_task == NULL)
-		data->check_task = post_task(CTX(taskqueue), 1, 0, seek_task, free, data);
+		data->check_task = post_task(CTX(taskqueue), 0, 100, seek_task, free, data);
 	else
 		free(data);
 }
