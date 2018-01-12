@@ -501,7 +501,6 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 		if (ip->state == IP_TENTATIVE || ip->state == IP_INACTIVE)
 			client_ip_set_state(ctx, client, ip, IP_TENTATIVE);
 	}
-// TODO we are called because nl80211 or neighbour code noticed a new neighbour. Do we really need to send a NS here?
 // prefix does not matter here, icmp6_send_solicitation will overwrite the first 13 bytes of the address.
 	icmp6_send_solicitation(CTX(icmp6), &address);
 }
