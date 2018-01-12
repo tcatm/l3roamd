@@ -213,6 +213,14 @@ void intercom_handle_claim(intercom_ctx *ctx, intercom_packet_claim *packet) {
 
 /** Finds the entry for a peer with a specified ID in the array \e ctx.peers */
 /*
+static int peer_id_cmp(fastd_peer_t *const *a, fastd_peer_t *const *b) {
+if ((*a)->id == (*b)->id)
+return 0;
+else if ((*a)->id < (*b)->id)
+return -1;
+else
+return 1;
+}
 static fastd_peer_t ** peer_p_find_by_id(uint64_t id) {
 	fastd_peer_t key = {.id = id};
 	fastd_peer_t *const keyp = &key;
@@ -391,7 +399,7 @@ void schedule_claim_retry(struct claim_task *data) {
 	ndata->check_task = data->check_task;
 
 	if (data->check_task == NULL && data->retries_left > 0)
-		data->check_task = post_task(&l3ctx.taskqueue_ctx, 3, claim_retry_task, free_claim_task, ndata);
+		data->check_task = post_task(&l3ctx.taskqueue_ctx, 1, 0, claim_retry_task, free_claim_task, ndata);
 	else
 		free_claim_task(ndata);
 }

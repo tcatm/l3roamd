@@ -131,7 +131,7 @@ void seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
 	data->address = *addr;
 
 	if (data->check_task == NULL)
-		data->check_task = post_task(CTX(taskqueue), 1, seek_task, free, data);
+		data->check_task = post_task(CTX(taskqueue), 1, 0, seek_task, free, data);
 	else
 		free(data);
 }
@@ -200,7 +200,7 @@ void schedule_ipcheck(ipmgr_ctx *ctx, struct entry *e) {
 	data->address = e->address;
 
 	if (e->check_task == NULL)
-		e->check_task = post_task(CTX(taskqueue), IPCHECK_INTERVAL, ipcheck_task, free, data);
+		e->check_task = post_task(CTX(taskqueue), IPCHECK_INTERVAL, 0, ipcheck_task, free, data);
 	else
 		free(data);
 }

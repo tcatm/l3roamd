@@ -38,12 +38,13 @@ void taskqueue_init(taskqueue_ctx *ctx) {
 }
 
 /** Enqueues a new task. A task with a timeout of zero is scheduled immediately. */
-taskqueue_t * post_task(taskqueue_ctx *ctx, unsigned int timeout, void (*function)(void*), void (*cleanup)(void*), void *data) {
+taskqueue_t * post_task(taskqueue_ctx *ctx, unsigned int timeout, int millisecs, void (*function)(void*), void (*cleanup)(void*), void *data) {
 	taskqueue_t *task = calloc(1, sizeof(taskqueue_t));
 
 	clock_gettime(CLOCK_MONOTONIC, &task->due);
 
 	task->due.tv_sec += timeout;
+	task->due.tv_nsec += millisecs*1000;
 	task->function = function;
 	task->cleanup = cleanup;
 	task->data = data;
