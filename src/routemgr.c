@@ -48,6 +48,11 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	if (tb[NDA_LLADDR]) {
 		mac_addr_n2a(mac_str, RTA_DATA(tb[NDA_LLADDR]));
 	}
+	
+	char ip_str[INET6_ADDRSTRLEN+1] = "";
+	if (tb[NDA_DST]) {
+		inet_ntop(AF_INET6, RTA_DATA(tb[NDA_DST]), ip_str, INET6_ADDRSTRLEN);
+	}
 
 	if_indextoname(msg->ndm_ifindex, ifname);
 	unsigned int br_index = if_nametoindex(ctx->client_bridge);
@@ -63,21 +68,20 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 				switch (nh->nlmsg_type) {
 					case RTM_NEWNEIGH:
 						if (msg->ndm_state & NUD_REACHABLE) {
-							printf("MAC-(STATUS)-CHANGE, %s\n", mac_str) ;
+							printf("MAC-(STATUS)-CHANGE to NUD_REACHABLE, %s\n", mac_str) ;
 							clientmgr_notify_mac(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]), rta_getattr_u32(tb[NDA_MASTER]));
 						}
 						break;
 					case RTM_DELNEIGH:
-						if (msg->ndm_state & NUD_FAILED) {
+//						if (msg->ndm_state & NUD_FAILED) {
 							// client has roamed or was turned off 5 minutes ago
-							printf("REMOVING %s\n", mac_str);
+							printf("REMOVING %s [%s] because we received DELNEIGH-message \n", ip_str, mac_str);
 							clientmgr_delete_client(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]));
-						}
+//						}
 						break;
 					case RTM_GETNEIGH:
-						printf("GETNEIGH - not handler registered.\n");
-						break;
 					default:
+						printf("GETNEIGH - no handler registered.\n");
 						break;
 				}
 			}
@@ -86,17 +90,20 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 				case RTM_NEWNEIGH:
 					if (tb[NDA_DST] && tb[NDA_LLADDR] && msg->ndm_family == AF_INET6) {
 						if (msg->ndm_state & NUD_REACHABLE) {
-							printf("ADDING address\n") ;
-							clientmgr_add_address(CTX(clientmgr),  RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
+							printf("Status-Change to NUD_REACHABLE, ADDING address %s [%s]\n", ip_str, mac_str) ;
+							clientmgr_notify_mac(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
+//							clientmgr_add_address(CTX(clientmgr),  RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
 						}
 					}
 					break;
 				case RTM_DELNEIGH:
-					if (msg->ndm_state & NUD_FAILED) {
+//					if (msg->ndm_state & NUD_FAILED) {
 						// client has roamed or was turned off 5 minutes ago
-						printf("REMOVING %s %s because we received NUD_FAILED-message\n", RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR])  );
-						clientmgr_remove_address(CTX(clientmgr), RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
-					}
+						// TODO: consider running
+						printf("REMOVING %s [%s]\n", ip_str, mac_str);
+						clientmgr_delete_client(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]));
+						// clientmgr_remove_address(CTX(clientmgr), RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
+//					}
 				default:
 					break;
 			}
