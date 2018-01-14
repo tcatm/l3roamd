@@ -291,6 +291,8 @@ void clientmgr_delete_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
 
 	print_client(client);
 
+	remove_special_ip(ctx, client);
+
 	if (VECTOR_LEN(client->addresses) > 0) {
 		for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
 			struct client_ip *e = &VECTOR_INDEX(client->addresses, i);
@@ -515,13 +517,10 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 
 	bool active = client_is_active(client);
 
-	if (active)
-		remove_special_ip(ctx, client);
-
 	intercom_info(CTX(intercom), sender, client, active);
 
-	if (!client_is_active(client))
-		return;
+//	if (active)
+//		return;
 
 	printf("Dropping client %02x:%02x:%02x:%02x:%02x:%02x in response to claim\n",  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 	clientmgr_delete_client(ctx, mac);
