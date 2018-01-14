@@ -8,7 +8,7 @@
 ** */
 void print_ip(const struct in6_addr *addr) {
 	char a1[INET6_ADDRSTRLEN+1];
-	inet_ntop(AF_INET6, addr, a1, INET6_ADDRSTRLEN);
+	inet_ntop(AF_INET6, &(addr->s6_addr), a1, INET6_ADDRSTRLEN);
 	printf("%s", a1);
 }
 

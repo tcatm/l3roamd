@@ -223,9 +223,10 @@ int main(int argc, char *argv[]) {
 	l3ctx.icmp6_ctx.clientif = strdup("\0");
 	l3ctx.arp_ctx.clientif = strdup("\0");
 	l3ctx.clientmgr_ctx.export_table = 254;
-	bool v4_initialized=false;
-	bool a_initialized=false;
-	bool p_initialized=false;
+	bool v4_initialized = false;
+	bool a_initialized = false;
+	bool p_initialized = false;
+	bool clientif_set = false;
 
 	l3ctx.debug = false;
 
@@ -266,15 +267,16 @@ int main(int argc, char *argv[]) {
 				add_prefix(&l3ctx.clientmgr_ctx.prefixes, _prefix);
 				break;
 			case 'i':
-				if (if_nametoindex(optarg)) {
+				if (if_nametoindex(optarg) && !clientif_set ) {
 					free(l3ctx.routemgr_ctx.clientif);
 					free(l3ctx.icmp6_ctx.clientif);
 					free(l3ctx.arp_ctx.clientif);
 					l3ctx.routemgr_ctx.clientif = strdupa(optarg);
 					l3ctx.icmp6_ctx.clientif = strdupa(optarg);
 					l3ctx.arp_ctx.clientif = strdupa(optarg);
+					clientif_set=true;
 				} else {
-					fprintf(stderr, "ignoring unknown client-interface %s\n", optarg);
+					fprintf(stderr, "ignoring unknown client-interface %s or client-interface was already set. Only the first client-interface will be considered.\n", optarg);
 				}
 				break;
 			case 'm':

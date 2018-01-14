@@ -463,7 +463,7 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 
 	if (!was_active) {
 		struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
-		if (!intercom_claim(CTX(intercom), &address, client))
+		if (intercom_claim(CTX(intercom), &address, client))
 			add_special_ip(ctx, client);
 	}
 
@@ -490,8 +490,7 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 
 	struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
 
-	if (!intercom_claim(CTX(intercom), &address, client)) {
-		fprintf(stderr, "Claim failed for %s.\n", mac_str);
+	if (intercom_claim(CTX(intercom), &address, client)) {
 		add_special_ip(ctx, client);
 	}
 
@@ -501,6 +500,7 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 		if (ip->state == IP_TENTATIVE || ip->state == IP_INACTIVE)
 			client_ip_set_state(ctx, client, ip, IP_TENTATIVE);
 	}
+// yes. this happens on status-change we don
 // prefix does not matter here, icmp6_send_solicitation will overwrite the first 13 bytes of the address.
 	icmp6_send_solicitation(CTX(icmp6), &address);
 }

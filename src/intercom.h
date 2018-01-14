@@ -51,7 +51,7 @@ typedef struct {
 struct claim_task {
 	struct client *client;
 	uint8_t retries_left;
-	const struct in6_addr *recipient;
+	struct in6_addr *recipient;
 	intercom_packet_claim packet;
 	taskqueue_t *check_task;
 };

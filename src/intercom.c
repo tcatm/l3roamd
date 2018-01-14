@@ -26,7 +26,7 @@
 // Announce at most 32 addresses per client
 #define INFO_MAX 32
 
-void schedule_claim_retry(struct claim_task*);
+void schedule_claim_retry(struct claim_task*, int timeout);
 
 bool join_mcast(const int sock, const struct in6_addr addr, intercom_if *iface) {
 	struct ipv6_mreq mreq;
@@ -381,27 +381,28 @@ void claim_retry_task(void *d) {
 	}
 
 	if (data->retries_left > 0)
-		schedule_claim_retry(data);
+		schedule_claim_retry(data,1);
 }
+
 void free_claim_task(void *d) {
 	struct claim_task *data = d;
 	free(data->client);
+	free(data->recipient);
 	free(data);
 }
 
-void schedule_claim_retry(struct claim_task *data) {
+void schedule_claim_retry(struct claim_task *data, int timeout) {
 	struct claim_task *ndata = calloc(1, sizeof(struct claim_task));
 	ndata->client = malloc(sizeof(struct client));
 	memcpy(ndata->client, data->client,sizeof(struct client));
 	ndata->retries_left = data->retries_left -1;
 	ndata->packet = data->packet;
-	ndata->recipient = data->recipient;
+	ndata->recipient = calloc(1, sizeof(struct in6_addr));
+	memcpy(ndata->recipient, data->recipient, sizeof(struct in6_addr));
 	ndata->check_task = data->check_task;
 
 	if (data->check_task == NULL && data->retries_left > 0)
-		data->check_task = post_task(&l3ctx.taskqueue_ctx, 1, 0, claim_retry_task, free_claim_task, ndata);
-	else
-		free_claim_task(ndata);
+		data->check_task = post_task(&l3ctx.taskqueue_ctx, timeout, 0, claim_retry_task, free_claim_task, ndata);
 }
 
 bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client) {
@@ -429,10 +430,11 @@ bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct 
 	memcpy(data.client, client,sizeof(struct client));
 	data.retries_left = CLAIM_RETRY_MAX;
 	data.packet = packet;
-	data.recipient = recipient;
-	data.check_task=NULL;
-
-	claim_retry_task(&data);
+	data.recipient = malloc(sizeof(struct in6_addr));
+	data.check_task = NULL;
+	memcpy(data.recipient, recipient, sizeof(struct in6_addr));
+	schedule_claim_retry(&data, 0);
+	free(data.recipient);
 	free(data.client);
 	return true;
 }
