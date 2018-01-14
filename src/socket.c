@@ -168,7 +168,7 @@ void socket_handle_in(socket_ctx *ctx) {
 	switch (cmd) {
 		case GET_CLIENTS:
 			get_clients(retval);
-			dprintf(fd, json_object_to_json_string(retval));
+			dprintf(fd, "%s", json_object_to_json_string(retval));
 			json_object_put(retval);
 			break;
 		case ADD_PREFIX:
