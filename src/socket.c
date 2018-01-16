@@ -132,7 +132,7 @@ void get_clients(struct json_object *obj) {
 	}
 
 	if (i) {
-		json_object_object_add(obj,"clients", jclients);
+		json_object_object_add(obj,"clientlist", jclients);
 	}
 	else {
 		json_object_put(jclients);
