@@ -323,7 +323,8 @@ void rtnl_add_address(routemgr_ctx *ctx, struct in6_addr *address) {
 }
 
 void rtnl_remove_address(routemgr_ctx *ctx, struct in6_addr *address) {
-	rtnl_change_address(ctx, address, RTM_DELADDR, NLM_F_REQUEST);
+	rtnl_change_address(ctx, address, RTM_DELADDR, NLM_F_REQUEST | NLM_F_ACK);
+// 3, {msg_name={sa_family=AF_NETLINK, nl_pid=0, nl_groups=00000000}, msg_namelen=12, msg_iov=[{iov_base={{len=64, type=0x15 /* NLMSG_??? */, flags=NLM_F_REQUEST|NLM_F_ACK, seq=1516058301, pid=0}, "\n\200\0\0\1\0\0\0\24\0\2\0\376\300\0\0\0\0\0\0\242\363\301\377\376^\312\227\24\0\1\0"...}, iov_len=64}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, 0
 }
 
 void rtnl_change_address(routemgr_ctx *ctx, struct in6_addr *address, int type, int flags) {
