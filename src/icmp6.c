@@ -182,12 +182,14 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 		if (memcmp(&packet.hdr.ip6_src, "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 16) != 0)
 			return;
 
-		inet_ntop(AF_INET6, &packet.hdr.ip6_src, str, INET6_ADDRSTRLEN);
-		printf("Neighbor Solicitation from %s (MAC %02x:%02x:%02x:%02x:%02x:%02x)\n", str, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-		inet_ntop(AF_INET6, &packet.sol.hdr.nd_ns_target, str, INET6_ADDRSTRLEN);
-		printf("  Target: %s\n", str);
 
-		clientmgr_add_address(CTX(clientmgr), &packet.sol.hdr.nd_ns_target, mac, ctx->ifindex);
+		inet_ntop(AF_INET6, &lladdr, str, INET6_ADDRSTRLEN);
+		printf("Received Neighbor Solicitation from %s (MAC %02x:%02x:%02x:%02x:%02x:%02x) for IP ", str, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+		
+		inet_ntop(AF_INET6, &packet.sol.hdr.nd_ns_target, str, INET6_ADDRSTRLEN);
+		printf("%s. Learning new Client-MAC with source-IP of this message.\n", str);
+
+		clientmgr_add_address(CTX(clientmgr), (struct in6_addr*)&lladdr, mac, ctx->ifindex);
 	}
 }
 
@@ -230,6 +232,8 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 	if ((packet.hdr.nd_na_hdr.icmp6_dataun.icmp6_un_data8[0] & 0x60) != 0x60)
 		return;
 
+	if (l3ctx.debug)
+		printf("Learning new Client (MAC %02x:%02x:%02x:%02x:%02x:%02x) from Neighbour Advertisement\n", packet.hw_addr[0], packet.hw_addr[1], packet.hw_addr[2], packet.hw_addr[3], packet.hw_addr[4], packet.hw_addr[5]);
 	clientmgr_add_address(CTX(clientmgr), &packet.hdr.nd_na_target, packet.hw_addr, ctx->ifindex);
 }
 
