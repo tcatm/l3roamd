@@ -362,7 +362,6 @@ void routemgr_insert_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_a
 			.ndm_family = AF_INET6,
 			.ndm_state = NUD_REACHABLE,
 			.ndm_ifindex = ifindex,
-			.ndm_flags = NTF_USE
 		},
 	};
 
