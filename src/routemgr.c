@@ -240,38 +240,38 @@ void routemgr_init(routemgr_ctx *ctx) {
 
 
 int parse_kernel_route_rta(struct rtmsg *rtm, int len, struct kernel_route *route) {
-		len -= NLMSG_ALIGN(sizeof(*rtm));
+	len -= NLMSG_ALIGN(sizeof(*rtm));
 
-		memset(route, 0, sizeof(struct kernel_route));
-		route->proto = rtm->rtm_protocol;
+	memset(route, 0, sizeof(struct kernel_route));
+	route->proto = rtm->rtm_protocol;
 
-		for (struct rtattr *rta = RTM_RTA(rtm); RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
-				switch(rta->rta_type) {
-				case RTA_DST:
-						route->plen = rtm->rtm_dst_len;
-						memcpy(route->prefix.s6_addr, RTA_DATA(rta), 16);
-						break;
-				case RTA_SRC:
-						route->src_plen = rtm->rtm_src_len;
-						memcpy(route->src_prefix.s6_addr, RTA_DATA(rta), 16);
-						break;
-				case RTA_GATEWAY:
-						memcpy(route->gw.s6_addr, RTA_DATA(rta), 16);
-						break;
-				case RTA_OIF:
-						route->ifindex = *(int*)RTA_DATA(rta);
-						break;
-				case RTA_PRIORITY:
-						route->metric = *(int*)RTA_DATA(rta);
-						if(route->metric < 0 || route->metric > KERNEL_INFINITY)
-								route->metric = KERNEL_INFINITY;
-						break;
-				default:
-						break;
-				}
+	for (struct rtattr *rta = RTM_RTA(rtm); RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
+		switch(rta->rta_type) {
+			case RTA_DST:
+				route->plen = rtm->rtm_dst_len;
+				memcpy(route->prefix.s6_addr, RTA_DATA(rta), 16);
+				break;
+			case RTA_SRC:
+				route->src_plen = rtm->rtm_src_len;
+				memcpy(route->src_prefix.s6_addr, RTA_DATA(rta), 16);
+				break;
+			case RTA_GATEWAY:
+				memcpy(route->gw.s6_addr, RTA_DATA(rta), 16);
+				break;
+			case RTA_OIF:
+				route->ifindex = *(int*)RTA_DATA(rta);
+				break;
+			case RTA_PRIORITY:
+				route->metric = *(int*)RTA_DATA(rta);
+				if(route->metric < 0 || route->metric > KERNEL_INFINITY)
+					route->metric = KERNEL_INFINITY;
+				break;
+			default:
+				break;
 		}
+	}
 
-		return 1;
+	return 1;
 }
 
 void routemgr_handle_in(routemgr_ctx *ctx, int fd) {
@@ -282,10 +282,10 @@ void routemgr_handle_in(routemgr_ctx *ctx, int fd) {
 		count = recv(fd, buf, sizeof buf, 0);
 		if (count == -1) {
 			if (errno != EAGAIN)
-			perror("read");
+				perror("read");
 			break;
 		} else if (count == 0)
-		break;
+			break;
 
 		const struct nlmsghdr *nh;
 		struct nlmsgerr *ne;
@@ -328,9 +328,9 @@ void rtnl_remove_address(routemgr_ctx *ctx, struct in6_addr *address) {
 
 void rtnl_change_address(routemgr_ctx *ctx, struct in6_addr *address, int type, int flags) {
 	struct {
-		 struct nlmsghdr nl;
-		 struct ifaddrmsg ifa;
-		 char buf[1024];
+		struct nlmsghdr nl;
+		struct ifaddrmsg ifa;
+		char buf[1024];
 	} req = {
 		.nl = {
 			.nlmsg_len = NLMSG_LENGTH(sizeof(struct ifaddrmsg)),
