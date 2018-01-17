@@ -73,11 +73,11 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 						}
 						break;
 					case RTM_DELNEIGH:
-//						if (msg->ndm_state & NUD_FAILED) {
-							// client has roamed or was turned off 5 minutes ago
-							printf("REMOVING %s [%s] because we received DELNEIGH-message \n", ip_str, mac_str);
-							clientmgr_delete_client(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]));
-//						}
+						//						if (msg->ndm_state & NUD_FAILED) {
+						// client has roamed or was turned off 5 minutes ago
+						printf("REMOVING %s [%s] because we received DELNEIGH-message \n", ip_str, mac_str);
+						clientmgr_delete_client(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]));
+						//						}
 						break;
 					case RTM_GETNEIGH:
 					default:
@@ -92,18 +92,18 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 						if (msg->ndm_state & NUD_REACHABLE) {
 							printf("Status-Change to NUD_REACHABLE, ADDING address %s [%s]\n", ip_str, mac_str) ;
 							clientmgr_notify_mac(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
-//							clientmgr_add_address(CTX(clientmgr),  RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
+							//							clientmgr_add_address(CTX(clientmgr),  RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
 						}
 					}
 					break;
 				case RTM_DELNEIGH:
-//					if (msg->ndm_state & NUD_FAILED) {
-						// client has roamed or was turned off 5 minutes ago
-						// TODO: consider running
-						printf("REMOVING %s [%s]\n", ip_str, mac_str);
-						clientmgr_delete_client(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]));
-						// clientmgr_remove_address(CTX(clientmgr), RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
-//					}
+					//					if (msg->ndm_state & NUD_FAILED) {
+					// client has roamed or was turned off 5 minutes ago
+					// TODO: consider running
+					printf("REMOVING %s [%s]\n", ip_str, mac_str);
+					clientmgr_delete_client(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]));
+					// clientmgr_remove_address(CTX(clientmgr), RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
+					//					}
 				default:
 					break;
 			}
