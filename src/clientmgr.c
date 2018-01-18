@@ -411,19 +411,19 @@ bool clientmgr_is_ipv4(clientmgr_ctx *ctx, struct in6_addr *address) {
 
 /** Remove an address from a client identified by its MAC.
 **/
-void clientmgr_remove_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex) {
+void clientmgr_remove_address(clientmgr_ctx *ctx, struct client *client, struct in6_addr *address) {
 	if (l3ctx.debug) {
 		char str[INET6_ADDRSTRLEN];
 		inet_ntop(AF_INET6, address, str, INET6_ADDRSTRLEN);
-		printf("clientmgr_remove_address: %s is running",str);
+		char strmac[18];
+		mac_addr_n2a(strmac, client->mac);
+		printf("clientmgr_remove_address: %s is running for client %s",str, strmac);
 	}
 
-	struct client *client = get_client(ctx, mac);
 	if (client) {
 		delete_client_ip(client, address);
 	}
 
-	routemgr_remove_neighbor(&l3ctx.routemgr_ctx, client->ifindex, address, mac);
 }
 
 /** Add a new address to a client identified by its MAC.
