@@ -1,5 +1,6 @@
 #include "icmp6.h"
 #include "l3roamd.h"
+#include "util.h"
 
 #include <linux/in6.h>
 #include <stddef.h>
@@ -183,7 +184,7 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 			return;
 
 
-		inet_ntop(AF_INET6, &lladdr, str, INET6_ADDRSTRLEN);
+		inet_ntop(AF_INET6, (struct in6_addr*)&lladdr, str, INET6_ADDRSTRLEN);
 		printf("Received Neighbor Solicitation from %s (MAC %02x:%02x:%02x:%02x:%02x:%02x) for IP ", str, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 		
 		inet_ntop(AF_INET6, &packet.sol.hdr.nd_ns_target, str, INET6_ADDRSTRLEN);
@@ -232,8 +233,11 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 	if ((packet.hdr.nd_na_hdr.icmp6_dataun.icmp6_un_data8[0] & 0x60) != 0x60)
 		return;
 
-	if (l3ctx.debug)
-		printf("Learning new Client (MAC %02x:%02x:%02x:%02x:%02x:%02x) from Neighbour Advertisement\n", packet.hw_addr[0], packet.hw_addr[1], packet.hw_addr[2], packet.hw_addr[3], packet.hw_addr[4], packet.hw_addr[5]);
+	if (l3ctx.debug) {
+		printf("Learning new Client (MAC %02x:%02x:%02x:%02x:%02x:%02x) from Neighbour Advertisement with source: ", packet.hw_addr[0], packet.hw_addr[1], packet.hw_addr[2], packet.hw_addr[3], packet.hw_addr[4], packet.hw_addr[5]);
+		print_ip(&packet.hdr.nd_na_target);
+		printf("\n");
+	}
 	clientmgr_add_address(CTX(clientmgr), &packet.hdr.nd_na_target, packet.hw_addr, ctx->ifindex);
 }
 
