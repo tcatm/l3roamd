@@ -58,5 +58,6 @@ void clientmgr_purge_clients(clientmgr_ctx *ctx);
 void clientmgr_delete_client(clientmgr_ctx *ctx, const uint8_t mac[6]);
 void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip, enum ip_state state);
 struct client *get_client(clientmgr_ctx *ctx, const uint8_t mac[6]);
-bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address);
+bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address, struct client *client);
+void add_special_ip(clientmgr_ctx *ctx, struct client *client);
 void mac_addr_n2a(char *mac_addr, unsigned char *arg);

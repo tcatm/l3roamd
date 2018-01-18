@@ -110,11 +110,10 @@ void print_client(struct client *client) {
     currently active or tentative.
     */
 bool client_is_active(const struct client *client) {
-	struct timespec now;
-	clock_gettime(CLOCK_MONOTONIC, &now);
-
 	for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
 		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
+		printf("looking at state %i for ip", ip->state);
+		print_ip(&ip->addr);
 
 		if (ip->state == IP_ACTIVE || ip->state == IP_TENTATIVE)
 			return true;
@@ -168,19 +167,22 @@ void delete_client_ip(struct client *client, const struct in6_addr *address) {
 
 	char str[INET6_ADDRSTRLEN+1];
 	inet_ntop(AF_INET6, address, str, INET6_ADDRSTRLEN);
-	printf("\x1b[31mDeleting IP %s from client\x1b[0m ", str);
+	printf("\x1b[31mDeleted IP %s from client %zi addresses are still assigned\x1b[0m ", str, VECTOR_LEN(client->addresses));
 	print_client(client);
 
 	if (VECTOR_LEN(client->addresses) == 0) {
 		printf("no IP-addresses left in client. Deleting client.\n");
-		clientmgr_delete_client(&l3ctx.clientmgr_ctx ,client->mac);
+		clientmgr_delete_client(&l3ctx.clientmgr_ctx, client->mac);
 	}
 }
 
 /** Adds a route.
   */
 void client_add_route(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip) {
+	printf("adding route for "); 
+	print_ip(&ip->addr);
 	if (clientmgr_is_ipv4(ctx, &ip->addr)) {
+		printf(" (IPv4)\n");
 		struct in_addr ip4 = {
 			.s_addr = ip->addr.s6_addr[12] << 24 | ip->addr.s6_addr[13] << 16 | ip->addr.s6_addr[14] << 8 | ip->addr.s6_addr[15]
 		};
@@ -188,6 +190,7 @@ void client_add_route(clientmgr_ctx *ctx, struct client *client, struct client_i
 		routemgr_insert_route(CTX(routemgr), ctx->export_table, ctx->nat46ifindex, &ip->addr, 128);
 		routemgr_insert_route4(CTX(routemgr), ctx->export_table, client->ifindex, &ip4);
 	} else {
+		printf(" (IPv6)\n");
 		routemgr_insert_route(CTX(routemgr), ctx->export_table, client->ifindex, &ip->addr, 128);
 	}
 }
@@ -225,7 +228,7 @@ struct client *get_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
 
 /** Given an ip-address, this returns true if there is a local client connected having this IP-address and false otherwise
 */
-bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address) {
+bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address, struct client *client) {
 	for (int i = 0; i < VECTOR_LEN(ctx->clients); i++) {
 		struct client *c = &VECTOR_INDEX(ctx->clients, i);
 		for (int j = 0; j< VECTOR_LEN(c->addresses);j++) {
@@ -238,9 +241,13 @@ bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address) {
 			}
 			if (!memcmp(address, &a->addr, sizeof(struct in6_addr))) {
 				if (l3ctx.debug) {
-					printf(" => match found.\n");
-					return true;
+					char mac_str[18];
+					mac_addr_n2a(mac_str, c->mac);
+					printf(" => match found for client %s.\n", mac_str);
 				}
+				if (client)
+					memcpy(client, c, sizeof(struct client));
+				return true;
 			}
 		}
 	}
@@ -250,7 +257,7 @@ bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address) {
 
 /** Get a client or create a new, empty one.
   */
-struct client *get_or_create_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
+struct client *get_or_create_client(clientmgr_ctx *ctx, const uint8_t mac[6], unsigned int ifindex) {
 	struct client *client = get_client(ctx, mac);
 
 	if (client == NULL) {
@@ -258,6 +265,7 @@ struct client *get_or_create_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
 		memcpy(_client.mac, mac, sizeof(uint8_t) * 6);
 		VECTOR_ADD(ctx->clients, _client);
 		client = &VECTOR_INDEX(ctx->clients, VECTOR_LEN(ctx->clients) - 1);
+		client->ifindex = ifindex;
 	}
 
 	return client;
@@ -338,8 +346,8 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 					// ignore
 					break;
 				case IP_ACTIVE:
-					client_add_route(ctx, client, ip);
 					routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr , client->mac);
+					client_add_route(ctx, client, ip);
 					ip->timestamp = now;
 					break;
 				case IP_TENTATIVE:
@@ -372,8 +380,8 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 					break;
 				case IP_ACTIVE:
 					ip->timestamp = now;
-					client_add_route(ctx, client, ip);
 					routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr , client->mac);
+					client_add_route(ctx, client, ip);
 					break;
 				case IP_TENTATIVE:
 					nop = true;
@@ -429,44 +437,43 @@ void clientmgr_remove_address(clientmgr_ctx *ctx, struct client *client, struct 
 /** Add a new address to a client identified by its MAC.
  */
 void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex) {
-	char str[INET6_ADDRSTRLEN];
-	inet_ntop(AF_INET6, address, str, INET6_ADDRSTRLEN);
-
-	if (l3ctx.debug)
-		printf("clientmgr_add_address: %s is running",str);
 
 	if (!clientmgr_valid_address(ctx, address)) {
 		if (l3ctx.debug)
-			printf(" but address is not within a client-prefix\n");
+			printf("address is not within a client-prefix, not adding.\n");
 		return;
 	}
-	printf("\n");
 
+	if (l3ctx.debug) {
+		char mac_str[18];
+		char ifname[IFNAMSIZ];
+		char str[INET6_ADDRSTRLEN];
 
-	struct client *client = get_or_create_client(ctx, mac);
+		if_indextoname(ifindex, ifname);
+		mac_addr_n2a(mac_str, mac);
+		inet_ntop(AF_INET6, address, str, INET6_ADDRSTRLEN);
+
+		printf("clientmgr_add_address: %s[%s] is running for interface %i %s\n",str, mac_str, ifindex, ifname);
+	}
+
+	struct client *client = get_or_create_client(ctx, mac, ifindex);
 	struct client_ip *ip = get_client_ip(client, address);
+	client->ifindex = ifindex; // client might have roamed to different interface on the same node
 
 	bool was_active = client_is_active(client);
 	bool ip_is_new = ip == NULL;
 
 	if (ip_is_new) {
-		char mac_str[18];
-		mac_addr_n2a(mac_str, client->mac);
-		printf("ADDING Address: %s to client %s\n", str, mac_str);
 		struct client_ip _ip = {};
 		memcpy(&_ip.addr, address, sizeof(struct in6_addr));
 		VECTOR_ADD(client->addresses, _ip);
 		ip = &VECTOR_INDEX(client->addresses, VECTOR_LEN(client->addresses) - 1);
+		client_ip_set_state(ctx, client, ip, IP_ACTIVE);
 	}
-
-	client->ifindex = ifindex;
-
-	client_ip_set_state(ctx, client, ip, IP_ACTIVE);
 
 	if (!was_active) {
 		struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
-		if (intercom_claim(CTX(intercom), &address, client))
-			add_special_ip(ctx, client);
+		intercom_claim(CTX(intercom), &address, client);
 	}
 
 	if (ip_is_new)
@@ -476,7 +483,17 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 /** Notify the client manager about a new MAC (e.g. a new wifi client).
   */
 void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex) {
-	struct client *client = get_or_create_client(ctx, mac);
+	struct client *client = get_or_create_client(ctx, mac, ifindex);
+
+	if (client_is_active(client)) {
+		if (l3ctx.debug) {
+			char mac_str[18];
+			mac_addr_n2a(mac_str, client->mac);
+			printf("client[%s] was detected earlier, not re-adding\n", mac_str);
+		}
+		return;
+	}
+
 
 	char ifname[IFNAMSIZ];
 	if_indextoname(ifindex, ifname);
@@ -487,14 +504,11 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 
 	// TODO It is rather nasty to hard-code the client-interface here. Still, all clients should appear on the client-interface, not anywhere else. Using the fdb detection mechanism, clients might end up appearing on the client bridge or somewhere else which should be prevented.
 	// this means that we cannot support multiple client interfaces and that we absolutely need the client bridge.
-	// TODO: THIS IS NOW THE ONLY CHANGE IN CLIENT DETECTION CODE. IF NEXT VERSION DOES NOT BREAK FOR JASON,REMOVE THIS WHOLE COMMENTED SECTION
-	// client->ifindex = l3ctx.routemgr_ctx.clientif_index;
+	client->ifindex = ifindex;
 
 	struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
 
-	if (intercom_claim(CTX(intercom), &address, client)) {
-		add_special_ip(ctx, client);
-	}
+	intercom_claim(CTX(intercom), &address, client);
 
 	for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
 		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
@@ -502,8 +516,8 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 		if (ip->state == IP_TENTATIVE || ip->state == IP_INACTIVE)
 			client_ip_set_state(ctx, client, ip, IP_TENTATIVE);
 	}
-// yes. this happens on status-change we don
-// prefix does not matter here, icmp6_send_solicitation will overwrite the first 13 bytes of the address.
+
+	// prefix does not matter here, icmp6_send_solicitation will overwrite the first 13 bytes of the address.
 	icmp6_send_solicitation(CTX(icmp6), &address);
 }
 

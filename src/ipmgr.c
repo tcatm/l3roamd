@@ -218,7 +218,7 @@ void seek_task(void *d) {
 	}
 	e->check_task = NULL;
 
-	if (!clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &data->address)) {
+	if (!clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &data->address, NULL)) {
 		if (l3ctx.debug) {
 			printf("seeking on intercom for client ");
 			print_ip(&data->address);
