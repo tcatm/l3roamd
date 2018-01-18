@@ -162,14 +162,15 @@ void intercom_send_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len
 		if (!iface->ok)
 			continue;
 
-		struct sockaddr_in6 groupaddr = ctx->groupaddr;
+		struct sockaddr_in6 _groupaddr = {};
+		memcpy(&_groupaddr, &ctx->groupaddr, sizeof(struct sockaddr_in6));
 
-		groupaddr.sin6_scope_id = iface->ifindex;
+		_groupaddr.sin6_scope_id = iface->ifindex;
 
-		ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, (struct sockaddr*)&groupaddr, sizeof(groupaddr));
+		ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, (struct sockaddr*)&_groupaddr, sizeof(struct sockaddr_in6));
 		if (l3ctx.debug) {
 			char str[INET6_ADDRSTRLEN+1];
-			inet_ntop(AF_INET6, &groupaddr, str, INET6_ADDRSTRLEN);
+			inet_ntop(AF_INET6, &_groupaddr.sin6_addr, str, INET6_ADDRSTRLEN);
 			printf("sent intercom packet to %s on iface %s rc: %zi\n",str , iface->ifname,rc);
 		}
 		if (rc < 0)
@@ -382,6 +383,12 @@ void claim_retry_task(void *d) {
 
 	if (data->retries_left > 0)
 		schedule_claim_retry(data,1);
+	else {
+		// we have not received an info message, otherwise we would not have run out of retries => noone knew the client and it is new to the mesh.
+		// => adding the special IP
+		add_special_ip(&l3ctx.clientmgr_ctx, data->client);
+	}
+
 }
 
 void free_claim_task(void *d) {
