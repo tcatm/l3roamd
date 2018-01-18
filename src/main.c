@@ -124,9 +124,13 @@ void loop() {
 		n = epoll_wait(efd, events, maxevents, -1);
 		for(int i = 0; i < n; i++) {
 			if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)) {
-				fprintf(stderr, "epoll error. This could be a bug. Exiting now.\n");
-				close(events[i].data.fd);
+				if (errno == EAGAIN) {
+					printf("EAGAIN received, continuing.");
+					continue;
+				}
+				perror("epoll error. This is a bug. Fix this.");
 				sig_term_handler(0, 0, 0);
+				close(events[i].data.fd);
 				// TODO: routemgr is handling routes from kernel AND direct neighbours from fdb. Refactor this at is actually a netlink-handler
 			} else if (l3ctx.taskqueue_ctx.fd == events[i].data.fd) {
 				taskqueue_run(&l3ctx.taskqueue_ctx);
