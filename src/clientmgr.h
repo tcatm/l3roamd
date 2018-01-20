@@ -55,7 +55,7 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[6]);
 void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bool relinquished);
 void clientmgr_purge_clients(clientmgr_ctx *ctx);
-void clientmgr_delete_client(clientmgr_ctx *ctx, const uint8_t mac[6]);
+void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[6]);
 void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip, enum ip_state state);
 struct client *get_client(clientmgr_ctx *ctx, const uint8_t mac[6]);
 bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address, struct client *client);

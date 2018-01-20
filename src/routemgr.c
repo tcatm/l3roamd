@@ -76,9 +76,9 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 						}
 						break;
 					case RTM_DELNEIGH:
-						//						if (msg->ndm_state & NUD_FAILED) {
+						// if (msg->ndm_state & NUD_FAILED) {
 						// client has roamed or was turned off 5 minutes ago
-						printf("REMOVING %s [%s] because we received DELNEIGH-message \n", ip_str, mac_str);
+						printf("REMOVING (%s) [%s] because we received DELNEIGH-message \n", ip_str, mac_str);
 						clientmgr_delete_client(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]));
 						//						}
 						break;

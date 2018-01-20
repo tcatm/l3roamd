@@ -285,17 +285,20 @@ void clientmgr_purge_clients(clientmgr_ctx *ctx) {
 /** Given a MAC address deletes a client. Safe to call if the client is not
   known.
   */
-void clientmgr_delete_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
-	struct client *client= get_client(ctx, mac);
+void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[6]) {
+	struct client *client = get_client(ctx, mac);
 	char mac_str[18];
-
-	mac_addr_n2a(mac_str, client->mac);
-	printf("\033[34mREMOVING client %s and invalidating its IP-addresses\033[0m\n", mac_str);
-
-	if (!client) {
-		printf("  we were going to delete a client but it does not exist.\n");
+	mac_addr_n2a(mac_str, mac);
+	if (client == NULL) {
+		if (l3ctx.debug) {
+			printf("Client [%s] unknown: cannot delete\n", mac_str);
+		}
 		return;
 	}
+
+
+
+	printf("\033[34mREMOVING client %s and invalidating its IP-addresses\033[0m\n", mac_str);
 
 	print_client(client);
 
