@@ -441,7 +441,7 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 
 	if (!clientmgr_valid_address(ctx, address)) {
 		if (l3ctx.debug)
-			printf("address is not within a client-prefix, not adding.\n");
+			printf("address is not within a client-prefix and not ll, not adding.\n");
 		return;
 	}
 

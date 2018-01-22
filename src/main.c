@@ -325,6 +325,11 @@ int main(int argc, char *argv[]) {
 		v4_initialized=true;
 	}
 
+	// clients have ll-addresses too
+	struct prefix _prefix = {};
+	parse_prefix(&_prefix, "fe80::/64");
+	add_prefix(&l3ctx.clientmgr_ctx.prefixes, _prefix);
+
 	if (!a_initialized)
 		exit_error("specifying -a is mandatory");
 	if (!p_initialized)
