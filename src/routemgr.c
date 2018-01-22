@@ -49,7 +49,7 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 		mac_addr_n2a(mac_str, RTA_DATA(tb[NDA_LLADDR]));
 	}
 	
-	char ip_str[INET6_ADDRSTRLEN+1] = "";
+	char ip_str[INET6_ADDRSTRLEN] = {};
 	if (tb[NDA_DST]) {
 		inet_ntop(AF_INET6, RTA_DATA(tb[NDA_DST]), ip_str, INET6_ADDRSTRLEN);
 	}
