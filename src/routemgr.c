@@ -203,6 +203,8 @@ void rtnl_handle_msg(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	}
 }
 
+/* obtain all neighbours by sending GETNEIGH request
+**/
 static void routemgr_initial_neighbours(routemgr_ctx *ctx, uint8_t family) {
 	struct nlneighreq req = {
 		.nl = {
@@ -219,6 +221,7 @@ static void routemgr_initial_neighbours(routemgr_ctx *ctx, uint8_t family) {
 }
 
 void routemgr_destroy(routemgr_ctx *ctx) {
+	// TODO: remove all routes here
 	close(ctx->fd);
 }
 

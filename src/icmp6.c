@@ -235,8 +235,7 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 
 	if (l3ctx.debug) {
 		printf("Learning new Client (MAC %02x:%02x:%02x:%02x:%02x:%02x) from Neighbour Advertisement with source: ", packet.hw_addr[0], packet.hw_addr[1], packet.hw_addr[2], packet.hw_addr[3], packet.hw_addr[4], packet.hw_addr[5]);
-		print_ip(&packet.hdr.nd_na_target);
-		printf("\n");
+		print_ip(&packet.hdr.nd_na_target, "\n");
 	}
 	clientmgr_add_address(CTX(clientmgr), &packet.hdr.nd_na_target, packet.hw_addr, ctx->ifindex);
 }

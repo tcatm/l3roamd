@@ -146,8 +146,7 @@ bool intercom_send_packet_unicast(intercom_ctx *ctx, const struct in6_addr *reci
 	ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, (struct sockaddr*)&addr, sizeof(addr));
 	if (l3ctx.debug) {
 		printf("sent intercom packet rc: %zi to ", rc);
-		print_ip(recipient);
-		printf("\n");
+		print_ip(recipient, "\n");
 	}
 	if (rc < 0)
 		perror("sendto failed");
@@ -370,8 +369,7 @@ void claim_retry_task(void *d) {
 	if (data->recipient != NULL) {
 		if (l3ctx.debug) {
 			printf("sending unicast claim for client %02x:%02x:%02x:%02x:%02x:%02x to ",  data->client->mac[0], data->client->mac[1], data->client->mac[2], data->client->mac[3], data->client->mac[4], data->client->mac[5]);
-			print_ip(data->recipient);
-			printf("\n");
+			print_ip(data->recipient, "\n");
 		}
 		intercom_send_packet_unicast(&l3ctx.intercom_ctx, data->recipient, (uint8_t*)&data->packet, sizeof(data->packet));
 	} else {

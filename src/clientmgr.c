@@ -112,8 +112,10 @@ void print_client(struct client *client) {
 bool client_is_active(const struct client *client) {
 	for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
 		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
-		printf("looking at state %i for ip", ip->state);
-		print_ip(&ip->addr);
+		if (l3ctx.debug) {
+			printf("looking at state %i for ip", ip->state);
+			print_ip(&ip->addr, "\n");
+		}
 
 		if (ip->state == IP_ACTIVE || ip->state == IP_TENTATIVE)
 			return true;
@@ -170,6 +172,7 @@ void delete_client_ip(struct client *client, const struct in6_addr *address) {
 	printf("\x1b[31mDeleted IP %s from client %zi addresses are still assigned\x1b[0m ", str, VECTOR_LEN(client->addresses));
 	print_client(client);
 
+
 	if (VECTOR_LEN(client->addresses) == 0) {
 		printf("no IP-addresses left in client. Deleting client.\n");
 		clientmgr_delete_client(&l3ctx.clientmgr_ctx, client->mac);
@@ -179,8 +182,9 @@ void delete_client_ip(struct client *client, const struct in6_addr *address) {
 /** Adds a route.
   */
 void client_add_route(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip) {
+	routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr , client->mac);
 	printf("adding route for "); 
-	print_ip(&ip->addr);
+	print_ip(&ip->addr, "");
 	if (clientmgr_is_ipv4(ctx, &ip->addr)) {
 		printf(" (IPv4)\n");
 		struct in_addr ip4 = {
@@ -235,9 +239,8 @@ bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address, st
 			struct client_ip *a = &VECTOR_INDEX(c->addresses, j);
 			if (l3ctx.debug) {
 				printf("comparing ");
-				print_ip(address);
-				printf(" and ");
-				print_ip(&a->addr);
+				print_ip(address, " and ");
+				print_ip(&a->addr, "");
 			}
 			if (!memcmp(address, &a->addr, sizeof(struct in6_addr))) {
 				if (l3ctx.debug) {
@@ -346,10 +349,8 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 			switch (state) {
 				case IP_INACTIVE:
 					nop = true;
-					// ignore
 					break;
 				case IP_ACTIVE:
-					routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr , client->mac);
 					client_add_route(ctx, client, ip);
 					ip->timestamp = now;
 					break;
@@ -363,7 +364,6 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 				case IP_INACTIVE:
 					ip->timestamp = now;
 					client_remove_route(ctx, client, ip);
-					routemgr_remove_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr, client->mac);
 					break;
 				case IP_ACTIVE:
 					nop = true;
@@ -379,11 +379,9 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 				case IP_INACTIVE:
 					ip->timestamp = now;
 					client_remove_route(ctx, client, ip);
-					routemgr_remove_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr, client->mac);
 					break;
 				case IP_ACTIVE:
 					ip->timestamp = now;
-					routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr , client->mac);
 					client_add_route(ctx, client, ip);
 					break;
 				case IP_TENTATIVE:
@@ -395,7 +393,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 	}
 
 	if (!nop || l3ctx.debug) {
-		print_ip(&ip->addr);
+		print_ip(&ip->addr, "");
 		printf(" changes from %s to %s\n", state_str(ip->state), state_str(state));
 	}
 
