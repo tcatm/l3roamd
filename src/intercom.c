@@ -347,12 +347,20 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 
 	ssize_t packet_len = sizeof(intercom_packet_info) + i * sizeof(intercom_packet_info_entry);
 
-	if (recipient != NULL)
+	if (recipient != NULL) {
 		// TODO: consider adding resilience here. There *might* be an ACK sensible
+		if (l3ctx.debug) {
+			printf("sending unicast info for client %02x:%02x:%02x:%02x:%02x:%02x to ",  client->mac[0], client->mac[1], client->mac[2], client->mac[3], client->mac[4], client->mac[5]);
+			print_ip(recipient, "\n");
+		}
 		intercom_send_packet_unicast(ctx, recipient, (uint8_t*)packet, packet_len);
+	}
 	else {
 		// forward packet to other l3roamd instances
 		intercom_recently_seen_add(ctx, &packet->hdr);
+		if (l3ctx.debug) {
+			printf("sending info for client %02x:%02x:%02x:%02x:%02x:%02x to l3roamd neighbours\n",  client->mac[0], client->mac[1], client->mac[2], client->mac[3], client->mac[4], client->mac[5]);
+		}
 
 		intercom_send_packet(ctx, (uint8_t*)packet, packet_len);
 	}

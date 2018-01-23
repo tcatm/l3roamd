@@ -441,7 +441,7 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 
 	if (!clientmgr_valid_address(ctx, address)) {
 		if (l3ctx.debug)
-			printf("address is not within a client-prefix and not ll, not adding.\n");
+			printf("address is not within a client-prefix and not ll-address, not adding.\n");
 		return;
 	}
 
@@ -537,7 +537,8 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 //	if (active)
 //		return;
 
-	printf("Dropping client %02x:%02x:%02x:%02x:%02x:%02x in response to claim\n",  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+	printf("Dropping client %02x:%02x:%02x:%02x:%02x:%02x in response to claim from sender",  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+	print_ip(sender, "\n");
 	clientmgr_delete_client(ctx, mac);
 }
 
