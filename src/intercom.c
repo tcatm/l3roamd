@@ -419,6 +419,10 @@ void schedule_claim_retry(struct claim_task *data, int timeout) {
 }
 
 bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client) {
+	int i;
+	if (find_repeatable_claim(client->mac, &i))
+		return true;
+
 	intercom_packet_claim packet;
 	uint32_t nonce;
 
