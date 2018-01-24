@@ -455,7 +455,7 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 		mac_addr_n2a(mac_str, mac);
 		inet_ntop(AF_INET6, address, str, INET6_ADDRSTRLEN);
 
-		printf("clientmgr_add_address: %s[%s] is running for interface %i %s\n",str, mac_str, ifindex, ifname);
+		printf("clientmgr_add_address: %s [%s] is running for interface %i %s\n",str, mac_str, ifindex, ifname);
 	}
 
 	struct client *client = get_or_create_client(ctx, mac, ifindex);
@@ -478,8 +478,8 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 		intercom_claim(CTX(intercom), &address, client);
 	}
 
-	if (ip_is_new)
-		intercom_info(CTX(intercom), NULL, client, false);
+//	if (ip_is_new)
+//		intercom_info(CTX(intercom), NULL, client, false);
 }
 
 /** Notify the client manager about a new MAC (e.g. a new wifi client).
