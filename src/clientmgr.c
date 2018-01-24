@@ -242,7 +242,7 @@ bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address, st
 				print_ip(address, " and ");
 				print_ip(&a->addr, "");
 			}
-			if (!memcmp(address, &a->addr, sizeof(struct in6_addr))) {
+			if (&a->addr && !memcmp(address, &a->addr, sizeof(struct in6_addr))) {
 				if (l3ctx.debug) {
 					char mac_str[18];
 					mac_addr_n2a(mac_str, c->mac);
@@ -311,6 +311,7 @@ void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[6]) {
 		for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
 			struct client_ip *e = &VECTOR_INDEX(client->addresses, i);
 			client_ip_set_state(CTX(clientmgr), client, e, IP_INACTIVE);
+			clientmgr_remove_address(ctx, client, &e->addr);
 		}
 	}
 	VECTOR_FREE(client->addresses);
@@ -484,6 +485,9 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 /** Notify the client manager about a new MAC (e.g. a new wifi client).
   */
 void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex) {
+	if (memcmp(mac , "\x00\x00\x00\x00\x00\x00", 6) == 0)
+		return;
+
 	struct client *client = get_or_create_client(ctx, mac, ifindex);
 
 	if (client_is_active(client)) {
@@ -533,6 +537,7 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 	bool active = client_is_active(client);
 
 	intercom_info(CTX(intercom), sender, client, active);
+// TODO: claims can be retried. We will not be able to answer the 2nd and 3rd claim if we drop the client here. maybe move it into an old queue instead where we keep a fixed number of clients?
 
 //	if (active)
 //		return;

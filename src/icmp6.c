@@ -145,8 +145,7 @@ struct __attribute__((__packed__)) adv_packet {
 };
 
 void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
-	char str[INET6_ADDRSTRLEN];
-	struct msghdr msghdr;
+	struct msghdr msghdr = {};
 	memset (&msghdr, 0, sizeof (msghdr));
 
 	char cbuf[CMSG_SPACE (sizeof (int))];
@@ -154,7 +153,7 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 	struct __attribute__((__packed__)) {
 		struct ip6_hdr hdr;
 		struct sol_packet sol;
-	} packet;
+	} packet = {};
 
 	struct iovec iov =	{
 		.iov_base = &packet,
@@ -176,21 +175,21 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 
 	if (rc == -1)
 		return;
-
+	
 	uint8_t *mac = lladdr.sll_addr;
 
 	if (packet.sol.hdr.nd_ns_hdr.icmp6_type == ND_NEIGHBOR_SOLICIT) {
-		if (memcmp(&packet.hdr.ip6_src, "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 16) != 0)
+		if (memcmp(&packet.hdr.ip6_src, "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 16) == 0)
 			return;
 
+		if (l3ctx.debug) {
+			char str[INET6_ADDRSTRLEN];
+			inet_ntop(AF_INET6, &packet.hdr.ip6_src, str, INET6_ADDRSTRLEN);
+			printf("Received Neighbor Solicitation from %s [%02x:%02x:%02x:%02x:%02x:%02x] for IP ", str, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+			print_ip(&packet.sol.hdr.nd_ns_target, ". Learning source-IP for client.\n");
+		}
 
-		inet_ntop(AF_INET6, (struct in6_addr*)&lladdr, str, INET6_ADDRSTRLEN);
-		printf("Received Neighbor Solicitation from %s (MAC %02x:%02x:%02x:%02x:%02x:%02x) for IP ", str, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-		
-		inet_ntop(AF_INET6, &packet.sol.hdr.nd_ns_target, str, INET6_ADDRSTRLEN);
-		printf("%s. Learning new Client-MAC with source-IP of this message.\n", str);
-
-		clientmgr_add_address(CTX(clientmgr), (struct in6_addr*)&lladdr, mac, ctx->ifindex);
+		clientmgr_add_address(CTX(clientmgr), &packet.hdr.ip6_src, mac, ctx->ifindex);
 	}
 }
 
@@ -198,7 +197,7 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 	struct msghdr msghdr;
 	memset (&msghdr, 0, sizeof (msghdr));
 
-	struct adv_packet packet;
+	struct adv_packet packet = {};
 	char cbuf[CMSG_SPACE (sizeof (int))];
 
 	struct iovec iov =	{
@@ -221,22 +220,24 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 
 	if (rc == -1)
 		return;
-
-	if (packet.hdr.nd_na_hdr.icmp6_type != ND_NEIGHBOR_ADVERT)
+	
+	if (packet.hdr.nd_na_hdr.icmp6_type != ND_NEIGHBOR_ADVERT) {
+		printf("not an advertisement - returning\n");
 		return;
+	}
 
 	if (packet.hdr.nd_na_hdr.icmp6_code != 0)
 		return;
 
-	// only handle when it is a response to a solicitation
-	// and override bit is set (i.e. a MAC is supplied)
-	if ((packet.hdr.nd_na_hdr.icmp6_dataun.icmp6_un_data8[0] & 0x60) != 0x60)
+
+	if (memcmp(packet.hw_addr, "\x00\x00\x00\x00\x00\x00", 6) == 0)
 		return;
 
 	if (l3ctx.debug) {
 		printf("Learning new Client (MAC %02x:%02x:%02x:%02x:%02x:%02x) from Neighbour Advertisement with source: ", packet.hw_addr[0], packet.hw_addr[1], packet.hw_addr[2], packet.hw_addr[3], packet.hw_addr[4], packet.hw_addr[5]);
 		print_ip(&packet.hdr.nd_na_target, "\n");
 	}
+	
 	clientmgr_add_address(CTX(clientmgr), &packet.hdr.nd_na_target, packet.hw_addr, ctx->ifindex);
 }
 

@@ -116,8 +116,8 @@ void get_clients(struct json_object *obj) {
 			struct client_ip *_client_ip = &VECTOR_INDEX(_client->addresses, j);
 			char ip_str[INET6_ADDRSTRLEN] = "";
 			inet_ntop(AF_INET6, &_client_ip->addr, ip_str, INET6_ADDRSTRLEN);
-			json_object_object_add(address, "state", json_object_new_int(_client_ip->state));
 
+			json_object_object_add(address, "state", json_object_new_int(_client_ip->state));
 			json_object_object_add(addresses , ip_str, address);
 		}
 

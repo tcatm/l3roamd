@@ -143,7 +143,7 @@ void loop() {
 			} else if (l3ctx.icmp6_ctx.fd == events[i].data.fd) {
 				if (events[i].events & EPOLLIN)
 					icmp6_handle_in(&l3ctx.icmp6_ctx, events[i].data.fd);
-			} else if (l3ctx.icmp6_ctx.nsfd == events[i].data.fd) {
+			} else if ( ( l3ctx.icmp6_ctx.nsfd == events[i].data.fd) || ( l3ctx.icmp6_ctx.fd == events[i].data.fd ) ) {
 				if (events[i].events & EPOLLIN)
 					icmp6_handle_ns_in(&l3ctx.icmp6_ctx, events[i].data.fd);
 			} else if (l3ctx.arp_ctx.fd == events[i].data.fd) {
