@@ -38,7 +38,10 @@ void arp_handle_in(arp_ctx *ctx, int fd) {
 
 	if (packet.op != htons(ARP_REPLY))
 		return;
-
+	
+	if (memcmp(packet.spa ,"\x00\x00\x00\x00", 4) == 0) // IP is 0.0.0.0 - not sensible
+		return;
+	
 	uint8_t *mac = lladdr.sll_addr;
 
 	struct in6_addr address = ctx->prefix;
@@ -48,6 +51,7 @@ void arp_handle_in(arp_ctx *ctx, int fd) {
 	char str[INET6_ADDRSTRLEN];
 	inet_ntop(AF_INET6, &address, str, INET6_ADDRSTRLEN);
 	printf("ARP Response from %s (MAC %02x:%02x:%02x:%02x:%02x:%02x)\n", str, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
 
 	clientmgr_add_address(CTX(clientmgr), &address, packet.sha, ctx->ifindex);
 }

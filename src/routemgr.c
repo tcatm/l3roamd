@@ -63,36 +63,47 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 		}
 
 		if_indextoname(msg->ndm_ifindex, ifname);
-		printf("neighbour [%s] (%s) changed on interface %s, state: %i ... (msgif: %i cif: %i brif: %i)", mac_str, ip_str, ifname, msg->ndm_state, msg->ndm_ifindex, ctx->clientif_index, br_index ); // see include/uapi/linux/neighbour.h NUD_REACHABLE for numeric values
+		printf("neighbour [%s] (%s) changed on interface %s, state: %i ... (msgif: %i cif: %i brif: %i)\n", mac_str, ip_str, ifname, msg->ndm_state, msg->ndm_ifindex, ctx->clientif_index, br_index ); // see include/uapi/linux/neighbour.h NUD_REACHABLE for numeric values
 		if ((tb[NDA_MASTER]) && (rta_getattr_u32(tb[NDA_MASTER]) == br_index)) {
-			printf("da");
 				switch (nh->nlmsg_type) {
 					case RTM_NEWNEIGH:
-						if (tb[NDA_DST] && tb[NDA_LLADDR]) {
-							printf("Status-Change to NUD_REACHABLE, ADDING address %s [%s]\n", ip_str, mac_str) ;
-							clientmgr_add_address(CTX(clientmgr), RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
-						} 
+						if (msg->ndm_state & NUD_REACHABLE) {
+							if (tb[NDA_DST] && tb[NDA_LLADDR]) {
+								printf("Status-Change to NUD_REACHABLE, ADDING address %s [%s]\n", ip_str, mac_str) ;
+								clientmgr_add_address(CTX(clientmgr), RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
+							} 
+						}
+						else if (msg->ndm_state & NUD_FAILED) {
+							printf("REMOVING %s [%s]\n", ip_str, mac_str);
+							struct client _client = {};
+							if (clientmgr_is_known_address(CTX(clientmgr), RTA_DATA(tb[NDA_DST]), &_client)) {
+								clientmgr_remove_address(CTX(clientmgr), &_client,  RTA_DATA(tb[NDA_DST]));
+							}
+						}
 						break;
 					case RTM_DELNEIGH:
 						// if (msg->ndm_state & NUD_FAILED) {
 						// client has roamed or was turned off a while ago
-						printf("REMOVING (%s) [%s] because we received DELNEIGH-message \n", ip_str, mac_str);
-						clientmgr_delete_client(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]));
+						// printf("REMOVING (%s) [%s] because we received DELNEIGH-message \n", ip_str, mac_str);
+						// clientmgr_delete_client(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]));
+						printf("REMOVING %s [%s]\n", ip_str, mac_str);
+						struct client _client = {};
+						if (clientmgr_is_known_address(CTX(clientmgr), RTA_DATA(tb[NDA_DST]), &_client)) {
+							mac_addr_n2a(mac_str, _client.mac);
+							printf("REMOVING  - really%s [%s]\n", ip_str, mac_str);
+							clientmgr_remove_address(CTX(clientmgr), &_client, RTA_DATA(tb[NDA_DST]));
+						}
 						break;
-					case RTM_GETNEIGH:
 					default:
-						printf("GETNEIGH - no handler registered.\n");
+						printf("Received neither NEWNEIGH not DELNEIGH - doing nothing.\n");
 						break;
 				}
 		} else {
 			switch (nh->nlmsg_type) {
 				case RTM_NEWNEIGH:
 					if (msg->ndm_state & NUD_REACHABLE) {
-						printf("hier: ");
 						if (tb[NDA_DST] && tb[NDA_LLADDR]) {
-							inet_ntop(AF_INET6, RTA_DATA(tb[NDA_DST]), ip_str, INET6_ADDRSTRLEN);
-							printf("\n   MAC: %s IP-ADRESSE: %s\n", mac_str, ip_str);
-							printf("Status-Change to NUD_REACHABLE, ADDING address %s [%s]\n", ip_str, mac_str) ;
+							printf(" Status-Change to NUD_REACHABLE, ADDING address %s [%s]\n", ip_str, mac_str) ;
 							clientmgr_add_address(CTX(clientmgr), RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
 						}
 					}
@@ -105,7 +116,7 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 					}
 					break;
 				case RTM_DELNEIGH:
-					if (msg->ndm_state & NUD_FAILED) {
+//					if (msg->ndm_state & NUD_FAILED) {
 					// client has roamed or was turned off 5 minutes ago
 						printf("REMOVING %s [%s]\n", ip_str, mac_str);
 						struct client _client = {};
@@ -114,9 +125,9 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 							printf("REMOVING  - really%s [%s]\n", ip_str, mac_str);
 							clientmgr_remove_address(CTX(clientmgr), &_client, RTA_DATA(tb[NDA_DST]));
 						}
-					}
+//					}
 				default:
-					printf("default\n");
+					printf("Received neither NEWNEIGH not DELNEIGH - doing nothing.\n");
 					break;
 			}
 		}

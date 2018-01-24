@@ -113,7 +113,7 @@ bool client_is_active(const struct client *client) {
 	for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
 		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
 		if (l3ctx.debug) {
-			printf("looking at state %i for ip", ip->state);
+			printf("looking at state %i for ip ", ip->state);
 			print_ip(&ip->addr, "\n");
 		}
 
@@ -237,10 +237,12 @@ bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address, st
 		struct client *c = &VECTOR_INDEX(ctx->clients, i);
 		for (int j = 0; j< VECTOR_LEN(c->addresses);j++) {
 			struct client_ip *a = &VECTOR_INDEX(c->addresses, j);
-			if (l3ctx.debug) {
-				printf("comparing ");
-				print_ip(address, " and ");
-				print_ip(&a->addr, "");
+			if (&a->addr) {
+				if (l3ctx.debug) {
+					printf("comparing ");
+					print_ip(address, " and ");
+					print_ip(&a->addr, "");
+				}
 			}
 			if (&a->addr && !memcmp(address, &a->addr, sizeof(struct in6_addr))) {
 				if (l3ctx.debug) {

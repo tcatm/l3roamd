@@ -189,6 +189,7 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 			print_ip(&packet.sol.hdr.nd_ns_target, ". Learning source-IP for client.\n");
 		}
 
+		clientmgr_notify_mac(CTX(clientmgr), mac, ctx->ifindex);
 		clientmgr_add_address(CTX(clientmgr), &packet.hdr.ip6_src, mac, ctx->ifindex);
 	}
 }
