@@ -39,7 +39,7 @@ void arp_handle_in(arp_ctx *ctx, int fd) {
 	if (packet.op != htons(ARP_REPLY))
 		return;
 	
-	if (memcmp(packet.spa ,"\x00\x00\x00\x00", 4) == 0) // IP is 0.0.0.0 - not sensible
+	if (memcmp(packet.spa ,"\x00\x00\x00\x00", 4) == 0) // IP is 0.0.0.0 - not sensible to add that.
 		return;
 	
 	uint8_t *mac = lladdr.sll_addr;
