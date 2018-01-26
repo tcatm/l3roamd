@@ -143,7 +143,7 @@ void loop() {
 			} else if (l3ctx.icmp6_ctx.fd == events[i].data.fd) {
 				if (events[i].events & EPOLLIN)
 					icmp6_handle_in(&l3ctx.icmp6_ctx, events[i].data.fd);
-			} else if ( ( l3ctx.icmp6_ctx.nsfd == events[i].data.fd) || ( l3ctx.icmp6_ctx.fd == events[i].data.fd ) ) {
+			} else if (l3ctx.icmp6_ctx.nsfd == events[i].data.fd) {
 				if (events[i].events & EPOLLIN)
 					icmp6_handle_ns_in(&l3ctx.icmp6_ctx, events[i].data.fd);
 			} else if (l3ctx.arp_ctx.fd == events[i].data.fd) {
@@ -329,6 +329,7 @@ int main(int argc, char *argv[]) {
 	struct prefix _prefix = {};
 	parse_prefix(&_prefix, "fe80::/64");
 	add_prefix(&l3ctx.clientmgr_ctx.prefixes, _prefix);
+
 
 	if (!a_initialized)
 		exit_error("specifying -a is mandatory");
