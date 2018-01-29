@@ -73,33 +73,40 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 
 	if ( ctx->clientif_index == msg->ndm_ifindex || br_index == msg->ndm_ifindex ) {
 		if (nh->nlmsg_type == RTM_NEWNEIGH && msg->ndm_state & NUD_REACHABLE && tb[NDA_LLADDR]) {
-			printf("Status-Change to NUD_REACHABLE, notifying for mac change [%s]\n",  mac_str) ;
+			if (l3ctx.debug)
+				printf("Status-Change to NUD_REACHABLE, notifying for mac change [%s]\n",  mac_str) ;
 			clientmgr_notify_mac(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
 		}
 
-		if_indextoname(msg->ndm_ifindex, ifname);
-		printf("neighbour [%s] (%s) changed on interface %s, state: %i ... (msgif: %i cif: %i brif: %i)\n", mac_str, ip_str, ifname, msg->ndm_state, msg->ndm_ifindex, ctx->clientif_index, br_index ); // see include/uapi/linux/neighbour.h NUD_REACHABLE for numeric values
+		if (l3ctx.debug) {
+			if_indextoname(msg->ndm_ifindex, ifname);
+			printf("neighbour [%s] (%s) changed on interface %s, state: %i ... (msgif: %i cif: %i brif: %i)\n", mac_str, ip_str, ifname, msg->ndm_state, msg->ndm_ifindex, ctx->clientif_index, br_index ); // see include/uapi/linux/neighbour.h NUD_REACHABLE for numeric values
+		}
 
 		switch (nh->nlmsg_type) {
 			case RTM_NEWNEIGH:
 				if (msg->ndm_state & NUD_REACHABLE) {
 					if (tb[NDA_DST] && tb[NDA_LLADDR]) {
-						printf(" Status-Change to NUD_REACHABLE, ADDING address %s [%s]\n", ip_str, mac_str) ;
+						if (l3ctx.debug)
+							printf("Status-Change to NUD_REACHABLE, ADDING address %s [%s]\n", ip_str, mac_str) ;
 						clientmgr_add_address(CTX(clientmgr), &dst_address, RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
 					}
 				}
 				else if (msg->ndm_state & NUD_FAILED) {
-					printf("REMOVING %s [%s]\n", ip_str, mac_str);
+					if (l3ctx.debug)
+						printf("REMOVING %s [%s]\n", ip_str, mac_str);
 					rtmgr_client_remove_address(&dst_address);
 				}
 				break;
 			case RTM_DELNEIGH:
 				//if (msg->ndm_state & NUD_FAILED) {
-				printf("REMOVING %s [%s]\n", ip_str, mac_str);
+				if (l3ctx.debug)
+					printf("REMOVING %s [%s]\n", ip_str, mac_str);
 				rtmgr_client_remove_address(&dst_address);
 				//}
 			default:
-				printf("Received neither NEWNEIGH not DELNEIGH - doing nothing.\n");
+				if (l3ctx.debug)
+					printf("Received neither NEWNEIGH not DELNEIGH - doing nothing.\n");
 				break;
 		}
 	}

@@ -245,7 +245,8 @@ bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address, st
 					if (l3ctx.debug) {
 						char mac_str[18];
 						mac_addr_n2a(mac_str, c->mac);
-						printf(" => match found for client %s.\n", mac_str);
+						if (l3ctx.debug)
+							printf(" => match found for client %s.\n", mac_str);
 					}
 					*client = c;
 					return true;
@@ -253,7 +254,8 @@ bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address, st
 			}
 		}
 	}
-	printf(" => no match found.\n");
+	if (l3ctx.debug)
+		printf(" => no match found.\n");
 	return false;
 }
 
