@@ -91,6 +91,7 @@ static inline void * l3roamd_alloc0(size_t size) {
 */
 static inline void * l3roamd_realloc(void *ptr, size_t size) {
 	void *ret = realloc(ptr, size);
+//	printf("realloc with size: %i\n", size);
 	if (!ret)
 		exit_errno("realloc");
 

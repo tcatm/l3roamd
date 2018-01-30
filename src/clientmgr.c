@@ -130,7 +130,8 @@ bool client_is_active(const struct client *client) {
   */
 void add_special_ip(clientmgr_ctx *ctx, struct client *client) {
 	struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
-	printf("Adding special address\n");
+	printf("Adding special address: ");
+	print_ip(&address, "\n");
 	rtnl_add_address(CTX(routemgr), &address);
 }
 
@@ -138,7 +139,8 @@ void add_special_ip(clientmgr_ctx *ctx, struct client *client) {
   */
 void remove_special_ip(clientmgr_ctx *ctx, struct client *client) {
 	struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
-	printf("Removing special address\n");
+	printf("Removing special address: ");
+	print_ip(&address, "\n");
 	rtnl_remove_address(CTX(routemgr), &address);
 }
 
@@ -315,8 +317,10 @@ void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[6]) {
 			delete_client_ip(client, &e->addr);
 		}
 	}
-	if (&client->addresses)
+	if (VECTOR_LEN(client->addresses)) {
+		printf("freeing addresses - this should not happen\n");
 		VECTOR_FREE(client->addresses);
+	}
 
 	// TODO: this is a rather low-level way of handling removal from the clients-vector. This could be improved by storing the index inside the client struct
 	for (int i=0;i<VECTOR_LEN(ctx->clients);i++) {
