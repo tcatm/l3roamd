@@ -541,6 +541,10 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
   */
 void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[6]) {
 	struct client *client = get_client(ctx, mac);
+	if (l3ctx.debug) {
+		printf("handle claim for client ");
+		print_client(client);
+	}
 
 	if (client == NULL)
 		return;
