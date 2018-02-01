@@ -164,8 +164,8 @@ void handle_kernel_routes(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	if (route.plen != 128)
 		return;
 
-	// TODO: We should check here whether the route is in the correct prefix for minor efficiency gain
-	ipmgr_route_appeared(CTX(ipmgr), &route.prefix);
+	if (clientmgr_valid_address(&l3ctx.clientmgr_ctx, &route.prefix))
+		ipmgr_route_appeared(CTX(ipmgr), &route.prefix);
 }
 
 void rtnl_handle_msg(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
