@@ -30,6 +30,7 @@
 #include "socket.h"
 #include "error.h"
 #include "l3roamd.h"
+#include "prefix.h"
 
 void socket_init(socket_ctx *ctx, char *path) {
 	if (!path) {
@@ -80,18 +81,27 @@ bool parse_command(char *cmd, enum socket_command *scmd) {
 		*scmd = ADD_PREFIX;
 		return true;
 	}
+	if (!strncmp(cmd, "get_prefixes", 12)) {
+		*scmd = GET_PREFIX;
+		return true;
+	}
 	return false;
 }
 
-/*
-void get_prefixes(struct json_object *obj) {
-	for (int i = 0; i < VECTOR_LEN(ctx->prefixes); i++) {
-		struct prefix *_prefix = &VECTOR_INDEX(ctx->prefixes, i);
-		if (prefix_contains(_prefix ,address))
-			return true;
+void socket_get_prefixes(struct json_object *obj) {
+	struct json_object *jprefixes = json_object_new_array();
+	char str_prefix[INET6_ADDRSTRLEN] = {};
+
+	inet_ntop(AF_INET6, &l3ctx.clientmgr_ctx.v4prefix.prefix, str_prefix, INET6_ADDRSTRLEN);
+	json_object_array_add(jprefixes, json_object_new_string(str_prefix));
+
+	for (int i = 0;i<VECTOR_LEN(l3ctx.clientmgr_ctx.prefixes);i++) {
+		struct prefix *_prefix = &VECTOR_INDEX(l3ctx.clientmgr_ctx.prefixes, i);
+		inet_ntop(AF_INET6, &_prefix->prefix, str_prefix, INET6_ADDRSTRLEN);
+		json_object_array_add(jprefixes, json_object_new_string(str_prefix));
 	}
+	json_object_object_add(obj, "prefixes", jprefixes);
 }
-*/
 
 void get_clients(struct json_object *obj) {
 	int i = 0, j = 0;
@@ -184,6 +194,11 @@ void socket_handle_in(socket_ctx *ctx) {
 				routemgr_remove_route(CTX(routemgr), 254, (struct in6_addr*)(_prefix.prefix.s6_addr), _prefix.plen );
 				dprintf(fd, "Deleted prefix: %s", &line[11]);
 			}
+			break;
+		case GET_PREFIX:
+			socket_get_prefixes(retval);
+			dprintf(fd, "%s", json_object_to_json_string(retval));
+			json_object_put(retval);
 			break;
 	}
 

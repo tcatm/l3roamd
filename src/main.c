@@ -270,6 +270,17 @@ int main(int argc, char *argv[]) {
 
 				add_prefix(&l3ctx.clientmgr_ctx.prefixes, _prefix);
 				break;
+			case '4':
+				if (!parse_prefix(&l3ctx.clientmgr_ctx.v4prefix, optarg))
+					exit_error("Can not parse IPv4 prefix");
+
+				if (l3ctx.clientmgr_ctx.v4prefix.plen != 96)
+					exit_error("IPv4 prefix must be /96");
+
+				l3ctx.arp_ctx.prefix = l3ctx.clientmgr_ctx.v4prefix.prefix;
+
+				v4_initialized=true;
+				break;
 			case 'i':
 				if (if_nametoindex(optarg) && !clientif_set ) {
 					free(l3ctx.routemgr_ctx.clientif);
@@ -298,17 +309,6 @@ int main(int argc, char *argv[]) {
 				break;
 			case 'd':
 				l3ctx.debug = true;
-				break;
-			case '4':
-				if (!parse_prefix(&l3ctx.clientmgr_ctx.v4prefix, optarg))
-					exit_error("Can not parse IPv4 prefix");
-
-				if (l3ctx.clientmgr_ctx.v4prefix.plen != 96)
-					exit_error("IPv4 prefix must be /96");
-
-				l3ctx.arp_ctx.prefix = l3ctx.clientmgr_ctx.v4prefix.prefix;
-
-				v4_initialized=true;
 				break;
 			case 'n':
 				l3ctx.clientmgr_ctx.nat46ifindex = if_nametoindex(optarg);

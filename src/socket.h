@@ -12,7 +12,8 @@
 enum socket_command {
 	GET_CLIENTS =0,
 	ADD_PREFIX,
-	DEL_PREFIX
+	DEL_PREFIX,
+	GET_PREFIX
 };
 
 typedef struct {
