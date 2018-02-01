@@ -164,7 +164,7 @@ void loop() {
 }
 
 void usage() {
-	puts("Usage: l3roamd [-h] [-d] [-b <client-bridge>] -a <ip6> -p <prefix> [-i <clientif>] -m <meshif> ... -t <export table> [-4 prefix]");
+	puts("Usage: l3roamd [-h] [-d] [-b <client-bridge>] -a <ip6> -p <prefix> [-i <clientif>] -m <meshif> ... -t <export table> [-4 prefix] [-D <devicename>]");
 	puts("  -a <ip6>           ip address of this node");
 	puts("  -b <client-bridge> this is the bridge where all clients are connected");
 	puts("  -d                 use debug logging"); // TODO: do we really need this?
@@ -176,6 +176,7 @@ void usage() {
 	puts("  -t <export table>  export routes to this table");
 	puts("  -4 <prefix>        IPv4 translation prefix");
         puts("  -V                 show version information");
+	puts("  -D                 Device name for the l3roamd tun-device");
 	puts("  -h                 this help\n\n");
 	puts("The socket will accept the following commands:");
 	puts("get_clients          The daemon will reply with a json structure, currently providing client count.");
@@ -221,7 +222,6 @@ int main(int argc, char *argv[]) {
 	l3ctx.icmp6_ctx.l3ctx = &l3ctx;
 	l3ctx.arp_ctx.l3ctx = &l3ctx;
 
-	intercom_init(&l3ctx.intercom_ctx);
 	l3ctx.routemgr_ctx.client_bridge = strdup("\0");
 	l3ctx.routemgr_ctx.clientif = strdup("\0");
 	l3ctx.icmp6_ctx.clientif = strdup("\0");
@@ -233,9 +233,10 @@ int main(int argc, char *argv[]) {
 	bool clientif_set = false;
 
 	l3ctx.debug = false;
+	l3ctx.l3device = strdup("l3roam0");
 
 	int c;
-	while ((c = getopt(argc, argv, "dha:b:p:i:m:t:c:4:n:s:d:V")) != -1)
+	while ((c = getopt(argc, argv, "dha:b:p:i:m:t:c:4:n:s:d:VD:")) != -1)
 		switch (c) {
                         case 'V':
                                 printf("l3roamd %s\n", SOURCE_VERSION);
@@ -313,13 +314,17 @@ int main(int argc, char *argv[]) {
 			case 'n':
 				l3ctx.clientmgr_ctx.nat46ifindex = if_nametoindex(optarg);
 				break;
+			case 'D':
+				free(l3ctx.l3device);
+				l3ctx.l3device = strdupa(optarg);
+				break;
 			default:
 				fprintf(stderr, "Invalid parameter %c ignored.\n", c);
 		}
 
 
 	if (!v4_initialized) {
-		fprintf(stderr, "-4 was not specified. Defaulting to 0:0:0:0:0:ffff::/96");
+		fprintf(stderr, "-4 was not specified. Defaulting to 0:0:0:0:0:ffff::/96\n");
 		parse_prefix(&l3ctx.clientmgr_ctx.v4prefix, "0:0:0:0:0:ffff::/96");
 		l3ctx.arp_ctx.prefix = l3ctx.clientmgr_ctx.v4prefix.prefix;
 		v4_initialized=true;
@@ -336,8 +341,9 @@ int main(int argc, char *argv[]) {
 	if (!p_initialized)
 		exit_error("specifying -p is mandatory");
 
+	intercom_init(&l3ctx.intercom_ctx);
 	socket_init(&l3ctx.socket_ctx, socketpath);
-	ipmgr_init(&l3ctx.ipmgr_ctx, "l3roam0", 9000);
+	ipmgr_init(&l3ctx.ipmgr_ctx, l3ctx.l3device, 9000);
 	routemgr_init(&l3ctx.routemgr_ctx);
 	wifistations_init(&l3ctx.wifistations_ctx);
 	taskqueue_init(&l3ctx.taskqueue_ctx);

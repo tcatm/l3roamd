@@ -84,7 +84,6 @@ void intercom_add_interface(intercom_ctx *ctx, char *ifname) {
 
 	VECTOR_ADD(ctx->interfaces, iface);
 
-	intercom_update_interfaces(ctx);
 }
 
 void intercom_init(intercom_ctx *ctx) {
@@ -102,6 +101,14 @@ void intercom_init(intercom_ctx *ctx) {
 
 	if (ctx->fd < 0)
 		exit_error("creating socket");
+	
+	for (int i=0;i<VECTOR_LEN(ctx->interfaces);i++) {
+		if (l3ctx.debug)
+			printf("binding to interface %s", VECTOR_INDEX(ctx->interfaces, i).ifname);
+		if(setsockopt(ctx->fd, SOL_SOCKET, SO_BINDTODEVICE, VECTOR_INDEX(ctx->interfaces, i).ifname, strnlen(VECTOR_INDEX(ctx->interfaces, i).ifname, IFNAMSIZ-1))) {
+			exit_error("error on setsockopt while binding to interface %s", VECTOR_INDEX(ctx->interfaces, i).ifname);
+		}
+	}
 
 	struct sockaddr_in6 server_addr = {};
 
@@ -113,6 +120,7 @@ void intercom_init(intercom_ctx *ctx) {
 		perror("bind failed");
 		exit(EXIT_FAILURE);
 	}
+	intercom_update_interfaces(ctx);
 }
 
 void intercom_seek(intercom_ctx *ctx, const struct in6_addr *address) {

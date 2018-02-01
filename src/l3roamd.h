@@ -26,6 +26,7 @@ struct l3ctx {
 	clientmgr_ctx clientmgr_ctx;
 	icmp6_ctx icmp6_ctx;
 	ipmgr_ctx ipmgr_ctx;
+	char *l3device;
 	arp_ctx arp_ctx;
 	routemgr_ctx routemgr_ctx;
 	socket_ctx socket_ctx;
