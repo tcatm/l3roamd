@@ -66,10 +66,9 @@ void add_fd(int efd, int fd, uint32_t events) {
 void sig_term_handler(int signum, siginfo_t *info, void *ptr)
 {
 	write(STDERR_FILENO, SIGTERM_MSG, sizeof(SIGTERM_MSG));
-	int j = VECTOR_LEN(l3ctx.clientmgr_ctx.prefixes);
-
 	struct prefix _prefix = {};
-	for (int i=j;i>0;i--) {
+
+	for (int i=VECTOR_LEN(l3ctx.clientmgr_ctx.prefixes);i>0;i--) {
 		del_prefix(&l3ctx.clientmgr_ctx.prefixes, _prefix);
 		routemgr_remove_route(&l3ctx.routemgr_ctx, 254, (struct in6_addr*)(_prefix.prefix.s6_addr), _prefix.plen );
 	}
@@ -167,7 +166,7 @@ void usage() {
 	puts("Usage: l3roamd [-h] [-d] [-b <client-bridge>] -a <ip6> -p <prefix> [-i <clientif>] -m <meshif> ... -t <export table> [-4 prefix] [-D <devicename>]");
 	puts("  -a <ip6>           ip address of this node");
 	puts("  -b <client-bridge> this is the bridge where all clients are connected");
-	puts("  -d                 use debug logging"); // TODO: do we really need this?
+	puts("  -d                 use debug logging");
 	puts("  -c <file>          configuration file"); // TODO: do we really need this?
 	puts("  -p <prefix>        Accept queries for this prefix. May be provided multiple times.");
 	puts("  -s <socketpath>    provide statistics and allow control using this socket. See below for usage instructions.");
@@ -180,6 +179,7 @@ void usage() {
 	puts("  -h                 this help\n\n");
 	puts("The socket will accept the following commands:");
 	puts("get_clients          The daemon will reply with a json structure, currently providing client count.");
+	puts("get_prefixes         This return a list of all prefixes being handled by l3roamd.");
 	puts("add_prefix <prefix>  This will treat <prefix> as if it was added using -p");
 	puts("del_prefix <prefix>  This will remove <prefix> from the list of client-prefixes and stop accepting queries for clients within that prefix.");
 }
