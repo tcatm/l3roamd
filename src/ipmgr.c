@@ -85,7 +85,7 @@ struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 		struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
 		if (l3ctx.debug) {
 			printf("looking for ip ");
-			print_ip(k, "comparing with ");
+			print_ip(k, " comparing with ");
 			print_ip(&e->address, "\n");
 		}
 		if (memcmp(k, &(e->address), sizeof(struct in6_addr)) == 0) {

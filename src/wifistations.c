@@ -64,8 +64,6 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
 			// just directly removing it. The client may have
 			// roamed and we would like to allow for a
 			// claim/info-cycle.
-			// Possibly use the tentative state for this because we
-			// are not currently using it.
 			printf("NL80211_CMD_DEL_STATION fpr [%s] RECEIVED on interface %s. Removing.\n", macbuf, ifname);
 			clientmgr_delete_client(CTX(clientmgr), nla_data(tb[NL80211_ATTR_MAC]));
 			break;

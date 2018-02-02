@@ -106,7 +106,7 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 				}
 			default:
 				if (l3ctx.debug)
-					printf("Received neither NEWNEIGH not DELNEIGH - doing nothing.\n");
+					printf("Received neither NEWNEIGH not DELNEIGH - doing nothing. nlmsg_type: %i\n", nh->nlmsg_type);
 				break;
 		}
 	}

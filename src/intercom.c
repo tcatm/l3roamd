@@ -6,7 +6,6 @@
 #include "syscallwrappers.h"
 #include "util.h"
 
-//TODO this is used for print_client - remove
 #include "clientmgr.h"
 
 #include <time.h>
