@@ -104,6 +104,7 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 						printf("REMOVING (DELNEIGH) %s [%s]\n", ip_str, mac_str);
 					rtmgr_client_remove_address(&dst_address);
 				}
+				break;
 			default:
 				if (l3ctx.debug)
 					printf("Received neither NEWNEIGH not DELNEIGH - doing nothing. nlmsg_type: %i\n", nh->nlmsg_type);
