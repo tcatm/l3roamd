@@ -94,8 +94,8 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 				}
 				else if (msg->ndm_state & NUD_FAILED) {
 					if (l3ctx.debug)
-						printf("REMOVING (NEWNEIGH)  %s [%s]\n", ip_str, mac_str);
-					rtmgr_client_remove_address(&dst_address);
+						printf("(NEWNEIGH & NUD_FAILED received - sending NS)  %s [%s]\n", ip_str, mac_str);
+					icmp6_send_solicitation(CTX(icmp6), &dst_address);
 				}
 				break;
 			case RTM_DELNEIGH:
