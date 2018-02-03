@@ -12,38 +12,16 @@ static void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh);
 static int rtnl_addattr(struct nlmsghdr *n, int maxlen, int type, void *data, int datalen);
 static void rtmgr_rtnl_talk(routemgr_ctx *ctx, struct nlmsghdr *req);
 
-
-void routemgr_remove_neighbour(routemgr_ctx *ctx, const int ifindex, uint8_t mac[6]) {
-	struct nlneighreq req = {
-		.nl = {
-			.nlmsg_type = RTM_DELNEIGH,
-			.nlmsg_flags = NLM_F_REQUEST,
-			.nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg)),
-		},
-		.nd = {
-			.ndm_family = AF_INET6,
-			.ndm_state = NUD_PERMANENT,
-			.ndm_ifindex = ifindex,
-		},
-	};
-
-	rtnl_addattr(&req.nl, sizeof(req), NDA_LLADDR, mac, sizeof(uint8_t) * 6);
-
-	rtmgr_rtnl_talk(ctx, (struct nlmsghdr*)&req);
-}
-
-
-
 int parse_rtattr_flags(struct rtattr *tb[], int max, struct rtattr *rta,
 		int len, unsigned short flags)
 {
 	unsigned short type;
 
-	memset(tb, 0, sizeof(struct rtattr *) * (max + 1));
 	while (RTA_OK(rta, len)) {
 		type = rta->rta_type & ~flags;
-		if ((type <= max) && (!tb[type]))
+		if ((type <= max) && (!tb[type])) {
 			tb[type] = rta;
+		}
 		rta = RTA_NEXT(rta,len);
 	}
 	if (len)
@@ -56,69 +34,80 @@ int parse_rtattr(struct rtattr *tb[], int max, struct rtattr *rta, int len)
 	return parse_rtattr_flags(tb, max, rta, len, 0);
 }
 
-void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
-	struct ndmsg *msg = NLMSG_DATA(nh);
-	char ifname[IFNAMSIZ] = "";
-	struct rtattr * tb[NDA_MAX+1];
+void rtmgr_client_remove_address(struct in6_addr *dst_address) {
+	struct client *_client = NULL;
+	if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, dst_address, &_client)) {
+		clientmgr_remove_address(&l3ctx.clientmgr_ctx, _client, dst_address);
+	}
 
+}
+
+void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
+	char ifname[IFNAMSIZ+1] = "";
+	struct rtattr * tb[NDA_MAX+1];
+	memset(tb, 0, sizeof(struct rtattr *) * (NDA_MAX + 1));
+	char mac_str[18] = {};
+	char ip_str[INET6_ADDRSTRLEN] = {};
+
+	struct ndmsg *msg = NLMSG_DATA(nh);
 	parse_rtattr(tb, NDA_MAX, NDA_RTA(msg), nh->nlmsg_len - NLMSG_LENGTH(sizeof(*msg)));
 
-	char mac_str[64] = "";
 	if (tb[NDA_LLADDR]) {
 		mac_addr_n2a(mac_str, RTA_DATA(tb[NDA_LLADDR]));
 	}
+	struct in6_addr dst_address = {};
 
-	if_indextoname(msg->ndm_ifindex, ifname);
+	if (tb[NDA_DST]) {
+		if (msg->ndm_family == AF_INET) {
+			// form a transformed ipv6 address from the ipv4 address, we just parsed
+			memcpy(&dst_address, &l3ctx.clientmgr_ctx.v4prefix,12);
+			memcpy(&dst_address.s6_addr[12], RTA_DATA(tb[NDA_DST]), 4);
+		}
+		else
+			memcpy(&dst_address, RTA_DATA(tb[NDA_DST]),16);
+
+		inet_ntop(AF_INET6, &dst_address, ip_str, INET6_ADDRSTRLEN);
+	}
+
 	unsigned int br_index = if_nametoindex(ctx->client_bridge);
 
-	if ( ctx->clientif_index == msg->ndm_ifindex ||
-	     br_index == msg->ndm_ifindex ||
-	     ( tb[NDA_MASTER] && br_index == rta_getattr_u32(tb[NDA_MASTER]) )
-	     ) {
-		printf("neighbour [%s] changed on interface %s, state: %i ... ", mac_str, ifname, msg->ndm_state); // see include/uapi/linux/neighbour.h NUD_REACHABLE for numeric values
-		if (tb[NDA_MASTER]) {
-			if_indextoname(rta_getattr_u32(tb[NDA_MASTER]),ifname);
-			if (! strncmp( ifname, ctx->client_bridge, strlen(ifname))) {
-				switch (nh->nlmsg_type) {
-					case RTM_NEWNEIGH:
-						if (msg->ndm_state == NUD_REACHABLE) {
-							printf("MAC-(STATUS)-CHANGE\n") ;
-							clientmgr_notify_mac(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]), rta_getattr_u32(tb[NDA_MASTER]));
-						}
-						break;
-					case RTM_DELNEIGH:
-						if (msg->ndm_state == NUD_FAILED) {
-							// client has roamed or was turned off 5 minutes ago
-							printf("REMOVING\n");
-							clientmgr_delete_client(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]));
-						}
-						break;
-					case RTM_GETNEIGH:
-						printf("GETNEIGH - not handler registered.\n");
-						break;
-					default:
-						break;
+	if ( ctx->clientif_index == msg->ndm_ifindex || br_index == msg->ndm_ifindex ) {
+		if (nh->nlmsg_type == RTM_NEWNEIGH && msg->ndm_state & NUD_REACHABLE && tb[NDA_LLADDR]) {
+			if (l3ctx.debug)
+				printf("Status-Change to NUD_REACHABLE, notifying for mac change [%s]\n",  mac_str) ;
+			clientmgr_notify_mac(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
+		}
+
+		if (l3ctx.debug) {
+			if_indextoname(msg->ndm_ifindex, ifname);
+			printf("neighbour [%s] (%s) changed on interface %s, state: %i ... (msgif: %i cif: %i brif: %i)\n", mac_str, ip_str, ifname, msg->ndm_state, msg->ndm_ifindex, ctx->clientif_index, br_index ); // see include/uapi/linux/neighbour.h NUD_REACHABLE for numeric values
+		}
+
+		switch (nh->nlmsg_type) {
+			case RTM_NEWNEIGH:
+				if (msg->ndm_state & NUD_REACHABLE) {
+					if (tb[NDA_DST] && tb[NDA_LLADDR]) {
+						if (l3ctx.debug)
+							printf("Status-Change to NUD_REACHABLE, ADDING address %s [%s]\n", ip_str, mac_str) ;
+						clientmgr_add_address(CTX(clientmgr), &dst_address, RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
+					}
 				}
-			}
-		} else {
-			switch (nh->nlmsg_type) {
-				case RTM_NEWNEIGH:
-					if (tb[NDA_DST] && tb[NDA_LLADDR] && msg->ndm_family == AF_INET6) {
-						if (msg->ndm_state == NUD_REACHABLE) {
-							printf("ADDING address\n") ;
-							clientmgr_add_address(CTX(clientmgr),  RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
-						}
-					}
-					break;
-				case RTM_DELNEIGH:
-					if (msg->ndm_state == NUD_FAILED) {
-						// client has roamed or was turned off 5 minutes ago
-						printf("REMOVING\n");
-						clientmgr_remove_address(CTX(clientmgr), RTA_DATA(tb[NDA_DST]), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
-					}
-				default:
-					break;
-			}
+				else if (msg->ndm_state & NUD_FAILED) {
+					if (l3ctx.debug)
+						printf("REMOVING (NEWNEIGH)  %s [%s]\n", ip_str, mac_str);
+					rtmgr_client_remove_address(&dst_address);
+				}
+				break;
+			case RTM_DELNEIGH:
+				if (msg->ndm_state & NUD_FAILED) {
+					if (l3ctx.debug)
+						printf("REMOVING (DELNEIGH) %s [%s]\n", ip_str, mac_str);
+					rtmgr_client_remove_address(&dst_address);
+				}
+			default:
+				if (l3ctx.debug)
+					printf("Received neither NEWNEIGH not DELNEIGH - doing nothing. nlmsg_type: %i\n", nh->nlmsg_type);
+				break;
 		}
 	}
 }
@@ -175,8 +164,8 @@ void handle_kernel_routes(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	if (route.plen != 128)
 		return;
 
-	// TODO: We should check here whether the route is in the correct prefix for minor efficiency gain
-	ipmgr_route_appeared(CTX(ipmgr), &route.prefix);
+	if (clientmgr_valid_address(&l3ctx.clientmgr_ctx, &route.prefix))
+		ipmgr_route_appeared(CTX(ipmgr), &route.prefix);
 }
 
 void rtnl_handle_msg(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
@@ -187,7 +176,7 @@ void rtnl_handle_msg(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 			break;
 		case RTM_NEWNEIGH:
 		case RTM_DELNEIGH:
-			rtnl_handle_neighbour(ctx,nh);
+			rtnl_handle_neighbour(ctx, nh);
 			break;
 		case RTM_NEWLINK:
 		case RTM_DELLINK:
@@ -199,6 +188,8 @@ void rtnl_handle_msg(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	}
 }
 
+/* obtain all neighbours by sending GETNEIGH request
+**/
 static void routemgr_initial_neighbours(routemgr_ctx *ctx, uint8_t family) {
 	struct nlneighreq req = {
 		.nl = {
@@ -215,6 +206,7 @@ static void routemgr_initial_neighbours(routemgr_ctx *ctx, uint8_t family) {
 }
 
 void routemgr_destroy(routemgr_ctx *ctx) {
+	// TODO: remove all routes here
 	close(ctx->fd);
 }
 
@@ -252,38 +244,38 @@ void routemgr_init(routemgr_ctx *ctx) {
 
 
 int parse_kernel_route_rta(struct rtmsg *rtm, int len, struct kernel_route *route) {
-		len -= NLMSG_ALIGN(sizeof(*rtm));
+	len -= NLMSG_ALIGN(sizeof(*rtm));
 
-		memset(route, 0, sizeof(struct kernel_route));
-		route->proto = rtm->rtm_protocol;
+	memset(route, 0, sizeof(struct kernel_route));
+	route->proto = rtm->rtm_protocol;
 
-		for (struct rtattr *rta = RTM_RTA(rtm); RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
-				switch(rta->rta_type) {
-				case RTA_DST:
-						route->plen = rtm->rtm_dst_len;
-						memcpy(route->prefix.s6_addr, RTA_DATA(rta), 16);
-						break;
-				case RTA_SRC:
-						route->src_plen = rtm->rtm_src_len;
-						memcpy(route->src_prefix.s6_addr, RTA_DATA(rta), 16);
-						break;
-				case RTA_GATEWAY:
-						memcpy(route->gw.s6_addr, RTA_DATA(rta), 16);
-						break;
-				case RTA_OIF:
-						route->ifindex = *(int*)RTA_DATA(rta);
-						break;
-				case RTA_PRIORITY:
-						route->metric = *(int*)RTA_DATA(rta);
-						if(route->metric < 0 || route->metric > KERNEL_INFINITY)
-								route->metric = KERNEL_INFINITY;
-						break;
-				default:
-						break;
-				}
+	for (struct rtattr *rta = RTM_RTA(rtm); RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
+		switch(rta->rta_type) {
+			case RTA_DST:
+				route->plen = rtm->rtm_dst_len;
+				memcpy(route->prefix.s6_addr, RTA_DATA(rta), 16);
+				break;
+			case RTA_SRC:
+				route->src_plen = rtm->rtm_src_len;
+				memcpy(route->src_prefix.s6_addr, RTA_DATA(rta), 16);
+				break;
+			case RTA_GATEWAY:
+				memcpy(route->gw.s6_addr, RTA_DATA(rta), 16);
+				break;
+			case RTA_OIF:
+				route->ifindex = *(int*)RTA_DATA(rta);
+				break;
+			case RTA_PRIORITY:
+				route->metric = *(int*)RTA_DATA(rta);
+				if(route->metric < 0 || route->metric > KERNEL_INFINITY)
+					route->metric = KERNEL_INFINITY;
+				break;
+			default:
+				break;
 		}
+	}
 
-		return 1;
+	return 1;
 }
 
 void routemgr_handle_in(routemgr_ctx *ctx, int fd) {
@@ -294,10 +286,10 @@ void routemgr_handle_in(routemgr_ctx *ctx, int fd) {
 		count = recv(fd, buf, sizeof buf, 0);
 		if (count == -1) {
 			if (errno != EAGAIN)
-			perror("read");
+				perror("read");
 			break;
 		} else if (count == 0)
-		break;
+			break;
 
 		const struct nlmsghdr *nh;
 		struct nlmsgerr *ne;
@@ -335,14 +327,14 @@ void rtnl_add_address(routemgr_ctx *ctx, struct in6_addr *address) {
 }
 
 void rtnl_remove_address(routemgr_ctx *ctx, struct in6_addr *address) {
-	rtnl_change_address(ctx, address, RTM_DELADDR, NLM_F_REQUEST);
+	rtnl_change_address(ctx, address, RTM_DELADDR, NLM_F_REQUEST | NLM_F_ACK);
 }
 
 void rtnl_change_address(routemgr_ctx *ctx, struct in6_addr *address, int type, int flags) {
 	struct {
-		 struct nlmsghdr nl;
-		 struct ifaddrmsg ifa;
-		 char buf[1024];
+		struct nlmsghdr nl;
+		struct ifaddrmsg ifa;
+		char buf[1024];
 	} req = {
 		.nl = {
 			.nlmsg_len = NLMSG_LENGTH(sizeof(struct ifaddrmsg)),
@@ -373,7 +365,6 @@ void routemgr_insert_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_a
 			.ndm_family = AF_INET6,
 			.ndm_state = NUD_REACHABLE,
 			.ndm_ifindex = ifindex,
-			.ndm_flags = NTF_USE
 		},
 	};
 
@@ -387,14 +378,14 @@ void routemgr_insert_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_a
 void routemgr_remove_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_addr *address, uint8_t mac[6]) {
 	struct nlneighreq req = {
 		.nl = {
-			.nlmsg_type = RTM_NEWNEIGH,
-			.nlmsg_flags = NLM_F_REQUEST,
+			.nlmsg_type = RTM_DELNEIGH,
+			.nlmsg_flags = NLM_F_REQUEST | NLM_F_REPLACE,
 			.nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg)),
 		},
 		.nd = {
 			.ndm_family = AF_INET6,
-			.ndm_state = NUD_NONE,
 			.ndm_ifindex = ifindex,
+			.ndm_flags = NTF_PROXY
 		},
 	};
 
@@ -527,7 +518,7 @@ void routemgr_insert_route4(routemgr_ctx *ctx, const int table, const int ifinde
 			.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg)),
 		},
 		.rt = {
-			.rtm_family = AF_INET,
+			.rtm_family = AF_INET6,
 			.rtm_table = table,
 			.rtm_protocol = ROUTE_PROTO,
 			.rtm_scope = RT_SCOPE_UNIVERSE,

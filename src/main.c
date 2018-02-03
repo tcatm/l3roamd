@@ -66,10 +66,9 @@ void add_fd(int efd, int fd, uint32_t events) {
 void sig_term_handler(int signum, siginfo_t *info, void *ptr)
 {
 	write(STDERR_FILENO, SIGTERM_MSG, sizeof(SIGTERM_MSG));
-	int j = VECTOR_LEN(l3ctx.clientmgr_ctx.prefixes);
-
 	struct prefix _prefix = {};
-	for (int i=j;i>0;i--) {
+
+	for (int i=VECTOR_LEN(l3ctx.clientmgr_ctx.prefixes);i>0;i--) {
 		del_prefix(&l3ctx.clientmgr_ctx.prefixes, _prefix);
 		routemgr_remove_route(&l3ctx.routemgr_ctx, 254, (struct in6_addr*)(_prefix.prefix.s6_addr), _prefix.plen );
 	}
@@ -124,9 +123,13 @@ void loop() {
 		n = epoll_wait(efd, events, maxevents, -1);
 		for(int i = 0; i < n; i++) {
 			if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)) {
-				fprintf(stderr, "epoll error. This could be a bug. Exiting now.\n");
-				close(events[i].data.fd);
+				if (errno == EAGAIN) {
+					printf("EAGAIN received, continuing.");
+					continue;
+				}
+				perror("epoll error. This is a bug. Fix this.");
 				sig_term_handler(0, 0, 0);
+				close(events[i].data.fd);
 				// TODO: routemgr is handling routes from kernel AND direct neighbours from fdb. Refactor this at is actually a netlink-handler
 			} else if (l3ctx.taskqueue_ctx.fd == events[i].data.fd) {
 				taskqueue_run(&l3ctx.taskqueue_ctx);
@@ -160,10 +163,10 @@ void loop() {
 }
 
 void usage() {
-	puts("Usage: l3roamd [-h] [-d] [-b <client-bridge>] -a <ip6> -p <prefix> [-i <clientif>] -m <meshif> ... -t <export table> [-4 prefix]");
+	puts("Usage: l3roamd [-h] [-d] [-b <client-bridge>] -a <ip6> -p <prefix> [-i <clientif>] -m <meshif> ... -t <export table> [-4 prefix] [-D <devicename>]");
 	puts("  -a <ip6>           ip address of this node");
 	puts("  -b <client-bridge> this is the bridge where all clients are connected");
-	puts("  -d                 use debug logging"); // TODO: do we really need this?
+	puts("  -d                 use debug logging");
 	puts("  -c <file>          configuration file"); // TODO: do we really need this?
 	puts("  -p <prefix>        Accept queries for this prefix. May be provided multiple times.");
 	puts("  -s <socketpath>    provide statistics and allow control using this socket. See below for usage instructions.");
@@ -172,9 +175,11 @@ void usage() {
 	puts("  -t <export table>  export routes to this table");
 	puts("  -4 <prefix>        IPv4 translation prefix");
         puts("  -V                 show version information");
+	puts("  -D                 Device name for the l3roamd tun-device");
 	puts("  -h                 this help\n\n");
 	puts("The socket will accept the following commands:");
 	puts("get_clients          The daemon will reply with a json structure, currently providing client count.");
+	puts("get_prefixes         This return a list of all prefixes being handled by l3roamd.");
 	puts("add_prefix <prefix>  This will treat <prefix> as if it was added using -p");
 	puts("del_prefix <prefix>  This will remove <prefix> from the list of client-prefixes and stop accepting queries for clients within that prefix.");
 }
@@ -217,20 +222,21 @@ int main(int argc, char *argv[]) {
 	l3ctx.icmp6_ctx.l3ctx = &l3ctx;
 	l3ctx.arp_ctx.l3ctx = &l3ctx;
 
-	intercom_init(&l3ctx.intercom_ctx);
 	l3ctx.routemgr_ctx.client_bridge = strdup("\0");
 	l3ctx.routemgr_ctx.clientif = strdup("\0");
 	l3ctx.icmp6_ctx.clientif = strdup("\0");
 	l3ctx.arp_ctx.clientif = strdup("\0");
 	l3ctx.clientmgr_ctx.export_table = 254;
-	bool v4_initialized=false;
-	bool a_initialized=false;
-	bool p_initialized=false;
+	bool v4_initialized = false;
+	bool a_initialized = false;
+	bool p_initialized = false;
+	bool clientif_set = false;
 
 	l3ctx.debug = false;
+	l3ctx.l3device = strdup("l3roam0");
 
 	int c;
-	while ((c = getopt(argc, argv, "dha:b:p:i:m:t:c:4:n:s:d:V")) != -1)
+	while ((c = getopt(argc, argv, "dha:b:p:i:m:t:c:4:n:s:d:VD:")) != -1)
 		switch (c) {
                         case 'V':
                                 printf("l3roamd %s\n", SOURCE_VERSION);
@@ -265,16 +271,28 @@ int main(int argc, char *argv[]) {
 
 				add_prefix(&l3ctx.clientmgr_ctx.prefixes, _prefix);
 				break;
+			case '4':
+				if (!parse_prefix(&l3ctx.clientmgr_ctx.v4prefix, optarg))
+					exit_error("Can not parse IPv4 prefix");
+
+				if (l3ctx.clientmgr_ctx.v4prefix.plen != 96)
+					exit_error("IPv4 prefix must be /96");
+
+				l3ctx.arp_ctx.prefix = l3ctx.clientmgr_ctx.v4prefix.prefix;
+
+				v4_initialized=true;
+				break;
 			case 'i':
-				if (if_nametoindex(optarg)) {
+				if (if_nametoindex(optarg) && !clientif_set ) {
 					free(l3ctx.routemgr_ctx.clientif);
 					free(l3ctx.icmp6_ctx.clientif);
 					free(l3ctx.arp_ctx.clientif);
 					l3ctx.routemgr_ctx.clientif = strdupa(optarg);
 					l3ctx.icmp6_ctx.clientif = strdupa(optarg);
 					l3ctx.arp_ctx.clientif = strdupa(optarg);
+					clientif_set=true;
 				} else {
-					fprintf(stderr, "ignoring unknown client-interface %s\n", optarg);
+					fprintf(stderr, "ignoring unknown client-interface %s or client-interface was already set. Only the first client-interface will be considered.\n", optarg);
 				}
 				break;
 			case 'm':
@@ -293,19 +311,12 @@ int main(int argc, char *argv[]) {
 			case 'd':
 				l3ctx.debug = true;
 				break;
-			case '4':
-				if (!parse_prefix(&l3ctx.clientmgr_ctx.v4prefix, optarg))
-					exit_error("Can not parse IPv4 prefix");
-
-				if (l3ctx.clientmgr_ctx.v4prefix.plen != 96)
-					exit_error("IPv4 prefix must be /96");
-
-				l3ctx.arp_ctx.prefix = l3ctx.clientmgr_ctx.v4prefix.prefix;
-
-				v4_initialized=true;
-				break;
 			case 'n':
 				l3ctx.clientmgr_ctx.nat46ifindex = if_nametoindex(optarg);
+				break;
+			case 'D':
+				free(l3ctx.l3device);
+				l3ctx.l3device = strdupa(optarg);
 				break;
 			default:
 				fprintf(stderr, "Invalid parameter %c ignored.\n", c);
@@ -313,19 +324,26 @@ int main(int argc, char *argv[]) {
 
 
 	if (!v4_initialized) {
-		fprintf(stderr, "-4 was not specified. Defaulting to 0:0:0:0:0:ffff::/96");
+		fprintf(stderr, "-4 was not specified. Defaulting to 0:0:0:0:0:ffff::/96\n");
 		parse_prefix(&l3ctx.clientmgr_ctx.v4prefix, "0:0:0:0:0:ffff::/96");
 		l3ctx.arp_ctx.prefix = l3ctx.clientmgr_ctx.v4prefix.prefix;
 		v4_initialized=true;
 	}
+
+	// clients have ll-addresses too
+	struct prefix _prefix = {};
+	parse_prefix(&_prefix, "fe80::/64");
+	add_prefix(&l3ctx.clientmgr_ctx.prefixes, _prefix);
+
 
 	if (!a_initialized)
 		exit_error("specifying -a is mandatory");
 	if (!p_initialized)
 		exit_error("specifying -p is mandatory");
 
+	intercom_init(&l3ctx.intercom_ctx);
 	socket_init(&l3ctx.socket_ctx, socketpath);
-	ipmgr_init(&l3ctx.ipmgr_ctx, "l3roam0", 9000);
+	ipmgr_init(&l3ctx.ipmgr_ctx, l3ctx.l3device, 9000);
 	routemgr_init(&l3ctx.routemgr_ctx);
 	wifistations_init(&l3ctx.wifistations_ctx);
 	taskqueue_init(&l3ctx.taskqueue_ctx);

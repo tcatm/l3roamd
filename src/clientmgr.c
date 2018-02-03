@@ -35,9 +35,9 @@ void mac_addr_n2a(char *mac_addr, unsigned char *arg) {
 //	snprintf(&addr_str[0], INET6_ADDRSTRLEN, "ff02::1:ff%02x:%02x%02x", mac[3], mac[4], mac[5]);
 //}
 
-struct in6_addr mac2ipv6(uint8_t mac[6]) {
+struct in6_addr mac2ipv6(uint8_t mac[6], char * prefix) {
 	struct in6_addr address = {};
-	inet_pton(AF_INET6, NODE_CLIENT_PREFIX, &address);
+	inet_pton(AF_INET6, prefix, &address);
 
 	address.s6_addr[8] = mac[0] ^ 0x02;
 	address.s6_addr[9] = mac[1];
@@ -53,6 +53,8 @@ struct in6_addr mac2ipv6(uint8_t mac[6]) {
 
 bool prefix_contains(const struct prefix *prefix, struct in6_addr *addr) {
 	int mask=0xff;
+//	print_ip(&prefix->prefix, "<- prefix\n");
+//	print_ip(addr, "<- addr\n");
 	for (int remaining_plen = prefix->plen, i=0;remaining_plen > 0; remaining_plen-= 8) {
 		if (remaining_plen < 8)
 			mask = 0xff & (0xff00 >>remaining_plen);
@@ -66,10 +68,10 @@ bool prefix_contains(const struct prefix *prefix, struct in6_addr *addr) {
 
 void print_client(struct client *client) {
 	char ifname[IFNAMSIZ];
+	char mac_str[18];
 
-	printf("Client %02x:%02x:%02x:%02x:%02x:%02x", client->mac[0], client->mac[1],
-	                                               client->mac[2], client->mac[3],
-	                                               client->mac[4], client->mac[5]);
+	mac_addr_n2a(mac_str, client->mac);
+	printf("Client %s", mac_str);
 
 	if (client_is_active(client))
 		printf(" (active");
@@ -110,9 +112,6 @@ void print_client(struct client *client) {
     currently active or tentative.
     */
 bool client_is_active(const struct client *client) {
-	struct timespec now;
-	clock_gettime(CLOCK_MONOTONIC, &now);
-
 	for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
 		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
 
@@ -126,20 +125,22 @@ bool client_is_active(const struct client *client) {
 /** Adds the special node client IP address.
   */
 void add_special_ip(clientmgr_ctx *ctx, struct client *client) {
-	struct in6_addr address = mac2ipv6(client->mac);
-	printf("Adding special address\n");
+	struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
+	printf("Adding special address: ");
+	print_ip(&address, "\n");
 	rtnl_add_address(CTX(routemgr), &address);
 }
 
 /** Removes the special node client IP address.
   */
 void remove_special_ip(clientmgr_ctx *ctx, struct client *client) {
-	struct in6_addr address = mac2ipv6(client->mac);
-	printf("Removing special address\n");
+	struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
+	printf("Removing special address: ");
+	print_ip(&address, "\n");
 	rtnl_remove_address(CTX(routemgr), &address);
 }
 
-/** Given an IP address returns the IP object of a client.
+/** Given an IP address returns the client-object of a client.
     Returns NULL if no object is found.
     */
 struct client_ip *get_client_ip(struct client *client, const struct in6_addr *address) {
@@ -156,24 +157,32 @@ struct client_ip *get_client_ip(struct client *client, const struct in6_addr *ad
 /** Removes an IP address from a client. Safe to call if the IP is not
     currently present in the clients list.
     */
-void delete_client_ip(struct client *client, const struct in6_addr *address) {
-	for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
+void delete_client_ip(struct client *client, const struct in6_addr *address, bool cleanup) {
+	for (int i = VECTOR_LEN(client->addresses)-1;i>=0; i--) {
 		struct client_ip *e = &VECTOR_INDEX(client->addresses, i);
 
 		if (memcmp(address, &e->addr, sizeof(struct in6_addr)) == 0) {
-			VECTOR_DELETE(client->addresses, i);
-			break;
+			client_ip_set_state(&l3ctx.clientmgr_ctx, client, get_client_ip(client,address), IP_INACTIVE);
+			if (cleanup)
+				VECTOR_DELETE(client->addresses, i);
 		}
 	}
 
-	printf("\x1b[31mDeleting\x1b[0m ");
+	char str[INET6_ADDRSTRLEN+1];
+	inet_ntop(AF_INET6, address, str, INET6_ADDRSTRLEN);
+	printf("\x1b[31mDeleted IP %s from client %zi addresses are still assigned\x1b[0m ", str, VECTOR_LEN(client->addresses));
 	print_client(client);
+
 }
 
 /** Adds a route.
-  */
+*/
 void client_add_route(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip) {
+	routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr , client->mac);
+	printf("adding route for "); 
+	print_ip(&ip->addr, "");
 	if (clientmgr_is_ipv4(ctx, &ip->addr)) {
+		printf(" (IPv4)\n");
 		struct in_addr ip4 = {
 			.s_addr = ip->addr.s6_addr[12] << 24 | ip->addr.s6_addr[13] << 16 | ip->addr.s6_addr[14] << 8 | ip->addr.s6_addr[15]
 		};
@@ -181,6 +190,7 @@ void client_add_route(clientmgr_ctx *ctx, struct client *client, struct client_i
 		routemgr_insert_route(CTX(routemgr), ctx->export_table, ctx->nat46ifindex, &ip->addr, 128);
 		routemgr_insert_route4(CTX(routemgr), ctx->export_table, client->ifindex, &ip4);
 	} else {
+		printf(" (IPv6)\n");
 		routemgr_insert_route(CTX(routemgr), ctx->export_table, client->ifindex, &ip->addr, 128);
 	}
 }
@@ -209,7 +219,7 @@ struct client *get_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
 	for (int i = 0; i < VECTOR_LEN(ctx->clients); i++) {
 		struct client *e = &VECTOR_INDEX(ctx->clients, i);
 
-		if (memcmp(mac, e->mac, sizeof(uint8_t) * 6) == 0)
+		if (e->mac && memcmp(mac, e->mac, sizeof(uint8_t) * 6) == 0)
 			return e;
 	}
 
@@ -218,32 +228,39 @@ struct client *get_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
 
 /** Given an ip-address, this returns true if there is a local client connected having this IP-address and false otherwise
 */
-bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address) {
+bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address, struct client **client) {
 	for (int i = 0; i < VECTOR_LEN(ctx->clients); i++) {
 		struct client *c = &VECTOR_INDEX(ctx->clients, i);
-		for (int j = 0; j< VECTOR_LEN(c->addresses);j++) {
+		for (int j = 0; j < VECTOR_LEN(c->addresses);j++) {
 			struct client_ip *a = &VECTOR_INDEX(c->addresses, j);
-			if (l3ctx.debug) {
-				printf("comparing ");
-				print_ip(address);
-				printf(" and ");
-				print_ip(&a->addr);
-			}
-			if (!memcmp(address, &a->addr, sizeof(struct in6_addr))) {
+			if (&a->addr) {
 				if (l3ctx.debug) {
-					printf(" => match found.\n");
+					printf("comparing ");
+					print_ip(address, " and ");
+					print_ip(&a->addr, "\n");
+				}
+
+				if ( !memcmp(address, &a->addr, sizeof(struct in6_addr))) {
+					if (l3ctx.debug) {
+						char mac_str[18];
+						mac_addr_n2a(mac_str, c->mac);
+						if (l3ctx.debug)
+							printf(" => match found for client %s.\n", mac_str);
+					}
+					*client = c;
 					return true;
 				}
 			}
 		}
 	}
-	printf(" => no match found.\n");
+	if (l3ctx.debug)
+		printf(" => no match found.\n");
 	return false;
 }
 
 /** Get a client or create a new, empty one.
   */
-struct client *get_or_create_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
+struct client *get_or_create_client(clientmgr_ctx *ctx, const uint8_t mac[6], unsigned int ifindex) {
 	struct client *client = get_client(ctx, mac);
 
 	if (client == NULL) {
@@ -251,6 +268,7 @@ struct client *get_or_create_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
 		memcpy(_client.mac, mac, sizeof(uint8_t) * 6);
 		VECTOR_ADD(ctx->clients, _client);
 		client = &VECTOR_INDEX(ctx->clients, VECTOR_LEN(ctx->clients) - 1);
+		client->ifindex = ifindex;
 	}
 
 	return client;
@@ -263,46 +281,57 @@ void clientmgr_purge_clients(clientmgr_ctx *ctx) {
 
 	for (int i=VECTOR_LEN(ctx->clients)-1;i>=0;i--) {
 		client=&VECTOR_INDEX(ctx->clients, i);
-		printf("\033[34mREMOVING client %02x:%02x:%02x:%02x:%02x:%02x and invalidating its IP-addresses\033[0m\n", client->mac[0], client->mac[1], client->mac[2], client->mac[3], client->mac[4], client->mac[5]);
-		print_client(client);
-		if (VECTOR_LEN(client->addresses) > 0) {
-			for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
-				struct client_ip *e = &VECTOR_INDEX(client->addresses, i);
-				client_ip_set_state(CTX(clientmgr), client, e, IP_INACTIVE);
-				char str[INET6_ADDRSTRLEN];
-				inet_ntop(AF_INET6, &e->addr, str, INET6_ADDRSTRLEN);
-			}
-		}
-
-		VECTOR_FREE(client->addresses);
-		VECTOR_DELETE(ctx->clients, i);
+		clientmgr_delete_client(ctx, client->mac);
 	}
 }
 
 /** Given a MAC address deletes a client. Safe to call if the client is not
   known.
   */
-void clientmgr_delete_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
-	struct client *client;
+void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[6]) {
+	struct client *client = get_client(ctx, mac);
+	char mac_str[18];
+	mac_addr_n2a(mac_str, mac);
 
-	printf("\033[34mREMOVING client %02x:%02x:%02x:%02x:%02x:%02x and invalidating its IP-addresses\033[0m\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-
-	for (int i=0;i<VECTOR_LEN(ctx->clients);i++) {
-		client=&VECTOR_INDEX(ctx->clients, i);
-		if (memcmp(client->mac, mac, sizeof(uint8_t)*6) == 0) {
-			print_client(client);
-			if (VECTOR_LEN(client->addresses) > 0) {
-				for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
-					struct client_ip *e = &VECTOR_INDEX(client->addresses, i);
-					client_ip_set_state(CTX(clientmgr), client, e, IP_INACTIVE);
-					char str[INET6_ADDRSTRLEN];
-					inet_ntop(AF_INET6, &e->addr, str, INET6_ADDRSTRLEN);
-				}
-			}
-
-			VECTOR_FREE(client->addresses);
-			VECTOR_DELETE(ctx->clients, i);
+	if (client == NULL) {
+		if (l3ctx.debug) {
+			printf("Client [%s] unknown: cannot delete\n", mac_str);
 		}
+		return;
+	}
+
+	printf("\033[34mREMOVING client %s and invalidating its IP-addresses\033[0m\n", mac_str);
+	print_client(client);
+
+	remove_special_ip(ctx, client);
+
+	if (VECTOR_LEN(client->addresses) > 0) {
+		for (int i = VECTOR_LEN(client->addresses)-1; i >= 0; i--) {
+			struct client_ip *e = &VECTOR_INDEX(client->addresses, i);
+			client_ip_set_state(CTX(clientmgr), client, e, IP_INACTIVE);
+			delete_client_ip(client, &e->addr, false);
+		}
+	}
+
+	if (VECTOR_LEN(client->addresses)) {
+		// TODO: remove this block after clients with 4+ addresses could be removed without it being triggered
+		printf("freeing addresses - this should not happen\n");
+		VECTOR_FREE(client->addresses);
+	}
+
+	if (!client_is_active(client))  {
+		if (l3ctx.debug)
+			printf("client is not active, removing\n");
+		// TODO: schedule removal in n minutes instead of removing directly.
+
+		for (int i=0;i<VECTOR_LEN(ctx->clients);i++) {
+			if (memcmp(&(VECTOR_INDEX(ctx->clients, i).mac), mac, sizeof(uint8_t)*6) == 0) {
+				VECTOR_DELETE(ctx->clients, i);
+				break;
+			}
+		}
+	} else {
+		printf("WARNING: CLIENT WAS TO BE REMOVED BUT IS STILL ACTIVE THIS SHOULD NOT HAPPEN.\n");
 	}
 }
 
@@ -332,11 +361,9 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 			switch (state) {
 				case IP_INACTIVE:
 					nop = true;
-					// ignore
 					break;
 				case IP_ACTIVE:
 					client_add_route(ctx, client, ip);
-					routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr , client->mac);
 					ip->timestamp = now;
 					break;
 				case IP_TENTATIVE:
@@ -368,7 +395,6 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 				case IP_ACTIVE:
 					ip->timestamp = now;
 					client_add_route(ctx, client, ip);
-					routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr , client->mac);
 					break;
 				case IP_TENTATIVE:
 					nop = true;
@@ -379,7 +405,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 	}
 
 	if (!nop || l3ctx.debug) {
-		print_ip(&ip->addr);
+		print_ip(&ip->addr, "");
 		printf(" changes from %s to %s\n", state_str(ip->state), state_str(state));
 	}
 
@@ -391,7 +417,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 bool clientmgr_valid_address(clientmgr_ctx *ctx, struct in6_addr *address) {
 	for (int i = 0; i < VECTOR_LEN(ctx->prefixes); i++) {
 		struct prefix *_prefix = &VECTOR_INDEX(ctx->prefixes, i);
-		if (prefix_contains(_prefix ,address))
+		if (prefix_contains(_prefix, address))
 			return true;
 	}
 
@@ -406,75 +432,110 @@ bool clientmgr_is_ipv4(clientmgr_ctx *ctx, struct in6_addr *address) {
 
 /** Remove an address from a client identified by its MAC.
 **/
-void clientmgr_remove_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex) {
-	fprintf(stderr, "TODO: clientmgr_remove_address - currently not implemented\n");
+void clientmgr_remove_address(clientmgr_ctx *ctx, struct client *client, struct in6_addr *address) {
+	if (l3ctx.debug) {
+		char str[INET6_ADDRSTRLEN];
+		inet_ntop(AF_INET6, address, str, INET6_ADDRSTRLEN);
+		char strmac[18];
+		mac_addr_n2a(strmac, client->mac);
+		printf("clientmgr_remove_address: %s is running for client %s",str, strmac);
+	}
+
+	if (client) {
+		delete_client_ip(client, address, false);
+	}
+
+	if (!client_is_active(client)) {
+		printf("no active IP-addresses left in client. Deleting client.\n"); //TODO: do this in a couple of minutes
+		clientmgr_delete_client(&l3ctx.clientmgr_ctx, client->mac);
+	}
 }
 
 /** Add a new address to a client identified by its MAC.
  */
 void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex) {
-	char str[INET6_ADDRSTRLEN];
-	inet_ntop(AF_INET6, address, str, INET6_ADDRSTRLEN);
 
-	if (l3ctx.debug)
-		printf("clientmgr_add_address: %s is running",str);
-
-	if (!clientmgr_valid_address(ctx, address)) {
+	if (!clientmgr_valid_address(ctx, address) ) {
 		if (l3ctx.debug)
-			printf(" but address is not within a client-prefix\n");
+			printf("address is not within a client-prefix and not ll-address, not adding.\n");
 		return;
 	}
-	printf("\n");
+	
+	char mac_str[18] = "";
 
+	if (l3ctx.debug) {
+		mac_addr_n2a(mac_str, mac);
+		char ifname[IFNAMSIZ];
+		char str[INET6_ADDRSTRLEN];
 
-	struct client *client = get_or_create_client(ctx, mac);
+		if_indextoname(ifindex, ifname);
+		inet_ntop(AF_INET6, address, str, INET6_ADDRSTRLEN);
+
+		printf("clientmgr_add_address: %s [%s] is running for interface %i %s\n",str, mac_str, ifindex, ifname);
+	}
+
+	struct client *client = get_or_create_client(ctx, mac, ifindex);
 	struct client_ip *ip = get_client_ip(client, address);
+	client->ifindex = ifindex; // client might have roamed to different interface on the same node
 
 	bool was_active = client_is_active(client);
 	bool ip_is_new = ip == NULL;
 
 	if (ip_is_new) {
-		printf("ADDING Address: %s to client %02x:%02x:%02x:%02x:%02x:%02x\n", str, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 		struct client_ip _ip = {};
 		memcpy(&_ip.addr, address, sizeof(struct in6_addr));
 		VECTOR_ADD(client->addresses, _ip);
 		ip = &VECTOR_INDEX(client->addresses, VECTOR_LEN(client->addresses) - 1);
+		client_ip_set_state(ctx, client, ip, IP_ACTIVE);
 	}
-
-	client->ifindex = ifindex;
-
-	client_ip_set_state(ctx, client, ip, IP_ACTIVE);
-
+	print_client(client);
+	
 	if (!was_active) {
-		if (!intercom_claim(CTX(intercom), NULL, client))
-			add_special_ip(ctx, client);
+		if (l3ctx.debug)
+			printf("claiming client[%s]\n", mac_str);
+		struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
+		intercom_claim(CTX(intercom), &address, client);
 	}
 
-	if (ip_is_new)
-		intercom_info(CTX(intercom), NULL, client, false);
+// client info is discarded if client is not active on the reeiving node
+//	if (ip_is_new)
+//		intercom_info(CTX(intercom), NULL, client, false);
+
+
 }
 
 /** Notify the client manager about a new MAC (e.g. a new wifi client).
   */
 void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex) {
-	struct client *client = get_or_create_client(ctx, mac);
+	if (memcmp(mac , "\x00\x00\x00\x00\x00\x00", 6) == 0)
+		return;
+
+	struct client *client = get_or_create_client(ctx, mac, ifindex);
+
+	if (client_is_active(client)) {
+		if (l3ctx.debug) {
+			char mac_str[18];
+			mac_addr_n2a(mac_str, client->mac);
+			printf("client[%s] was detected earlier, not re-adding\n", mac_str);
+		}
+		return;
+	}
+
 
 	char ifname[IFNAMSIZ];
 	if_indextoname(ifindex, ifname);
+	char mac_str[18];
+	mac_addr_n2a(mac_str, client->mac);
 
-	printf("\033[34mnew client %02x:%02x:%02x:%02x:%02x:%02x on %s\033[0m\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], ifname);
+	printf("\033[34mnew client %s on %s\033[0m\n", mac_str, ifname);
 
-	struct timespec now;
-	clock_gettime(CLOCK_MONOTONIC, &now);
-
-	// TODO It is rather nasty to hard-code the client-interface here but it might work around an issue where clients in the neighbour table end up with NUD_FAILED
+	// TODO It is rather nasty to hard-code the client-interface here. Still, all clients should appear on the client-interface, not anywhere else. Using the fdb detection mechanism, clients might end up appearing on the client bridge or somewhere else which should be prevented.
 	// this means that we cannot support multiple client interfaces and that we absolutely need the client bridge.
-	client->ifindex = l3ctx.routemgr_ctx.clientif_index;
+	client->ifindex = ifindex;
 
-	if (!intercom_claim(CTX(intercom), NULL, client)) {
-		fprintf(stderr, "Claim failed for %02x:%02x:%02x:%02x:%02x:%02x.\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5] );
-		add_special_ip(ctx, client);
-	}
+	struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
+
+	intercom_claim(CTX(intercom), &address, client);
 
 	for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
 		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
@@ -482,8 +543,8 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 		if (ip->state == IP_TENTATIVE || ip->state == IP_INACTIVE)
 			client_ip_set_state(ctx, client, ip, IP_TENTATIVE);
 	}
-// TODO we are called because nl80211 or neighbour code noticed a new neighbour. Do we really need to send a NS here?
-	struct in6_addr address = mac2ipv6(client->mac);
+
+	// prefix does not matter here, icmp6_send_solicitation will overwrite the first 13 bytes of the address.
 	icmp6_send_solicitation(CTX(icmp6), &address);
 }
 
@@ -491,29 +552,26 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
   */
 void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[6]) {
 	struct client *client = get_client(ctx, mac);
+	if (l3ctx.debug) {
+		printf("handle claim for client ");
+		print_client(client);
+	}
 
 	if (client == NULL)
 		return;
 
 	bool active = client_is_active(client);
 
-	if (active)
-		remove_special_ip(ctx, client);
-
 	intercom_info(CTX(intercom), sender, client, active);
+// TODO: claims can be retried. We will not be able to answer the 2nd and 3rd claim if we drop the client here. maybe move it into an old queue instead where we keep a fixed number of clients?
 
-	if (!client_is_active(client))
-		return;
+//	if (active)
+//		return;
 
-	printf("Dropping client %02x:%02x:%02x:%02x:%02x:%02x in response to claim\n",  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-
-	for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
-		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
-
-		if (ip->state == IP_ACTIVE || ip->state == IP_TENTATIVE)
-			client_ip_set_state(ctx, client, ip, IP_INACTIVE);
-	}
-
+	printf("Dropping client %02x:%02x:%02x:%02x:%02x:%02x in response to claim from sender",  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+	print_ip(sender, "\n");
+	// TODO: set all ip addresses to inactive, remove all routes for client including special route, delete client in 5 minutes
+	clientmgr_delete_client(ctx, mac);
 }
 
 /** Handle incoming client info.

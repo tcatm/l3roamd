@@ -85,10 +85,8 @@ struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 		struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
 		if (l3ctx.debug) {
 			printf("looking for ip ");
-			print_ip(k);
-			printf(" comparing with ");
-			print_ip(&e->address);
-			printf("\n");
+			print_ip(k, " comparing with ");
+			print_ip(&e->address, "\n");
 		}
 		if (memcmp(k, &(e->address), sizeof(struct in6_addr)) == 0) {
 			if (l3ctx.debug)
@@ -128,10 +126,10 @@ void seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
 	struct ip_task *data = calloc(1, sizeof(struct ip_task));
 
 	data->ctx = ctx;
-	data->address = *addr;
+	memcpy(&data->address, addr, sizeof(struct in6_addr));
 
 	if (data->check_task == NULL)
-		data->check_task = post_task(CTX(taskqueue), 1, seek_task, free, data);
+		data->check_task = post_task(CTX(taskqueue), 0, 100, seek_task, free, data);
 	else
 		free(data);
 }
@@ -200,7 +198,7 @@ void schedule_ipcheck(ipmgr_ctx *ctx, struct entry *e) {
 	data->address = e->address;
 
 	if (e->check_task == NULL)
-		e->check_task = post_task(CTX(taskqueue), IPCHECK_INTERVAL, ipcheck_task, free, data);
+		e->check_task = post_task(CTX(taskqueue), IPCHECK_INTERVAL, 0, ipcheck_task, free, data);
 	else
 		free(data);
 }
@@ -212,16 +210,16 @@ void seek_task(void *d) {
 	if (!e) {
 		if (l3ctx.debug) {
 			printf("INFO: seek task was scheduled but no remaining packets available for host: ");
-			print_ip(&data->address);
+			print_ip(&data->address, "\n");
 		}
 		return;
 	}
 	e->check_task = NULL;
 
-	if (!clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &data->address)) {
+	if (!clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &data->address, NULL)) {
 		if (l3ctx.debug) {
 			printf("seeking on intercom for client ");
-			print_ip(&data->address);
+			print_ip(&data->address, "\n");
 		}
 		intercom_seek(&l3ctx.intercom_ctx, (const struct in6_addr*) &(data->address));
 	}

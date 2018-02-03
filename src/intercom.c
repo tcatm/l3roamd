@@ -6,7 +6,6 @@
 #include "syscallwrappers.h"
 #include "util.h"
 
-//TODO this is used for print_client - remove
 #include "clientmgr.h"
 
 #include <time.h>
@@ -26,7 +25,7 @@
 // Announce at most 32 addresses per client
 #define INFO_MAX 32
 
-void schedule_claim_retry(struct claim_task*);
+void schedule_claim_retry(struct claim_task*, int timeout);
 
 bool join_mcast(const int sock, const struct in6_addr addr, intercom_if *iface) {
 	struct ipv6_mreq mreq;
@@ -84,7 +83,6 @@ void intercom_add_interface(intercom_ctx *ctx, char *ifname) {
 
 	VECTOR_ADD(ctx->interfaces, iface);
 
-	intercom_update_interfaces(ctx);
 }
 
 void intercom_init(intercom_ctx *ctx) {
@@ -102,6 +100,14 @@ void intercom_init(intercom_ctx *ctx) {
 
 	if (ctx->fd < 0)
 		exit_error("creating socket");
+	
+	for (int i=0;i<VECTOR_LEN(ctx->interfaces);i++) {
+		if (l3ctx.debug)
+			printf("binding to interface %s", VECTOR_INDEX(ctx->interfaces, i).ifname);
+		if(setsockopt(ctx->fd, SOL_SOCKET, SO_BINDTODEVICE, VECTOR_INDEX(ctx->interfaces, i).ifname, strnlen(VECTOR_INDEX(ctx->interfaces, i).ifname, IFNAMSIZ-1))) {
+			exit_error("error on setsockopt while binding to interface %s", VECTOR_INDEX(ctx->interfaces, i).ifname);
+		}
+	}
 
 	struct sockaddr_in6 server_addr = {};
 
@@ -113,6 +119,7 @@ void intercom_init(intercom_ctx *ctx) {
 		perror("bind failed");
 		exit(EXIT_FAILURE);
 	}
+	intercom_update_interfaces(ctx);
 }
 
 void intercom_seek(intercom_ctx *ctx, const struct in6_addr *address) {
@@ -146,8 +153,7 @@ bool intercom_send_packet_unicast(intercom_ctx *ctx, const struct in6_addr *reci
 	ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, (struct sockaddr*)&addr, sizeof(addr));
 	if (l3ctx.debug) {
 		printf("sent intercom packet rc: %zi to ", rc);
-		print_ip(recipient);
-		printf("\n");
+		print_ip(recipient, "\n");
 	}
 	if (rc < 0)
 		perror("sendto failed");
@@ -162,14 +168,15 @@ void intercom_send_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len
 		if (!iface->ok)
 			continue;
 
-		struct sockaddr_in6 groupaddr = ctx->groupaddr;
+		struct sockaddr_in6 _groupaddr = {};
+		memcpy(&_groupaddr, &ctx->groupaddr, sizeof(struct sockaddr_in6));
 
-		groupaddr.sin6_scope_id = iface->ifindex;
+		_groupaddr.sin6_scope_id = iface->ifindex;
 
-		ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, (struct sockaddr*)&groupaddr, sizeof(groupaddr));
+		ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, (struct sockaddr*)&_groupaddr, sizeof(struct sockaddr_in6));
 		if (l3ctx.debug) {
 			char str[INET6_ADDRSTRLEN+1];
-			inet_ntop(AF_INET6, &groupaddr, str, INET6_ADDRSTRLEN);
+			inet_ntop(AF_INET6, &_groupaddr.sin6_addr, str, INET6_ADDRSTRLEN);
 			printf("sent intercom packet to %s on iface %s rc: %zi\n",str , iface->ifname,rc);
 		}
 		if (rc < 0)
@@ -213,6 +220,14 @@ void intercom_handle_claim(intercom_ctx *ctx, intercom_packet_claim *packet) {
 
 /** Finds the entry for a peer with a specified ID in the array \e ctx.peers */
 /*
+static int peer_id_cmp(fastd_peer_t *const *a, fastd_peer_t *const *b) {
+if ((*a)->id == (*b)->id)
+return 0;
+else if ((*a)->id < (*b)->id)
+return -1;
+else
+return 1;
+}
 static fastd_peer_t ** peer_p_find_by_id(uint64_t id) {
 	fastd_peer_t key = {.id = id};
 	fastd_peer_t *const keyp = &key;
@@ -339,12 +354,20 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 
 	ssize_t packet_len = sizeof(intercom_packet_info) + i * sizeof(intercom_packet_info_entry);
 
-	if (recipient != NULL)
+	if (recipient != NULL) {
 		// TODO: consider adding resilience here. There *might* be an ACK sensible
+		if (l3ctx.debug) {
+			printf("sending unicast info for client %02x:%02x:%02x:%02x:%02x:%02x to ",  client->mac[0], client->mac[1], client->mac[2], client->mac[3], client->mac[4], client->mac[5]);
+			print_ip(recipient, "\n");
+		}
 		intercom_send_packet_unicast(ctx, recipient, (uint8_t*)packet, packet_len);
+	}
 	else {
 		// forward packet to other l3roamd instances
 		intercom_recently_seen_add(ctx, &packet->hdr);
+		if (l3ctx.debug) {
+			printf("sending info for client %02x:%02x:%02x:%02x:%02x:%02x to l3roamd neighbours\n",  client->mac[0], client->mac[1], client->mac[2], client->mac[3], client->mac[4], client->mac[5]);
+		}
 
 		intercom_send_packet(ctx, (uint8_t*)packet, packet_len);
 	}
@@ -361,8 +384,7 @@ void claim_retry_task(void *d) {
 	if (data->recipient != NULL) {
 		if (l3ctx.debug) {
 			printf("sending unicast claim for client %02x:%02x:%02x:%02x:%02x:%02x to ",  data->client->mac[0], data->client->mac[1], data->client->mac[2], data->client->mac[3], data->client->mac[4], data->client->mac[5]);
-			print_ip(data->recipient);
-			printf("\n");
+			print_ip(data->recipient, "\n");
 		}
 		intercom_send_packet_unicast(&l3ctx.intercom_ctx, data->recipient, (uint8_t*)&data->packet, sizeof(data->packet));
 	} else {
@@ -373,30 +395,41 @@ void claim_retry_task(void *d) {
 	}
 
 	if (data->retries_left > 0)
-		schedule_claim_retry(data);
+		schedule_claim_retry(data,1);
+	else {
+		// we have not received an info message, otherwise we would not have run out of retries => noone knew the client and it is new to the mesh.
+		// => adding the special IP
+		add_special_ip(&l3ctx.clientmgr_ctx, data->client);
+	}
+
 }
+
 void free_claim_task(void *d) {
 	struct claim_task *data = d;
 	free(data->client);
+	free(data->recipient);
 	free(data);
 }
 
-void schedule_claim_retry(struct claim_task *data) {
+void schedule_claim_retry(struct claim_task *data, int timeout) {
 	struct claim_task *ndata = calloc(1, sizeof(struct claim_task));
 	ndata->client = malloc(sizeof(struct client));
 	memcpy(ndata->client, data->client,sizeof(struct client));
 	ndata->retries_left = data->retries_left -1;
 	ndata->packet = data->packet;
-	ndata->recipient = data->recipient;
+	ndata->recipient = calloc(1, sizeof(struct in6_addr));
+	memcpy(ndata->recipient, data->recipient, sizeof(struct in6_addr));
 	ndata->check_task = data->check_task;
 
 	if (data->check_task == NULL && data->retries_left > 0)
-		data->check_task = post_task(&l3ctx.taskqueue_ctx, 3, claim_retry_task, free_claim_task, ndata);
-	else
-		free_claim_task(ndata);
+		data->check_task = post_task(&l3ctx.taskqueue_ctx, timeout, 0, claim_retry_task, free_claim_task, ndata);
 }
 
 bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client) {
+	int i;
+	if (find_repeatable_claim(client->mac, &i))
+		return true;
+
 	intercom_packet_claim packet;
 	uint32_t nonce;
 
@@ -421,10 +454,11 @@ bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct 
 	memcpy(data.client, client,sizeof(struct client));
 	data.retries_left = CLAIM_RETRY_MAX;
 	data.packet = packet;
-	data.recipient = recipient;
-	data.check_task=NULL;
-
-	claim_retry_task(&data);
+	data.recipient = malloc(sizeof(struct in6_addr));
+	data.check_task = NULL;
+	memcpy(data.recipient, recipient, sizeof(struct in6_addr));
+	schedule_claim_retry(&data, 0);
+	free(data.recipient);
 	free(data.client);
 	return true;
 }

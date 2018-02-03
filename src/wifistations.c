@@ -56,10 +56,16 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
 			mac_addr_n2a(macbuf, nla_data(tb[NL80211_ATTR_MAC]));
 
 			printf("new wifi station [%s] found on interface %s\n", macbuf, ifname);
-			ifindex = ctx->l3ctx->icmp6_ctx.ifindex;
+//			ifindex = ctx->l3ctx->icmp6_ctx.ifindex;
 			clientmgr_notify_mac(CTX(clientmgr), nla_data(tb[NL80211_ATTR_MAC]), ifindex);
 			break;
 		case NL80211_CMD_DEL_STATION:
+			// TODO: we should delete the client in a while instead of
+			// just directly removing it. The client may have
+			// roamed and we would like to allow for a
+			// claim/info-cycle.
+			printf("NL80211_CMD_DEL_STATION fpr [%s] RECEIVED on interface %s. Removing.\n", macbuf, ifname);
+			clientmgr_delete_client(CTX(clientmgr), nla_data(tb[NL80211_ATTR_MAC]));
 			break;
 	}
 
