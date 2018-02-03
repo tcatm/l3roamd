@@ -68,7 +68,7 @@ struct ip_task {
 	taskqueue_t *check_task;
 };
 
-void ipmgr_init(ipmgr_ctx *ctx, char *tun_name, unsigned int mtu);
+bool ipmgr_init(ipmgr_ctx *ctx, char *tun_name, unsigned int mtu);
 void ipmgr_route_appeared(ipmgr_ctx *ctx, const struct in6_addr *destination);
 void ipmgr_handle_in(ipmgr_ctx *ctx, int fd);
 void ipmgr_handle_out(ipmgr_ctx *ctx, int fd);

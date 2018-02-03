@@ -353,6 +353,6 @@ void ipmgr_route_appeared(ipmgr_ctx *ctx, const struct in6_addr *destination) {
 }
 
 
-void ipmgr_init(ipmgr_ctx *ctx, char *tun_name, unsigned int mtu) {
-	tun_open(ctx, tun_name, mtu, "/dev/net/tun");
+bool ipmgr_init(ipmgr_ctx *ctx, char *tun_name, unsigned int mtu) {
+	return tun_open(ctx, tun_name, mtu, "/dev/net/tun");
 }
