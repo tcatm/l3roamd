@@ -174,7 +174,7 @@ void usage() {
 	puts("  -m <meshif>        mesh interface. may be specified multiple times");
 	puts("  -t <export table>  export routes to this table");
 	puts("  -4 <prefix>        IPv4 translation prefix");
-        puts("  -V                 show version information");
+	puts("  -V                 show version information");
 	puts("  -D                 Device name for the l3roamd tun-device");
 	puts("  -h                 this help\n\n");
 	puts("The socket will accept the following commands:");
@@ -203,7 +203,6 @@ void catch_sigterm()
 
 	sigaction(SIGTERM, &_sigact, NULL);
 }
-
 
 int main(int argc, char *argv[]) {
 	char *socketpath = NULL;
