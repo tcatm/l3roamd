@@ -226,10 +226,11 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 		printf("not an advertisement - returning\n");
 		return;
 	}
-printf("neighbour advertisement\n");
-
 //	if (packet.hdr.nd_na_hdr.icmp6_code != 0)
 //		return;
+
+	if (l3ctx.debug)
+		printf("Received neighbour advertisement\n");
 
 
 	if (memcmp(packet.hw_addr, "\x00\x00\x00\x00\x00\x00", 6) == 0)
