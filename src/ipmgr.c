@@ -137,6 +137,8 @@ void seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
 void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 	struct in6_addr dst;
 	memcpy(&dst, packet + 24, 16);
+	struct in6_addr src;
+	memcpy(&src, packet + 8, 16);
 
 	uint8_t a0 = dst.s6_addr[0];
 
@@ -144,11 +146,15 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 	if (a0 == 0xff)
 		return;
 
-	char str[INET6_ADDRSTRLEN];
-	inet_ntop(AF_INET6, &dst, str, sizeof str);
-	printf("Got packet to %s\n", str);
+
+	printf("Got packet from ");
+	print_ip(&src, " destined to ");
+	print_ip(&dst, "\n");
+
 
 	if (!clientmgr_valid_address(CTX(clientmgr), &dst)) {
+		char str[INET6_ADDRSTRLEN];
+		inet_ntop(AF_INET6, &dst, str, sizeof str);
 		fprintf(stderr, "The destination of the packet (%s) is not within the client prefixes. Ignoring packet\n", str);
 		return;
 	}
@@ -301,7 +307,7 @@ void ipmgr_handle_in(ipmgr_ctx *ctx, int fd) {
 			break;
 		}
 
-		// so why again ware we not allowing packets with less than 40 bytes?
+		// we are only interested in IPv6 containing a full header.
 		if (count < 40)
 			continue;
 
@@ -323,16 +329,22 @@ void ipmgr_handle_out(ipmgr_ctx *ctx, int fd) {
 		struct packet *packet = &VECTOR_INDEX(ctx->output_queue, 0);
 		count = write(fd, packet->data, packet->len);
 
-		// TODO refactor to use epoll. do we have to put the packet back in case of EAGAIN?
-		free(packet->data);
-		VECTOR_DELETE(ctx->output_queue, 0);
+		// TODO refactor to use epoll.
 
 		if (count == -1) {
 			if (errno != EAGAIN)
 				perror("Could not send packet to newly visible client");
+			else {
+				// we received eagain, so let's requeue this packet 
+				VECTOR_ADD(ctx->output_queue, *packet);
+			}
 
 			break;
 		}
+		else {
+			free(packet->data);
+		}
+		VECTOR_DELETE(ctx->output_queue, 0);
 	}
 }
 
