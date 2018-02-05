@@ -495,10 +495,13 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 	
 	if (!was_active) {
 		if (l3ctx.debug)
-			printf("claiming client[%s]\n", mac_str);
+			printf("Claiming client [%s]\n", mac_str);
 		struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
 		intercom_claim(CTX(intercom), &address, client);
 	}
+
+	// this will set NUD_REACHABLE for the clients address we are working on	
+	routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, address, client->mac);
 
 // client info is discarded if client is not active on the reeiving node
 //	if (ip_is_new)

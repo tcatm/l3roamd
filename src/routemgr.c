@@ -91,7 +91,7 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 			}
 		}
 		else if (msg->ndm_state & NUD_FAILED) {
-			if (nh->nlmsg_type == RTM_NEWNEIGH) {
+			if (nh->nlmsg_type == RTM_NEWNEIGH) {// TODO: re-try sending NS if no NA is received
 				if (l3ctx.debug)
 					printf("NEWNEIGH & NUD_FAILED received - sending NS for ip %s [%s]\n", ip_str, mac_str);
 				icmp6_send_solicitation(CTX(icmp6), &dst_address);
