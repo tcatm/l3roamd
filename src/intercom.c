@@ -105,7 +105,8 @@ void intercom_init(intercom_ctx *ctx) {
 		if (l3ctx.debug)
 			printf("binding to interface %s", VECTOR_INDEX(ctx->interfaces, i).ifname);
 		if(setsockopt(ctx->fd, SOL_SOCKET, SO_BINDTODEVICE, VECTOR_INDEX(ctx->interfaces, i).ifname, strnlen(VECTOR_INDEX(ctx->interfaces, i).ifname, IFNAMSIZ-1))) {
-			exit_error("error on setsockopt while binding to interface %s", VECTOR_INDEX(ctx->interfaces, i).ifname);
+			perror("setsockopt");
+			exit_error("error while binding to interface %s", VECTOR_INDEX(ctx->interfaces, i).ifname);
 		}
 	}
 
@@ -417,8 +418,11 @@ void schedule_claim_retry(struct claim_task *data, int timeout) {
 	memcpy(ndata->client, data->client,sizeof(struct client));
 	ndata->retries_left = data->retries_left -1;
 	ndata->packet = data->packet;
-	ndata->recipient = calloc(1, sizeof(struct in6_addr));
-	memcpy(ndata->recipient, data->recipient, sizeof(struct in6_addr));
+	ndata->recipient = NULL;
+	if (data->recipient) {
+		ndata->recipient = calloc(1, sizeof(struct in6_addr));
+		memcpy(ndata->recipient, data->recipient, sizeof(struct in6_addr));
+	}
 	ndata->check_task = data->check_task;
 
 	if (data->check_task == NULL && data->retries_left > 0)
@@ -454,9 +458,12 @@ bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct 
 	memcpy(data.client, client,sizeof(struct client));
 	data.retries_left = CLAIM_RETRY_MAX;
 	data.packet = packet;
-	data.recipient = malloc(sizeof(struct in6_addr));
 	data.check_task = NULL;
-	memcpy(data.recipient, recipient, sizeof(struct in6_addr));
+	data.recipient = NULL;
+	if (recipient) {
+		data.recipient = malloc(sizeof(struct in6_addr));
+		memcpy(data.recipient, recipient, sizeof(struct in6_addr));
+	}
 	schedule_claim_retry(&data, 0);
 	free(data.recipient);
 	free(data.client);
