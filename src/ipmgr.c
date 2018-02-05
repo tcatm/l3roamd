@@ -257,8 +257,11 @@ bool ipcheck(ipmgr_ctx *ctx, struct entry *e) {
 		struct packet *p = VECTOR_INDEX(e->packets, i);
 
 		if (timespec_cmp(p->timestamp, then) <= 0) {
-			if (l3ctx.debug)
-				printf("deleting old packet\n");
+			if (l3ctx.debug) {
+				printf("deleting old packet with destination ");
+				print_ip(&e->address, "\n");
+			}
+
 			free(p->data);
 			free(p);
 			VECTOR_DELETE(e->packets, i);
