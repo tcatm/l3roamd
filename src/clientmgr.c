@@ -306,26 +306,27 @@ void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[6]) {
 	printf("\033[34mREMOVING client %s and invalidating its IP-addresses\033[0m\n", mac_str);
 	print_client(client);
 
+	// TODO: schedule removal in n minutes instead of removing directly.
 	remove_special_ip(ctx, client);
 
 	if (VECTOR_LEN(client->addresses) > 0) {
 		for (int i = VECTOR_LEN(client->addresses)-1; i >= 0; i--) {
 			struct client_ip *e = &VECTOR_INDEX(client->addresses, i);
 			client_ip_set_state(CTX(clientmgr), client, e, IP_INACTIVE);
-			delete_client_ip(client, &e->addr, false);
+			delete_client_ip(client, &e->addr, true);
 		}
 	}
 
 	if (VECTOR_LEN(client->addresses)) {
 		// TODO: remove this block after clients with 4+ addresses could be removed without it being triggered
 		printf("freeing addresses - this should not happen\n");
+		print_client(client);
 		VECTOR_FREE(client->addresses);
 	}
 
 	if (!client_is_active(client))  {
 		if (l3ctx.debug)
 			printf("client is not active, removing\n");
-		// TODO: schedule removal in n minutes instead of removing directly.
 
 		for (int i=0;i<VECTOR_LEN(ctx->clients);i++) {
 			if (memcmp(&(VECTOR_INDEX(ctx->clients, i).mac), mac, sizeof(uint8_t)*6) == 0) {
