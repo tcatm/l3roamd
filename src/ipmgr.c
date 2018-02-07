@@ -110,7 +110,7 @@ void delete_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 }
 
 /** This will seek an address by checking locally and if needed querying the network by scheduling a task */
-void seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
+void ipmgr_seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
 	char str[INET6_ADDRSTRLEN];
 	inet_ntop(AF_INET6, addr, str, sizeof str);
 
@@ -189,7 +189,7 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 	then.tv_sec -= SEEK_TIMEOUT;
 
 	if (timespec_cmp(e->timestamp, then) <= 0 || new_unknown_dst) {
-		seek_address(ctx, &dst);
+		ipmgr_seek_address(ctx, &dst);
 		e->timestamp = now;
 	}
 
@@ -211,11 +211,12 @@ void schedule_ipcheck(ipmgr_ctx *ctx, struct entry *e) {
 void seek_task(void *d) {
 	struct ip_task *data = d;
 	struct entry *e = find_entry(data->ctx, &data->address);
+	// TODO: seek-task should include ARP/NS checks and only on the last two tries, run an intercom-seek.
 
 	if (!e) {
 		if (l3ctx.debug) {
 			printf("INFO: seek task was scheduled but no remaining packets available for host: ");
-			print_ip(&data->address, "\n");
+			print_ip(&data->address, " - cancelling seek.\n");
 		}
 		return;
 	}
@@ -227,11 +228,17 @@ void seek_task(void *d) {
 			print_ip(&data->address, "\n");
 		}
 		intercom_seek(&l3ctx.intercom_ctx, (const struct in6_addr*) &(data->address));
+
+		struct client *client = NULL;
+		if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &data->address, &client)) {
+			struct client_ip *ip = get_client_ip(client, &data->address);
+			if (ip)
+				client_ip_set_state(&l3ctx.clientmgr_ctx, client, ip, IP_INACTIVE);
+		}
 	}
 }
 
 void ipcheck_task(void *d) {
-	// TODO: this does nothing useful at the moment
 	struct ip_task *data = d;
 
 	struct entry *e = find_entry(data->ctx, &data->address);

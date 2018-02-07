@@ -32,8 +32,8 @@
 #include <netinet/in.h>
 #include "intercom.h"
 #define IPCHECK_INTERVAL 2
-#define PACKET_TIMEOUT 2
-#define SEEK_TIMEOUT 10
+#define PACKET_TIMEOUT 15
+#define SEEK_TIMEOUT 3
 
 struct packet {
 	struct timespec timestamp;
@@ -72,3 +72,5 @@ bool ipmgr_init(ipmgr_ctx *ctx, char *tun_name, unsigned int mtu);
 void ipmgr_route_appeared(ipmgr_ctx *ctx, const struct in6_addr *destination);
 void ipmgr_handle_in(ipmgr_ctx *ctx, int fd);
 void ipmgr_handle_out(ipmgr_ctx *ctx, int fd);
+void ipmgr_seek_address(ipmgr_ctx *ctx, struct in6_addr *addr);
+

@@ -103,7 +103,7 @@ void intercom_init(intercom_ctx *ctx) {
 	
 	for (int i=0;i<VECTOR_LEN(ctx->interfaces);i++) {
 		if (l3ctx.debug)
-			printf("binding to interface %s", VECTOR_INDEX(ctx->interfaces, i).ifname);
+			printf("binding to interface %s\n", VECTOR_INDEX(ctx->interfaces, i).ifname);
 		if(setsockopt(ctx->fd, SOL_SOCKET, SO_BINDTODEVICE, VECTOR_INDEX(ctx->interfaces, i).ifname, strnlen(VECTOR_INDEX(ctx->interfaces, i).ifname, IFNAMSIZ-1))) {
 			perror("setsockopt");
 			exit_error("error while binding to interface %s", VECTOR_INDEX(ctx->interfaces, i).ifname);
@@ -205,7 +205,7 @@ void intercom_recently_seen_add(intercom_ctx *ctx, intercom_packet_hdr *hdr) {
 void intercom_handle_seek(intercom_ctx *ctx, intercom_packet_seek *packet) {
 	struct in6_addr *address = (struct in6_addr *)packet->address;
 
-	printf("\x1b[36mLooking for ");
+	printf("\x1b[36mSEEK: Looking for ");
 	print_ip(address, "\x1b[0m\n");
 
 	if (clientmgr_is_ipv4(CTX(clientmgr), address))
@@ -272,7 +272,7 @@ void intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet) {
 
 	intercom_packet_info_entry *entry = (intercom_packet_info_entry*)((uint8_t*)(packet) + sizeof(intercom_packet_info));
 
-	for (int i = 0; i < packet->num_addresses; i++) {
+	for (i = 0; i < packet->num_addresses; i++) {
 		memcpy(&ip.addr.s6_addr, &entry->address, sizeof(uint8_t) * 16);
 		VECTOR_ADD(client.addresses, ip);
 		entry++;

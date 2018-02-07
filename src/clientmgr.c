@@ -5,6 +5,7 @@
 #include "error.h"
 #include "l3roamd.h"
 #include "util.h"
+#include "ipmgr.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -358,7 +359,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
 	bool nop = false;
-
+// TODO: trigger multiple NS when going into IP_TENTATIVE state. after the last try, deactivate the IP.
 	switch (ip->state) {
 		case IP_INACTIVE:
 			switch (state) {
@@ -371,6 +372,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 					break;
 				case IP_TENTATIVE:
 					ip->timestamp = now;
+					ipmgr_seek_address(&l3ctx.ipmgr_ctx, &ip->addr);
 					break;
 			}
 			break;
@@ -386,6 +388,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 					break;
 				case IP_TENTATIVE:
 					ip->timestamp = now;
+					ipmgr_seek_address(&l3ctx.ipmgr_ctx, &ip->addr);
 					break;
 			}
 			break;
@@ -504,11 +507,10 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 	// this will set NUD_REACHABLE for the clients address we are working on	
 	routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, address, client->mac);
 
-// client info is discarded if client is not active on the reeiving node
+	// TODO: only create INTERCOM_INFO when a seek or claim was received within the last second (DEFINE).
+	// TODO: WHY do we need to send an info here this is only relevant if a seek happened before and then the info is discarded on the target because the client is not known there. 
 //	if (ip_is_new)
 //		intercom_info(CTX(intercom), NULL, client, false);
-
-
 }
 
 /** Notify the client manager about a new MAC (e.g. a new wifi client).
@@ -556,6 +558,17 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 	icmp6_send_solicitation(CTX(icmp6), &address);
 }
 
+/** This will set all IP addresses of the client to IP_INACTIVE and remove the special IP & route
+*/
+void client_deactivate(struct client *client) {
+	for (int i=0; i<VECTOR_LEN(client->addresses); i++) {
+		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
+		if (ip)
+			client_ip_set_state(&l3ctx.clientmgr_ctx, client, ip, IP_INACTIVE);
+	}
+	remove_special_ip(&l3ctx.clientmgr_ctx, client);
+}
+
 /** Handle claim (info request).
   */
 void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[6]) {
@@ -568,18 +581,16 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 	if (client == NULL)
 		return;
 
-	bool active = client_is_active(client);
+//	bool active = client_is_active(client);
 
-	intercom_info(CTX(intercom), sender, client, active);
-// TODO: claims can be retried. We will not be able to answer the 2nd and 3rd claim if we drop the client here. maybe move it into an old queue instead where we keep a fixed number of clients?
-
+	intercom_info(CTX(intercom), sender, client, true);
+	// intercom_info(CTX(intercom), sender, client, !active);
 //	if (active)
 //		return;
 
 	printf("Dropping client %02x:%02x:%02x:%02x:%02x:%02x in response to claim from sender",  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 	print_ip(sender, "\n");
-	// TODO: set all ip addresses to inactive, remove all routes for client including special route, delete client in 5 minutes
-	clientmgr_delete_client(ctx, mac);
+	client_deactivate(client);
 }
 
 /** Handle incoming client info.
@@ -591,8 +602,11 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bo
 		print_client(foreign_client);
 	}
 
-	if (client == NULL || !client_is_active(client))
+	if (client == NULL || !client_is_active(client)) {
+		if (l3ctx.debug)
+			printf("received info message for client but client is either not locally connected or inactive - discarding message\n");
 		return;
+	}
 
 	for (int i = 0; i < VECTOR_LEN(foreign_client->addresses); i++) {
 		struct client_ip *foreign_ip = &VECTOR_INDEX(foreign_client->addresses, i);
@@ -611,7 +625,7 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bo
 	if (relinquished)
 		add_special_ip(ctx, client);
 
-	printf("Client info merged ");
+	printf("Client information merged into local client ");
 	print_client(client);
 	printf("\n");
 }
