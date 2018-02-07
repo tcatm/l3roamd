@@ -203,10 +203,15 @@ void intercom_recently_seen_add(intercom_ctx *ctx, intercom_packet_hdr *hdr) {
 }
 
 void intercom_handle_seek(intercom_ctx *ctx, intercom_packet_seek *packet) {
-	if (clientmgr_is_ipv4(CTX(clientmgr), (struct in6_addr *)packet->address))
-		arp_send_request(CTX(arp), (struct in6_addr *)packet->address);
+	struct in6_addr *address = (struct in6_addr *)packet->address;
+
+	printf("\x1b[36mLooking for ");
+	print_ip(address, "\x1b[0m\n");
+
+	if (clientmgr_is_ipv4(CTX(clientmgr), address))
+		arp_send_request(CTX(arp), address);
 	else
-		icmp6_send_solicitation(CTX(icmp6), (struct in6_addr *)packet->address);
+		icmp6_send_solicitation(CTX(icmp6), address);
 }
 
 void intercom_handle_claim(intercom_ctx *ctx, intercom_packet_claim *packet) {

@@ -83,17 +83,16 @@ struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 	// TODO: make use of VECTOR_BSEARCH here.
 	for (int i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
 		struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
-		if (l3ctx.debug) {
-			printf("looking for ip ");
-			print_ip(k, " comparing with ");
-			print_ip(&e->address, "\n");
-		}
 		if (memcmp(k, &(e->address), sizeof(struct in6_addr)) == 0) {
-			if (l3ctx.debug)
-				printf(" ... match\n");
+			if (l3ctx.debug) {
+				print_ip(k, " is on the unknown-clients list\n");
+			}
 			return e;
 		}
 	}
+
+	if (l3ctx.debug)
+		print_ip(k, " is not on the unknown-clients list\n");
 
 	return NULL;
 }
@@ -232,6 +231,7 @@ void seek_task(void *d) {
 }
 
 void ipcheck_task(void *d) {
+	// TODO: this does nothing useful at the moment
 	struct ip_task *data = d;
 
 	struct entry *e = find_entry(data->ctx, &data->address);
@@ -342,6 +342,7 @@ void ipmgr_handle_out(ipmgr_ctx *ctx, int fd) {
 			break;
 		}
 		else {
+			// write was successful, free data structures
 			free(packet->data);
 		}
 		VECTOR_DELETE(ctx->output_queue, 0);

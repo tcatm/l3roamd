@@ -229,25 +229,22 @@ struct client *get_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
 /** Given an ip-address, this returns true if there is a local client connected having this IP-address and false otherwise
 */
 bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address, struct client **client) {
+
 	for (int i = 0; i < VECTOR_LEN(ctx->clients); i++) {
 		struct client *c = &VECTOR_INDEX(ctx->clients, i);
 		for (int j = 0; j < VECTOR_LEN(c->addresses);j++) {
 			struct client_ip *a = &VECTOR_INDEX(c->addresses, j);
 			if (&a->addr) {
-				if (l3ctx.debug) {
-					printf("comparing ");
-					print_ip(address, " and ");
-					print_ip(&a->addr, "\n");
-				}
-
 				if ( !memcmp(address, &a->addr, sizeof(struct in6_addr))) {
 					if (l3ctx.debug) {
-						char mac_str[18];
-						mac_addr_n2a(mac_str, c->mac);
-						if (l3ctx.debug)
-							printf(" => match found for client %s.\n", mac_str);
+						if (l3ctx.debug) {
+							char mac_str[18];
+							mac_addr_n2a(mac_str, c->mac);
+							print_ip(address, "is attached to local client");
+							printf("%s\n", mac_str);
+						}
 					}
-					
+
 					if (client) {
 						*client = c;
 					}
@@ -256,8 +253,10 @@ bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address, st
 			}
 		}
 	}
+
 	if (l3ctx.debug)
-		printf(" => no match found.\n");
+		print_ip(address, " is not assigned to any of the local clients\n");
+
 	return false;
 }
 
