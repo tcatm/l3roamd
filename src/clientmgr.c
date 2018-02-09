@@ -574,8 +574,11 @@ void client_deactivate(struct client *client) {
 void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[6]) {
 	struct client *client = get_client(ctx, mac);
 	if (l3ctx.debug) {
-		printf("handle claim for client ");
-		print_client(client);
+		printf("handle claim for client: ");
+		if (client)
+			print_client(client);
+		else
+			printf("unknown\n");
 	}
 
 	if (client == NULL)
