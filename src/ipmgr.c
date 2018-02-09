@@ -128,7 +128,7 @@ void ipmgr_seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
 	memcpy(&data->address, addr, sizeof(struct in6_addr));
 
 	if (data->check_task == NULL)
-		data->check_task = post_task(CTX(taskqueue), 0, 100, seek_task, free, data);
+		data->check_task = post_task(CTX(taskqueue), 0, 300, seek_task, free, data);
 	else
 		free(data);
 }
