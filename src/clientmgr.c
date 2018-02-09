@@ -499,9 +499,9 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 	if (!was_active) {
 		if (l3ctx.debug)
 			printf("Claiming client [%s]\n", mac_str);
-//		struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
-//		intercom_claim(CTX(intercom), &address, client);
-		intercom_claim(CTX(intercom), NULL, client);
+		struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
+		intercom_claim(CTX(intercom), &address, client);
+		// intercom_claim(CTX(intercom), NULL, client);
 	}
 
 	// this will set NUD_REACHABLE for the clients address we are working on	
@@ -543,9 +543,8 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 	client->ifindex = ifindex;
 
 	struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
-
-	// intercom_claim(CTX(intercom), &address, client);
-	intercom_claim(CTX(intercom), NULL, client);
+	intercom_claim(CTX(intercom), &address, client);
+	// intercom_claim(CTX(intercom), NULL, client);
 
 	for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
 		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);

@@ -392,7 +392,8 @@ void claim_retry_task(void *d) {
 			printf("sending unicast claim for client %02x:%02x:%02x:%02x:%02x:%02x to ",  data->client->mac[0], data->client->mac[1], data->client->mac[2], data->client->mac[3], data->client->mac[4], data->client->mac[5]);
 			print_ip(data->recipient, "\n");
 		}
-		intercom_send_packet_unicast(&l3ctx.intercom_ctx, data->recipient, (uint8_t*)&data->packet, sizeof(data->packet));
+		if (!intercom_send_packet_unicast(&l3ctx.intercom_ctx, data->recipient, (uint8_t*)&data->packet, sizeof(data->packet)) )
+			intercom_send_packet(&l3ctx.intercom_ctx, (uint8_t*)&data->packet, sizeof(data->packet)); // sending unicast did not work (node too new in the network?), fall back to multicast
 	} else {
 		if (l3ctx.debug) {
 			printf("sending multicast claim for client %02x:%02x:%02x:%02x:%02x:%02x\n",  data->client->mac[0], data->client->mac[1], data->client->mac[2], data->client->mac[3], data->client->mac[4], data->client->mac[5]);
