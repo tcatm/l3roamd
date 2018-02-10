@@ -278,15 +278,14 @@ void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 	inet_ntop(AF_INET6, &dst.sin6_addr, str, sizeof str);
 
 	int len=0;
-	while (len <= 0 ){
+	int retries = 3;
+	while (len <= 0 && retries > 0){
 		len = sendto(ctx->fd, &packet, sizeof(packet), 0, (struct sockaddr*)&dst, sizeof(dst));
 		printf("sent NS to %s %i\n", str, len);
 		if (len < 0)
-			perror("Error happened, retrying");
+			perror("Error while sending NS to %s, retrying");
+		retries--;
 	}
-
-	printf("Sent NS to %s %i\n", str, len);
-
 }
 
 /*
