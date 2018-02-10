@@ -76,19 +76,19 @@ bool parse_command(char *cmd, enum socket_command *scmd) {
 		*scmd = GET_CLIENTS;
 		return true;
 	}
-	if (!strncmp(cmd, "del_prefix", 10)) {
+	if (!strncmp(cmd, "del_prefix ", 11)) {
 		*scmd = DEL_PREFIX;
 		return true;
 	}
-	if (!strncmp(cmd, "add_address", 11)) {
+	if (!strncmp(cmd, "add_address ", 12)) {
 		*scmd = ADD_ADDRESS;
 		return true;
 	}
-	if (!strncmp(cmd, "del_address", 11)) {
+	if (!strncmp(cmd, "del_address ", 12)) {
 		*scmd = DEL_ADDRESS;
 		return true;
 	}
-	if (!strncmp(cmd, "add_prefix", 10)) {
+	if (!strncmp(cmd, "add_prefix ", 11)) {
 		*scmd = ADD_PREFIX;
 		return true;
 	}
