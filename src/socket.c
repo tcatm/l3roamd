@@ -31,7 +31,7 @@
 #include "error.h"
 #include "l3roamd.h"
 #include "prefix.h"
-
+#include "routemgr.h"
 
 #include "clientmgr.h"
 
@@ -90,6 +90,10 @@ bool parse_command(char *cmd, enum socket_command *scmd) {
 	}
 	if (!strncmp(cmd, "add_prefix ", 11)) {
 		*scmd = ADD_PREFIX;
+		return true;
+	}
+	if (!strncmp(cmd, "probe ", 6)) {
+		*scmd = PROBE;
 		return true;
 	}
 	if (!strncmp(cmd, "get_prefixes", 12)) {
@@ -191,6 +195,14 @@ void socket_handle_in(socket_ctx *ctx) {
 	char *str_mac = NULL;
 
 	switch (cmd) {
+		case PROBE:
+			str_address = strtok(&line[6], " ");
+			str_mac = strtok(NULL, " ");
+			sscanf(str_mac, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx", &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
+			if (inet_pton(AF_INET6, str_address, &address) == 1) {
+				routemgr_probe_neighbor(&l3ctx.routemgr_ctx, l3ctx.routemgr_ctx.clientif_index, &address,  mac);
+			}
+			break;
 		case GET_CLIENTS:
 			get_clients(retval);
 			dprintf(fd, "%s", json_object_to_json_string(retval));
