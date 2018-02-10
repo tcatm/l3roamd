@@ -6,6 +6,7 @@
 #include "if.h"
 #include <unistd.h>
 #include "icmp6.h"
+#include "util.h"
 
 static void rtnl_change_address(routemgr_ctx *ctx, struct in6_addr *address, int type, int flags);
 static void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh);
@@ -38,6 +39,9 @@ void rtmgr_client_remove_address(struct in6_addr *dst_address) {
 	struct client *_client = NULL;
 	if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, dst_address, &_client)) {
 		clientmgr_remove_address(&l3ctx.clientmgr_ctx, _client, dst_address);
+		for (int i=0; i < VECTOR_LEN(_client->addresses); i++) {
+			routemgr_probe_neighbor(&l3ctx.routemgr_ctx, _client->ifindex, &VECTOR_INDEX(_client->addresses, i).addr, _client->mac);
+		}
 	}
 
 }
@@ -94,7 +98,7 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 			if (nh->nlmsg_type == RTM_NEWNEIGH) {// TODO: re-try sending NS if no NA is received
 				if (l3ctx.debug)
 					printf("NEWNEIGH & NUD_FAILED received - sending NS for ip %s [%s]\n", ip_str, mac_str);
-				icmp6_send_solicitation(CTX(icmp6), &dst_address);
+				icmp6_send_solicitation(CTX(icmp6), &dst_address); // we cannot replace this with our probe-function or we will endlessly loop between states.
 			}
 			else if (nh->nlmsg_type == RTM_DELNEIGH) {
 				if (l3ctx.debug)
@@ -348,6 +352,45 @@ void rtnl_change_address(routemgr_ctx *ctx, struct in6_addr *address, int type, 
 	};
 
 	rtnl_addattr(&req.nl, sizeof(req), IFA_LOCAL, address, sizeof(struct in6_addr));
+
+	rtmgr_rtnl_talk(ctx, (struct nlmsghdr*)&req);
+}
+
+void routemgr_probe_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_addr *address, uint8_t mac[6]) {
+	int family = AF_INET6;
+	size_t addr_len = 16;
+	void *addr = address->s6_addr;
+
+	if (clientmgr_is_ipv4(CTX(clientmgr), address)) {
+		if (l3ctx.debug) {
+			printf("probing for IPv4-address! ");
+			print_ip((struct in6_addr*)addr, "\n");
+		}
+		addr = address->s6_addr + 12;
+		addr_len = 4;
+		family = AF_INET;
+	} else {
+		if (l3ctx.debug) {
+			printf("probing for IPv6-address! ");
+			print_ip((struct in6_addr*)address, "\n");
+		}
+	}
+
+	struct nlneighreq req = {
+		.nl = {
+			.nlmsg_type = RTM_NEWNEIGH,
+			.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_REPLACE,
+			.nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg)),
+		},
+		.nd = {
+			.ndm_family = family,
+			.ndm_state = NUD_PROBE,
+			.ndm_ifindex = ifindex,
+		},
+	};
+
+	rtnl_addattr(&req.nl, sizeof(req), NDA_DST, (void*)addr, addr_len);
+	rtnl_addattr(&req.nl, sizeof(req), NDA_LLADDR, mac, sizeof(uint8_t) * 6);
 
 	rtmgr_rtnl_talk(ctx, (struct nlmsghdr*)&req);
 }
