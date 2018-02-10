@@ -241,7 +241,7 @@ bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address, st
 						if (l3ctx.debug) {
 							char mac_str[18];
 							mac_addr_n2a(mac_str, c->mac);
-							print_ip(address, "is attached to local client");
+							print_ip(address, "is attached to local client ");
 							printf("%s\n", mac_str);
 						}
 					}
