@@ -229,7 +229,7 @@ struct client *get_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
 
 /** Given an ip-address, this returns true if there is a local client connected having this IP-address and false otherwise
 */
-bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address, struct client **client) {
+bool clientmgr_is_known_address(clientmgr_ctx *ctx, const struct in6_addr *address, struct client **client) {
 
 	for (int i = 0; i < VECTOR_LEN(ctx->clients); i++) {
 		struct client *c = &VECTOR_INDEX(ctx->clients, i);
@@ -620,7 +620,6 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bo
 
 		VECTOR_ADD(client->addresses, *foreign_ip);
 		ip = &VECTOR_INDEX(client->addresses, VECTOR_LEN(client->addresses) - 1);
-
 		client_ip_set_state(ctx, client, ip, IP_TENTATIVE);
 	}
 
