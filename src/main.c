@@ -124,8 +124,8 @@ void loop() {
 		for(int i = 0; i < n; i++) {
 			if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)) {
 				if (errno == EAGAIN) {
-					printf("EAGAIN received, continuing.");
-					continue;
+					printf("EAGAIN received on fd %i, continuing. taskqueue.fd: %i routemgr: %i ipmgr: %i icmp6: %i icmp6.ns: %i arp: %i intercom: %i socket: %i, wifistations: %i\n", events[i].data.fd, l3ctx.taskqueue_ctx.fd, l3ctx.routemgr_ctx.fd, l3ctx.ipmgr_ctx.fd, l3ctx.icmp6_ctx.fd, l3ctx.icmp6_ctx.nsfd, l3ctx.arp_ctx.fd, l3ctx.intercom_ctx.fd, l3ctx.socket_ctx.fd, l3ctx.wifistations_ctx.fd);
+					continue; // TODO: this seems to be causing 100% CPU load sometimes. Find the cause and fix it.
 				}
 				perror("epoll error. This is a bug. Fix this.");
 				sig_term_handler(0, 0, 0);
