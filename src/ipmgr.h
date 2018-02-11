@@ -31,9 +31,8 @@
 #include <stdint.h>
 #include <netinet/in.h>
 #include "intercom.h"
-#define IPCHECK_INTERVAL 2
-#define PACKET_TIMEOUT 15
-#define SEEK_TIMEOUT 3
+#define PACKET_TIMEOUT 15  // drop packet after it sat in the unknown destination-queue for this amount of time
+#define SEEK_INTERVAL 3    // retry a seek every n seconds
 
 struct packet {
 	struct timespec timestamp;

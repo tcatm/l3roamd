@@ -14,10 +14,8 @@
 #include <linux/if_tun.h>
 
 static bool tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name);
-static void schedule_ipcheck(ipmgr_ctx *ctx, struct entry *e);
-static void ipcheck_task(void *d);
+static void ipmgr_ns_task(void *d);
 static void seek_task(void *d);
-static bool ipcheck(ipmgr_ctx *ctx, struct entry *e);
 
 /* open l3roamd's tun device that is used to obtain packets for unknown clients */
 bool tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name) {
@@ -98,46 +96,40 @@ struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 }
 
 /** This will remove an entry from the ipmgr unknown-clients list */
-void delete_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
-	for (int i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
-		struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
+void delete_entry(const struct in6_addr *k) {
+	for (int i = 0; i < VECTOR_LEN((&l3ctx.ipmgr_ctx)->addrs); i++) {
+		struct entry *e = &VECTOR_INDEX((&l3ctx.ipmgr_ctx)->addrs, i);
 
 		if (memcmp(k, &(e->address), sizeof(struct in6_addr)) == 0) {
-			VECTOR_DELETE(ctx->addrs, i);
+			VECTOR_DELETE((&l3ctx.ipmgr_ctx)->addrs, i);
 			break;
 		}
 	}
 }
 
+
 /** This will seek an address by checking locally and if needed querying the network by scheduling a task */
 void ipmgr_seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
-	char str[INET6_ADDRSTRLEN];
-	inet_ntop(AF_INET6, addr, str, sizeof str);
+	struct ip_task *ns_data = calloc(1, sizeof(struct ip_task));
 
-	printf("\x1b[36mLooking for %s\x1b[0m\n", str);
-
-	if (clientmgr_is_ipv4(CTX(clientmgr), addr))
-		arp_send_request(CTX(arp), addr);
-	else
-		icmp6_send_solicitation(CTX(icmp6), addr);
+	ns_data->ctx = ctx;
+	memcpy(&ns_data->address, addr, sizeof(struct in6_addr));
+	post_task(CTX(taskqueue), 0, 0, ipmgr_ns_task, free, ns_data);
 
 	// schedule an intercom-seek operation that in turn will only be executed if there is no local client known
 	struct ip_task *data = calloc(1, sizeof(struct ip_task));
 
 	data->ctx = ctx;
 	memcpy(&data->address, addr, sizeof(struct in6_addr));
-
-	if (data->check_task == NULL)
-		data->check_task = post_task(CTX(taskqueue), 0, 300, seek_task, free, data);
-	else
-		free(data);
+	data->check_task = post_task(CTX(taskqueue), 0, 300, seek_task, free, data);
 }
 
 void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 	struct in6_addr dst;
-	memcpy(&dst, packet + 24, 16);
 	struct in6_addr src;
+
 	memcpy(&src, packet + 8, 16);
+	memcpy(&dst, packet + 24, 16);
 
 	uint8_t a0 = dst.s6_addr[0];
 
@@ -173,6 +165,7 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 
 		VECTOR_ADD(ctx->addrs, entry);
 		e = &VECTOR_INDEX(ctx->addrs, VECTOR_LEN(ctx->addrs) - 1);
+
 	}
 
 	struct packet *p = malloc(sizeof(struct packet));
@@ -185,81 +178,40 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 
 	VECTOR_ADD(e->packets, p);
 
-	struct timespec then = now;
-	then.tv_sec -= SEEK_TIMEOUT;
-
-	if (timespec_cmp(e->timestamp, then) <= 0 || new_unknown_dst) {
+	if (new_unknown_dst)
 		ipmgr_seek_address(ctx, &dst);
-		e->timestamp = now;
-	}
 
-	schedule_ipcheck(ctx, e);
+//	schedule_ipcheck(ctx, e);
 }
 
-void schedule_ipcheck(ipmgr_ctx *ctx, struct entry *e) {
-	struct ip_task *data = calloc(1, sizeof(struct ip_task));
-
-	data->ctx = ctx;
-	data->address = e->address;
-
-	if (e->check_task == NULL)
-		e->check_task = post_task(CTX(taskqueue), IPCHECK_INTERVAL, 0, ipcheck_task, free, data);
-	else
-		free(data);
-}
-
-void seek_task(void *d) {
-	struct ip_task *data = d;
-	struct entry *e = find_entry(data->ctx, &data->address);
-	// TODO: seek-task should include ARP/NS checks and only on the last two tries, run an intercom-seek.
-
+bool should_we_really_seek(struct in6_addr *destination) {
+	struct entry *e = find_entry(&l3ctx.ipmgr_ctx, destination);
+	// if a route to this client appeared, the queue will be emptied -- no seek necessary
 	if (!e) {
 		if (l3ctx.debug) {
-			printf("INFO: seek task was scheduled but no remaining packets available for host: ");
-			print_ip(&data->address, " - cancelling seek.\n");
+			printf("INFO: seek task was scheduled but packets to be delivered to host: ");
+			print_ip(destination, "\n");
 		}
-		return;
+		return false;
 	}
-	e->check_task = NULL;
 
-	if (!clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &data->address, NULL)) {
-		if (l3ctx.debug) {
-			printf("seeking on intercom for client ");
-			print_ip(&data->address, "\n");
-		}
-		intercom_seek(&l3ctx.intercom_ctx, (const struct in6_addr*) &(data->address));
-
-		struct client *client = NULL;
-		if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &data->address, &client)) {
-			struct client_ip *ip = get_client_ip(client, &data->address);
-			if (ip)
-				client_ip_set_state(&l3ctx.clientmgr_ctx, client, ip, IP_INACTIVE);
-		}
+	if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, destination, NULL)) {
+		printf("=================================================\n");
+		printf("================= FAT WARNING ===================\n");
+		printf("=================================================\n");
+		printf("seek task was scheduled but there are no packets to be delivered to the host: ");
+		print_ip(destination, ". This should not happen because it means the host is known but the packet queue is not empty.\n");
+		return false;
 	}
+
+	// TODO: we could check if a route to this destination is known. If the route_appeared logic is ok, this however should not be necessary. Make the decision if we want the check or not and remove this message.
+
+	return true;
 }
 
-void ipcheck_task(void *d) {
-	struct ip_task *data = d;
-
-	struct entry *e = find_entry(data->ctx, &data->address);
-
-	if (!e) {
-		return;
-	}
-
-	char str[INET6_ADDRSTRLEN] = "";
-	inet_ntop(AF_INET6, &data->address, str, sizeof str);
-	if (l3ctx.debug)
-		printf("running an ipcheck on %s\n", str);
-
-	e->check_task = NULL;
-
-	if (ipcheck(data->ctx, e)) {
-		schedule_ipcheck(data->ctx, e);
-	}
-}
-
-bool ipcheck(ipmgr_ctx *ctx, struct entry *e) {
+void purge_old_packets(struct in6_addr *destination) {
+	//TODO: check implementation. it seems to work but READ THIS 
+	struct entry *e = find_entry(&l3ctx.ipmgr_ctx, destination);
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
 
@@ -283,15 +235,63 @@ bool ipcheck(ipmgr_ctx *ctx, struct entry *e) {
 	}
 
 	then = now;
-	then.tv_sec -= SEEK_TIMEOUT;
+	then.tv_sec -= SEEK_INTERVAL;
 
 	if (VECTOR_LEN(e->packets) == 0 && timespec_cmp(e->timestamp, then) <= 0) {
 		VECTOR_FREE(e->packets);
-		delete_entry(ctx, &e->address);
-		return false;
+		delete_entry(&e->address);
 	}
+}
 
-	return true;
+
+void ipmgr_ns_task(void *d) {
+	struct ip_task *data = d;
+	char str[INET6_ADDRSTRLEN];
+
+	purge_old_packets(&data->address);
+
+	if (should_we_really_seek(&data->address)) {
+		inet_ntop(AF_INET6, &data->address, str, sizeof str);
+		printf("\x1b[36mLooking for %s locally\x1b[0m\n", str);
+
+		if (clientmgr_is_ipv4(&l3ctx.clientmgr_ctx, &data->address))
+			arp_send_request(&l3ctx.arp_ctx, &data->address);
+		else
+			icmp6_send_solicitation(&l3ctx.icmp6_ctx, &data->address);
+
+		struct ip_task *ns_data = calloc(1, sizeof(struct ip_task));
+
+		ns_data->ctx = data->ctx;
+		memcpy(&ns_data->address, &data->address, sizeof(struct in6_addr));
+		post_task(&l3ctx.taskqueue_ctx, SEEK_INTERVAL, 0, ipmgr_ns_task, free, ns_data);
+	}
+}
+
+void seek_task(void *d) {
+	struct ip_task *data = d;
+
+	if (should_we_really_seek(&data->address)) {
+		if (l3ctx.debug) {
+			printf("\x1b[36mseeking on intercom for client with the address ");
+			print_ip(&data->address, "\x1b[0m\n");
+		}
+		intercom_seek(&l3ctx.intercom_ctx, (const struct in6_addr*) &(data->address));
+
+/* // WHY do we need to set the client ip to inactive? we are only seeking if
+** there is no route to this ip known.
+		struct client *client = NULL;
+		if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &data->address, &client)) {
+			struct client_ip *ip = get_client_ip(client, &data->address);
+			if (ip)
+				client_ip_set_state(&l3ctx.clientmgr_ctx, client, ip, IP_INACTIVE);
+		}
+		*/
+		struct ip_task *_data = calloc(1, sizeof(struct ip_task));
+
+		_data->ctx = data->ctx;
+		memcpy(&_data->address, &data->address, sizeof(struct in6_addr));
+		post_task(&l3ctx.taskqueue_ctx, SEEK_INTERVAL, 0, seek_task, free, _data);
+	}
 }
 
 void ipmgr_handle_in(ipmgr_ctx *ctx, int fd) {
@@ -340,7 +340,7 @@ void ipmgr_handle_out(ipmgr_ctx *ctx, int fd) {
 
 		if (count == -1) {
 			if (errno != EAGAIN)
-				perror("Could not send packet to newly visible client");
+				perror("Could not send packet to newly visible client, requeueing and trying again.");
 			else {
 				// we received eagain, so let's requeue this packet 
 				VECTOR_ADD(ctx->output_queue, *packet);
@@ -369,8 +369,7 @@ void ipmgr_route_appeared(ipmgr_ctx *ctx, const struct in6_addr *destination) {
 
 	VECTOR_FREE(e->packets);
 
-
-	delete_entry(ctx, destination);
+	delete_entry(destination);
 
 	ipmgr_handle_out(ctx, ctx->fd);
 }
