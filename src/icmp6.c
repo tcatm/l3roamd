@@ -271,6 +271,9 @@ void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 	dst.sin6_flowinfo = 0;
 
 	// RFC2461 dst address are multicast when the node needs to resolve an address and unicast when the node seeks to verify the existence of a neighbor
+	memcpy(&dst.sin6_addr, addr, 16);
+	memcpy(&dst.sin6_addr, "\xff\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\xff", 13);
+
 	struct client *_client = NULL;
 	if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, addr, &_client)) {
 		// find ll-address of the client. if it exists, use that as target for our NS
@@ -280,10 +283,6 @@ void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 		if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &lladdr, &_client)) {
 			memcpy(&dst.sin6_addr, &lladdr, 16);
 		}
-	}
-	else {
-		memcpy(&dst.sin6_addr, addr, 16);
-		memcpy(&dst.sin6_addr, "\xff\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\xff", 13);
 	}
 
 	char str[INET6_ADDRSTRLEN];
