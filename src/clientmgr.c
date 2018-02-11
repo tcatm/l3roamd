@@ -198,7 +198,7 @@ void client_add_route(clientmgr_ctx *ctx, struct client *client, struct client_i
 
 /** Remove a route.
   */
-void client_remove_route(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip) {
+void clientmgr_client_remove_route(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip) {
 	if (clientmgr_is_ipv4(ctx, &ip->addr)) {
 		struct in_addr ip4 = {
 			.s_addr = ip->addr.s6_addr[12] << 24 | ip->addr.s6_addr[13] << 16 | ip->addr.s6_addr[14] << 8 | ip->addr.s6_addr[15]
@@ -380,7 +380,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 			switch (state) {
 				case IP_INACTIVE:
 					ip->timestamp = now;
-					client_remove_route(ctx, client, ip);
+					clientmgr_client_remove_route(ctx, client, ip);
 					break;
 				case IP_ACTIVE:
 					nop = true;
@@ -396,7 +396,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 			switch (state) {
 				case IP_INACTIVE:
 					ip->timestamp = now;
-					client_remove_route(ctx, client, ip);
+					clientmgr_client_remove_route(ctx, client, ip);
 					break;
 				case IP_ACTIVE:
 					ip->timestamp = now;
