@@ -124,8 +124,8 @@ void loop() {
 		for(int i = 0; i < n; i++) {
 			if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)) {
 				if (errno == EAGAIN) {
-					printf("EAGAIN received, continuing.");
-					continue;
+					printf("EAGAIN received on fd %i, continuing. taskqueue.fd: %i routemgr: %i ipmgr: %i icmp6: %i icmp6.ns: %i arp: %i intercom: %i socket: %i, wifistations: %i\n", events[i].data.fd, l3ctx.taskqueue_ctx.fd, l3ctx.routemgr_ctx.fd, l3ctx.ipmgr_ctx.fd, l3ctx.icmp6_ctx.fd, l3ctx.icmp6_ctx.nsfd, l3ctx.arp_ctx.fd, l3ctx.intercom_ctx.fd, l3ctx.socket_ctx.fd, l3ctx.wifistations_ctx.fd);
+					continue; // TODO: this seems to be causing 100% CPU load sometimes. Find the cause and fix it.
 				}
 				perror("epoll error. This is a bug. Fix this.");
 				sig_term_handler(0, 0, 0);
@@ -174,7 +174,7 @@ void usage() {
 	puts("  -m <meshif>        mesh interface. may be specified multiple times");
 	puts("  -t <export table>  export routes to this table");
 	puts("  -4 <prefix>        IPv4 translation prefix");
-        puts("  -V                 show version information");
+	puts("  -V                 show version information");
 	puts("  -D                 Device name for the l3roamd tun-device");
 	puts("  -h                 this help\n\n");
 	puts("The socket will accept the following commands:");
@@ -204,13 +204,11 @@ void catch_sigterm()
 	sigaction(SIGTERM, &_sigact, NULL);
 }
 
-
 int main(int argc, char *argv[]) {
 	char *socketpath = NULL;
 
 	signal(SIGPIPE, SIG_IGN);
 
-	catch_sigterm();
 
 	l3ctx.wifistations_ctx.l3ctx = &l3ctx;
 	l3ctx.clientmgr_ctx.l3ctx = &l3ctx;
@@ -238,13 +236,13 @@ int main(int argc, char *argv[]) {
 	int c;
 	while ((c = getopt(argc, argv, "dha:b:p:i:m:t:c:4:n:s:d:VD:")) != -1)
 		switch (c) {
-                        case 'V':
-                                printf("l3roamd %s\n", SOURCE_VERSION);
+			case 'V':
+				printf("l3roamd %s\n", SOURCE_VERSION);
 #if defined(GIT_BRANCH) && defined(GIT_COMMIT_HASH)
-                                printf("branch: %s\n", GIT_BRANCH);
-                                printf("commit: %s\n", GIT_COMMIT_HASH);
+				printf("branch: %s\n", GIT_BRANCH);
+				printf("commit: %s\n", GIT_COMMIT_HASH);
 #endif
-                                exit(EXIT_SUCCESS);
+				exit(EXIT_SUCCESS);
 			case 'b':
 				free(l3ctx.routemgr_ctx.client_bridge);
 				l3ctx.routemgr_ctx.client_bridge = strdupa(optarg);
@@ -258,6 +256,7 @@ int main(int argc, char *argv[]) {
 				a_initialized=true;
 				break;
 			case 'c':
+				//TODO: this is not implemented.
 				parse_config(optarg);
 				break;
 			case 'p':
@@ -342,8 +341,12 @@ int main(int argc, char *argv[]) {
 		exit_error("specifying -p is mandatory");
 
 	intercom_init(&l3ctx.intercom_ctx);
+
+	catch_sigterm();
+
 	socket_init(&l3ctx.socket_ctx, socketpath);
-	ipmgr_init(&l3ctx.ipmgr_ctx, l3ctx.l3device, 9000);
+	if (!ipmgr_init(&l3ctx.ipmgr_ctx, l3ctx.l3device, 9000))
+		exit_error("could not open the tun device for l3roamd. exiting now\n");
 	routemgr_init(&l3ctx.routemgr_ctx);
 	wifistations_init(&l3ctx.wifistations_ctx);
 	taskqueue_init(&l3ctx.taskqueue_ctx);

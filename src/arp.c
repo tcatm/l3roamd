@@ -118,6 +118,7 @@ void arp_setup_interface(arp_ctx *ctx) {
 	bind(ctx->fd, (struct sockaddr *)&lladdr, sizeof(lladdr));
 
 	ctx->ifindex = req.ifr_ifindex;
+	printf("arp-fd: %i %i\n", ctx->fd, ctx->ifindex);
 
 	ctx->ok = true;
 }
@@ -138,10 +139,12 @@ void arp_interface_changed(arp_ctx *ctx, int type, const struct ifinfomsg *msg) 
 	switch (type) {
 		case RTM_NEWLINK:
 		case RTM_SETLINK:
+			printf("arp interfce ok\n");
 			arp_setup_interface(ctx);
 			break;
 
 		case RTM_DELLINK:
+			printf("arp interfce not ok\n");
 			ctx->ok = false;
 			break;
 	}

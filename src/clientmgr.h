@@ -11,9 +11,9 @@
 #define NODE_CLIENT_PREFIX "fec0::"
 
 enum ip_state {
-	IP_INACTIVE = 0,
-	IP_ACTIVE,
-	IP_TENTATIVE
+	IP_INACTIVE = 0, // ip address is known but not in use
+	IP_ACTIVE,   // address is in used
+	IP_TENTATIVE // address was received info on intercom OR belongs to a re-activated local client
 };
 
 
@@ -59,6 +59,9 @@ void clientmgr_purge_clients(clientmgr_ctx *ctx);
 void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[6]);
 void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip, enum ip_state state);
 struct client *get_client(clientmgr_ctx *ctx, const uint8_t mac[6]);
-bool clientmgr_is_known_address(clientmgr_ctx *ctx, struct in6_addr *address, struct client **client);
+bool clientmgr_is_known_address(clientmgr_ctx *ctx, const struct in6_addr *address, struct client **client);
 void add_special_ip(clientmgr_ctx *ctx, struct client *client);
+struct client_ip *get_client_ip(struct client *client, const struct in6_addr *address);
 void mac_addr_n2a(char *mac_addr, unsigned char *arg);
+struct in6_addr mac2ipv6(uint8_t mac[6], char * prefix);
+

@@ -54,6 +54,7 @@ void handle_route(routemgr_ctx *ctx, struct kernel_route *route);
 int parse_kernel_route_rta(struct rtmsg *rtm, int len, struct kernel_route *route);
 void routemgr_handle_in(routemgr_ctx *ctx, int fd);
 void routemgr_init(routemgr_ctx *ctx);
+void routemgr_probe_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_addr *address, uint8_t mac[6]);
 void routemgr_insert_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_addr *address, uint8_t mac[6]);
 void routemgr_remove_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_addr *address, uint8_t mac[6]);
 void routemgr_insert_route(routemgr_ctx *ctx, const int table, const int ifindex, struct in6_addr *address, const int prefix_length);
@@ -64,3 +65,6 @@ void routemgr_insert_route4(routemgr_ctx *ctx, const int table, const int ifinde
 void routemgr_remove_route4(routemgr_ctx *ctx, const int table, struct in_addr *address);
 void rtnl_add_address(routemgr_ctx *ctx, struct in6_addr *address);
 void rtnl_remove_address(routemgr_ctx *ctx, struct in6_addr *address);
+
+void rtmgr_client_remove_address(struct in6_addr *dst_address);
+

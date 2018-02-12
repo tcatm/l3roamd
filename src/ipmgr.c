@@ -12,12 +12,13 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <linux/if_tun.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <linux/if_packet.h>
 
 static bool tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name);
-static void schedule_ipcheck(ipmgr_ctx *ctx, struct entry *e);
-static void ipcheck_task(void *d);
+static void ipmgr_ns_task(void *d);
 static void seek_task(void *d);
-static bool ipcheck(ipmgr_ctx *ctx, struct entry *e);
 
 /* open l3roamd's tun device that is used to obtain packets for unknown clients */
 bool tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name) {
@@ -83,60 +84,61 @@ struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 	// TODO: make use of VECTOR_BSEARCH here.
 	for (int i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
 		struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
-		if (l3ctx.debug) {
-			printf("looking for ip ");
-			print_ip(k, " comparing with ");
-			print_ip(&e->address, "\n");
-		}
 		if (memcmp(k, &(e->address), sizeof(struct in6_addr)) == 0) {
-			if (l3ctx.debug)
-				printf(" ... match\n");
+			if (l3ctx.debug) {
+				print_ip(k, " is on the unknown-clients list\n");
+			}
 			return e;
 		}
 	}
+
+	if (l3ctx.debug)
+		print_ip(k, " is not on the unknown-clients list\n");
 
 	return NULL;
 }
 
 /** This will remove an entry from the ipmgr unknown-clients list */
-void delete_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
-	for (int i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
-		struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
+void delete_entry(const struct in6_addr *k) {
+	for (int i = 0; i < VECTOR_LEN((&l3ctx.ipmgr_ctx)->addrs); i++) {
+		struct entry *e = &VECTOR_INDEX((&l3ctx.ipmgr_ctx)->addrs, i);
 
 		if (memcmp(k, &(e->address), sizeof(struct in6_addr)) == 0) {
-			VECTOR_DELETE(ctx->addrs, i);
+			VECTOR_DELETE((&l3ctx.ipmgr_ctx)->addrs, i);
 			break;
 		}
 	}
 }
 
+
 /** This will seek an address by checking locally and if needed querying the network by scheduling a task */
-void seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
-	char str[INET6_ADDRSTRLEN];
-	inet_ntop(AF_INET6, addr, str, sizeof str);
+void ipmgr_seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
+	struct ip_task *ns_data = calloc(1, sizeof(struct ip_task));
 
-	printf("\x1b[36mLooking for %s\x1b[0m\n", str);
-
-	if (clientmgr_is_ipv4(CTX(clientmgr), addr))
-		arp_send_request(CTX(arp), addr);
-	else
-		icmp6_send_solicitation(CTX(icmp6), addr);
+	ns_data->ctx = ctx;
+	memcpy(&ns_data->address, addr, sizeof(struct in6_addr));
+	post_task(CTX(taskqueue), 0, 0, ipmgr_ns_task, free, ns_data);
 
 	// schedule an intercom-seek operation that in turn will only be executed if there is no local client known
 	struct ip_task *data = calloc(1, sizeof(struct ip_task));
 
 	data->ctx = ctx;
 	memcpy(&data->address, addr, sizeof(struct in6_addr));
+	data->check_task = post_task(CTX(taskqueue), 0, 300, seek_task, free, data);
+}
 
-	if (data->check_task == NULL)
-		data->check_task = post_task(CTX(taskqueue), 0, 100, seek_task, free, data);
-	else
-		free(data);
+struct in6_addr packet_get_src(uint8_t packet[]) {
+	struct in6_addr src;
+	memcpy(&src, packet + 8, 16);
+	return src;
 }
 
 void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 	struct in6_addr dst;
+	struct in6_addr src;
+
 	memcpy(&dst, packet + 24, 16);
+	src = packet_get_src(packet);
 
 	uint8_t a0 = dst.s6_addr[0];
 
@@ -144,11 +146,15 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 	if (a0 == 0xff)
 		return;
 
-	char str[INET6_ADDRSTRLEN];
-	inet_ntop(AF_INET6, &dst, str, sizeof str);
-	printf("Got packet to %s\n", str);
+
+	printf("Got packet from ");
+	print_ip(&src, " destined to ");
+	print_ip(&dst, "\n");
+
 
 	if (!clientmgr_valid_address(CTX(clientmgr), &dst)) {
+		char str[INET6_ADDRSTRLEN];
+		inet_ntop(AF_INET6, &dst, str, sizeof str);
 		fprintf(stderr, "The destination of the packet (%s) is not within the client prefixes. Ignoring packet\n", str);
 		return;
 	}
@@ -168,6 +174,7 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 
 		VECTOR_ADD(ctx->addrs, entry);
 		e = &VECTOR_INDEX(ctx->addrs, VECTOR_LEN(ctx->addrs) - 1);
+
 	}
 
 	struct packet *p = malloc(sizeof(struct packet));
@@ -180,73 +187,38 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 
 	VECTOR_ADD(e->packets, p);
 
-	struct timespec then = now;
-	then.tv_sec -= SEEK_TIMEOUT;
-
-	if (timespec_cmp(e->timestamp, then) <= 0 || new_unknown_dst) {
-		seek_address(ctx, &dst);
-		e->timestamp = now;
-	}
-
-	schedule_ipcheck(ctx, e);
+	if (new_unknown_dst)
+		ipmgr_seek_address(ctx, &dst);
 }
 
-void schedule_ipcheck(ipmgr_ctx *ctx, struct entry *e) {
-	struct ip_task *data = calloc(1, sizeof(struct ip_task));
-
-	data->ctx = ctx;
-	data->address = e->address;
-
-	if (e->check_task == NULL)
-		e->check_task = post_task(CTX(taskqueue), IPCHECK_INTERVAL, 0, ipcheck_task, free, data);
-	else
-		free(data);
-}
-
-void seek_task(void *d) {
-	struct ip_task *data = d;
-	struct entry *e = find_entry(data->ctx, &data->address);
-
+bool should_we_really_seek(struct in6_addr *destination) {
+	struct entry *e = find_entry(&l3ctx.ipmgr_ctx, destination);
+	// if a route to this client appeared, the queue will be emptied -- no seek necessary
 	if (!e) {
 		if (l3ctx.debug) {
-			printf("INFO: seek task was scheduled but no remaining packets available for host: ");
-			print_ip(&data->address, "\n");
+			printf("INFO: seek task was scheduled but no packets to be delivered to host: ");
+			print_ip(destination, "\n");
 		}
-		return;
+		return false;
 	}
-	e->check_task = NULL;
 
-	if (!clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &data->address, NULL)) {
-		if (l3ctx.debug) {
-			printf("seeking on intercom for client ");
-			print_ip(&data->address, "\n");
-		}
-		intercom_seek(&l3ctx.intercom_ctx, (const struct in6_addr*) &(data->address));
+	if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, destination, NULL)) {
+		printf("=================================================\n");
+		printf("================= FAT WARNING ===================\n");
+		printf("=================================================\n");
+		printf("seek task was scheduled, there are packets to be delivered to the host: ");
+		print_ip(destination, " BUT it is a known client. This should not happen. If it does, do something about it.\n");
+		return false;
 	}
+
+	// TODO: we could check if a route to this destination is known. If the route_appeared logic is ok, this however should not be necessary. Make the decision if we want the check or not and remove this message.
+
+	return true;
 }
 
-void ipcheck_task(void *d) {
-	struct ip_task *data = d;
-
-	struct entry *e = find_entry(data->ctx, &data->address);
-
-	if (!e) {
-		return;
-	}
-
-	char str[INET6_ADDRSTRLEN] = "";
-	inet_ntop(AF_INET6, &data->address, str, sizeof str);
-	if (l3ctx.debug)
-		printf("running an ipcheck on %s\n", str);
-
-	e->check_task = NULL;
-
-	if (ipcheck(data->ctx, e)) {
-		schedule_ipcheck(data->ctx, e);
-	}
-}
-
-bool ipcheck(ipmgr_ctx *ctx, struct entry *e) {
+void purge_old_packets(struct in6_addr *destination) {
+	//TODO: check implementation. it seems to work but READ THIS 
+	struct entry *e = find_entry(&l3ctx.ipmgr_ctx, destination);
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
 
@@ -257,8 +229,13 @@ bool ipcheck(ipmgr_ctx *ctx, struct entry *e) {
 		struct packet *p = VECTOR_INDEX(e->packets, i);
 
 		if (timespec_cmp(p->timestamp, then) <= 0) {
-			if (l3ctx.debug)
-				printf("deleting old packet\n");
+			if (l3ctx.debug) {
+				printf("deleting old packet with destination ");
+				print_ip(&e->address, "\n");
+				struct in6_addr src = packet_get_src(p->data);
+				icmp6_send_dest_unreachable(&src, p, (&l3ctx.ipmgr_ctx)->sockfd);
+			}
+
 			free(p->data);
 			free(p);
 			VECTOR_DELETE(e->packets, i);
@@ -267,15 +244,63 @@ bool ipcheck(ipmgr_ctx *ctx, struct entry *e) {
 	}
 
 	then = now;
-	then.tv_sec -= SEEK_TIMEOUT;
+	then.tv_sec -= SEEK_INTERVAL;
 
 	if (VECTOR_LEN(e->packets) == 0 && timespec_cmp(e->timestamp, then) <= 0) {
 		VECTOR_FREE(e->packets);
-		delete_entry(ctx, &e->address);
-		return false;
+		delete_entry(&e->address);
 	}
+}
 
-	return true;
+
+void ipmgr_ns_task(void *d) {
+	struct ip_task *data = d;
+	char str[INET6_ADDRSTRLEN];
+
+	purge_old_packets(&data->address);
+
+	if (should_we_really_seek(&data->address)) {
+		inet_ntop(AF_INET6, &data->address, str, sizeof str);
+		printf("\x1b[36mLooking for %s locally\x1b[0m\n", str);
+
+		if (clientmgr_is_ipv4(&l3ctx.clientmgr_ctx, &data->address))
+			arp_send_request(&l3ctx.arp_ctx, &data->address);
+		else
+			icmp6_send_solicitation(&l3ctx.icmp6_ctx, &data->address);
+
+		struct ip_task *ns_data = calloc(1, sizeof(struct ip_task));
+
+		ns_data->ctx = data->ctx;
+		memcpy(&ns_data->address, &data->address, sizeof(struct in6_addr));
+		post_task(&l3ctx.taskqueue_ctx, SEEK_INTERVAL, 0, ipmgr_ns_task, free, ns_data);
+	}
+}
+
+void seek_task(void *d) {
+	struct ip_task *data = d;
+
+	if (should_we_really_seek(&data->address)) {
+		if (l3ctx.debug) {
+			printf("\x1b[36mseeking on intercom for client with the address ");
+			print_ip(&data->address, "\x1b[0m\n");
+		}
+		intercom_seek(&l3ctx.intercom_ctx, (const struct in6_addr*) &(data->address));
+
+/* // WHY do we need to set the client ip to inactive? we are only seeking if
+** there is no route to this ip known.
+		struct client *client = NULL;
+		if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &data->address, &client)) {
+			struct client_ip *ip = get_client_ip(client, &data->address);
+			if (ip)
+				client_ip_set_state(&l3ctx.clientmgr_ctx, client, ip, IP_INACTIVE);
+		}
+		*/
+		struct ip_task *_data = calloc(1, sizeof(struct ip_task));
+
+		_data->ctx = data->ctx;
+		memcpy(&_data->address, &data->address, sizeof(struct in6_addr));
+		post_task(&l3ctx.taskqueue_ctx, SEEK_INTERVAL, 0, seek_task, free, _data);
+	}
 }
 
 void ipmgr_handle_in(ipmgr_ctx *ctx, int fd) {
@@ -298,7 +323,7 @@ void ipmgr_handle_in(ipmgr_ctx *ctx, int fd) {
 			break;
 		}
 
-		// so why again ware we not allowing packets with less than 40 bytes?
+		// we are only interested in IPv6 containing a full header.
 		if (count < 40)
 			continue;
 
@@ -320,16 +345,23 @@ void ipmgr_handle_out(ipmgr_ctx *ctx, int fd) {
 		struct packet *packet = &VECTOR_INDEX(ctx->output_queue, 0);
 		count = write(fd, packet->data, packet->len);
 
-		// TODO refactor to use epoll. do we have to put the packet back in case of EAGAIN?
-		free(packet->data);
-		VECTOR_DELETE(ctx->output_queue, 0);
+		// TODO refactor to use epoll.
 
 		if (count == -1) {
 			if (errno != EAGAIN)
-				perror("Could not send packet to newly visible client");
+				perror("Could not send packet to newly visible client, requeueing and trying again.");
+			else {
+				// we received eagain, so let's requeue this packet 
+				VECTOR_ADD(ctx->output_queue, *packet);
+			}
 
 			break;
 		}
+		else {
+			// write was successful, free data structures
+			free(packet->data);
+		}
+		VECTOR_DELETE(ctx->output_queue, 0);
 	}
 }
 
@@ -346,13 +378,50 @@ void ipmgr_route_appeared(ipmgr_ctx *ctx, const struct in6_addr *destination) {
 
 	VECTOR_FREE(e->packets);
 
-
-	delete_entry(ctx, destination);
+	delete_entry(destination);
 
 	ipmgr_handle_out(ctx, ctx->fd);
 }
 
+static inline int setsockopt_int(int socket, int level, int option, int value) {
+	return setsockopt(socket, level, option, &value, sizeof(value));
+}
 
-void ipmgr_init(ipmgr_ctx *ctx, char *tun_name, unsigned int mtu) {
-	tun_open(ctx, tun_name, mtu, "/dev/net/tun");
+bool ipmgr_init(ipmgr_ctx *ctx, char *tun_name, unsigned int mtu) {
+	bool tun = tun_open(ctx, tun_name, mtu, "/dev/net/tun");
+	int sock_fd = socket(PF_INET6, SOCK_RAW | SOCK_NONBLOCK, IPPROTO_ICMPV6);
+	setsockopt_int(sock_fd, IPPROTO_RAW, IPV6_CHECKSUM, 2);
+	setsockopt_int(sock_fd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, 255);
+	setsockopt_int(sock_fd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, 1);
+	setsockopt_int(sock_fd, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, 1);
+	setsockopt_int(sock_fd, IPPROTO_IPV6, IPV6_AUTOFLOWLABEL, 0);
+	ctx->sockfd = sock_fd;
+
+/*
+//	struct ifreq req = {};
+//	strncpy(req.ifr_name, tun_name, IFNAMSIZ-1);
+//	ioctl(ctx->fd, SIOCGIFHWADDR, &req);
+//	memcpy(ctx->mac, req.ifr_hwaddr.sa_data, 6);
+
+//	strncpy(req.ifr_name, tun_name, IFNAMSIZ-1);
+//	ioctl(ctx->fd, SIOCGIFINDEX, &req);
+
+	struct sockaddr_ll saddr;
+
+	// Bind the socket to the interface we're interested in
+	memset(&saddr, 0, sizeof(saddr));
+	saddr.sll_family = PF_PACKET;
+	saddr.sll_protocol = htons(ETH_P_IPV6);
+//	saddr.sll_ifindex = req.ifr_ifindex;
+	saddr.sll_hatype = 0;
+	saddr.sll_pkttype = 0;
+	saddr.sll_halen = ETH_ALEN;
+	memcpy(saddr.sll_addr, &l3ctx.intercom_ctx.ip, sizeof(struct in6_addr));
+
+	if (bind(ctx->sockfd, (struct sockaddr *)&saddr, sizeof(saddr)) ) {
+		perror("BIND FAILED");
+		return false;
+	}
+*/
+	return tun;
 }

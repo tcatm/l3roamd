@@ -31,6 +31,9 @@
 #include "error.h"
 #include "l3roamd.h"
 #include "prefix.h"
+#include "routemgr.h"
+
+#include "clientmgr.h"
 
 void socket_init(socket_ctx *ctx, char *path) {
 	if (!path) {
@@ -73,12 +76,24 @@ bool parse_command(char *cmd, enum socket_command *scmd) {
 		*scmd = GET_CLIENTS;
 		return true;
 	}
-	if (!strncmp(cmd, "del_prefix", 10)) {
+	if (!strncmp(cmd, "del_prefix ", 11)) {
 		*scmd = DEL_PREFIX;
 		return true;
 	}
-	if (!strncmp(cmd, "add_prefix", 10)) {
+	if (!strncmp(cmd, "add_address ", 12)) {
+		*scmd = ADD_ADDRESS;
+		return true;
+	}
+	if (!strncmp(cmd, "del_address ", 12)) {
+		*scmd = DEL_ADDRESS;
+		return true;
+	}
+	if (!strncmp(cmd, "add_prefix ", 11)) {
 		*scmd = ADD_PREFIX;
+		return true;
+	}
+	if (!strncmp(cmd, "probe ", 6)) {
+		*scmd = PROBE;
 		return true;
 	}
 	if (!strncmp(cmd, "get_prefixes", 12)) {
@@ -174,18 +189,56 @@ void socket_handle_in(socket_ctx *ctx) {
 
 	struct prefix _prefix = {};
 	struct json_object *retval = json_object_new_object();
+	uint8_t mac[6] = { 0xff, 0xfe, 0xfd, 0xfc, 0xfb, 0xfa };
+	struct in6_addr address = {};
+	char *str_address = NULL;
+	char *str_mac = NULL;
 
 	switch (cmd) {
+		case PROBE:
+			str_address = strtok(&line[6], " ");
+			str_mac = strtok(NULL, " ");
+			sscanf(str_mac, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx", &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
+			if (inet_pton(AF_INET6, str_address, &address) == 1) {
+				routemgr_probe_neighbor(&l3ctx.routemgr_ctx, l3ctx.routemgr_ctx.clientif_index, &address,  mac);
+			}
+			break;
 		case GET_CLIENTS:
 			get_clients(retval);
 			dprintf(fd, "%s", json_object_to_json_string(retval));
-			json_object_put(retval);
 			break;
 		case ADD_PREFIX:
 			if (parse_prefix(&_prefix, &line[11])) {
 				add_prefix(&CTX(clientmgr)->prefixes, _prefix);
 				routemgr_insert_route(CTX(routemgr), 254, if_nametoindex(CTX(ipmgr)->ifname), (struct in6_addr*)(_prefix.prefix.s6_addr), _prefix.plen );
 				dprintf(fd, "Added prefix: %s", &line[11]);
+			}
+			break;
+		case ADD_ADDRESS: ;
+			str_address = strtok(&line[12], " ");
+			str_mac = strtok(NULL, " ");
+			sscanf(str_mac, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx", &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
+			if (inet_pton(AF_INET6, str_address, &address) == 1) {
+				clientmgr_add_address(&l3ctx.clientmgr_ctx, &address, mac, l3ctx.routemgr_ctx.clientif_index);
+				dprintf(fd, "OK");
+			}
+			else {
+				dprintf(fd, "NOT OK");
+			}
+			break;
+		case DEL_ADDRESS: ;
+			str_address = strtok(&line[12], " ");
+			str_mac = strtok(NULL, " ");
+			sscanf(str_mac, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx", &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
+			struct client *client = get_client(&l3ctx.clientmgr_ctx, mac);
+			if (client) {
+				if (inet_pton(AF_INET6, str_address, &address) == 1) {
+					rtmgr_client_remove_address(&address);
+					dprintf(fd, "OK");
+				}
+				else {
+					dprintf(fd, "NOT OK");
+				}
 			}
 			break;
 		case DEL_PREFIX:
@@ -198,10 +251,10 @@ void socket_handle_in(socket_ctx *ctx) {
 		case GET_PREFIX:
 			socket_get_prefixes(retval);
 			dprintf(fd, "%s", json_object_to_json_string(retval));
-			json_object_put(retval);
 			break;
 	}
 
+	json_object_put(retval);
 end:
 	close(fd);
 }
