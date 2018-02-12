@@ -133,6 +133,12 @@ void icmp6_interface_changed(icmp6_ctx *ctx, int type, const struct ifinfomsg *m
 	}
 }
 
+
+
+struct __attribute__((__packed__)) dest_unreach_packet {
+	struct icmp6_hdr hdr;
+	uint8_t data[1272];
+};
 struct __attribute__((__packed__)) sol_packet {
 	struct nd_neighbor_solicit hdr;
 	struct nd_opt_hdr opt;
@@ -245,6 +251,38 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 	clientmgr_add_address(CTX(clientmgr), &packet.hdr.nd_na_target, packet.hw_addr, ctx->ifindex);
 }
 
+void icmp6_send_dest_unreachable(const struct in6_addr *addr, const struct packet *data, int fd) {
+	struct dest_unreach_packet packet = {};
+	memset(&packet, 0, sizeof(packet));
+	memset(&packet.hdr, 0, sizeof(packet.hdr));
+	packet.hdr.icmp6_type = ICMP6_DST_UNREACH;
+	packet.hdr.icmp6_code = ICMP6_DST_UNREACH_NOROUTE;
+	packet.hdr.icmp6_cksum = htons(0); 
+
+	int dlen = 1272;
+	if (data->len < 1272)
+		dlen = data->len;
+
+	memcpy(packet.data, data->data, dlen);
+
+	struct sockaddr_in6 dst = {};
+	dst.sin6_family = AF_INET6;
+	dst.sin6_flowinfo = 0;
+	memcpy(&dst.sin6_addr, &addr, 16);
+
+	int len=0;
+	int retries = 3;
+	while (len <= 0 && retries > 0){
+		// TODO: send the unreachable packet to where it belongs, which can be any interface
+		len = sendto((&l3ctx.ipmgr_ctx)->sockfd, &packet, sizeof(packet.hdr) + dlen, 0, (struct sockaddr*)&dst, sizeof(dst));
+		printf("sent %i bytes ICMP6 destination unreachable to ", len);
+		print_ip(addr, "\n");
+		if (len < 0)
+			perror("Error while sending ICMP destination unreachable, retrying");
+		retries--;
+	}
+}
+
 void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 	if (!strlen(ctx->clientif))
 		return;
@@ -294,7 +332,7 @@ void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 		len = sendto(ctx->fd, &packet, sizeof(packet), 0, (struct sockaddr*)&dst, sizeof(dst));
 		printf("sent NS to %s %i\n", str, len);
 		if (len < 0)
-			perror("Error while sending NS to %s, retrying");
+			perror("Error while sending NS, retrying");
 		retries--;
 	}
 }

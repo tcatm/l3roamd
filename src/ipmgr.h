@@ -31,7 +31,7 @@
 #include <stdint.h>
 #include <netinet/in.h>
 #include "intercom.h"
-#define PACKET_TIMEOUT 15  // drop packet after it sat in the unknown destination-queue for this amount of time
+#define PACKET_TIMEOUT 5  // drop packet after it sat in the unknown destination-queue for this amount of time
 #define SEEK_INTERVAL 3    // retry a seek every n seconds
 
 struct packet {
@@ -55,6 +55,7 @@ struct entry {
 
 typedef struct {
 	int fd;
+	int sockfd;
 	char *ifname;
 	struct l3ctx *l3ctx;
 	VECTOR(struct entry) addrs;

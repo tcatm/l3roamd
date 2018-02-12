@@ -12,6 +12,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <linux/if_tun.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <linux/if_packet.h>
 
 static bool tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name);
 static void ipmgr_ns_task(void *d);
@@ -124,12 +127,18 @@ void ipmgr_seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
 	data->check_task = post_task(CTX(taskqueue), 0, 300, seek_task, free, data);
 }
 
+struct in6_addr packet_get_src(uint8_t packet[]) {
+	struct in6_addr src;
+	memcpy(&src, packet + 8, 16);
+	return src;
+}
+
 void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 	struct in6_addr dst;
 	struct in6_addr src;
 
-	memcpy(&src, packet + 8, 16);
 	memcpy(&dst, packet + 24, 16);
+	src = packet_get_src(packet);
 
 	uint8_t a0 = dst.s6_addr[0];
 
@@ -180,8 +189,6 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 
 	if (new_unknown_dst)
 		ipmgr_seek_address(ctx, &dst);
-
-//	schedule_ipcheck(ctx, e);
 }
 
 bool should_we_really_seek(struct in6_addr *destination) {
@@ -189,7 +196,7 @@ bool should_we_really_seek(struct in6_addr *destination) {
 	// if a route to this client appeared, the queue will be emptied -- no seek necessary
 	if (!e) {
 		if (l3ctx.debug) {
-			printf("INFO: seek task was scheduled but packets to be delivered to host: ");
+			printf("INFO: seek task was scheduled but no packets to be delivered to host: ");
 			print_ip(destination, "\n");
 		}
 		return false;
@@ -199,8 +206,8 @@ bool should_we_really_seek(struct in6_addr *destination) {
 		printf("=================================================\n");
 		printf("================= FAT WARNING ===================\n");
 		printf("=================================================\n");
-		printf("seek task was scheduled but there are no packets to be delivered to the host: ");
-		print_ip(destination, ". This should not happen because it means the host is known but the packet queue is not empty.\n");
+		printf("seek task was scheduled, there are packets to be delivered to the host: ");
+		print_ip(destination, " BUT it is a known client. This should not happen. If it does, do something about it.\n");
 		return false;
 	}
 
@@ -225,6 +232,8 @@ void purge_old_packets(struct in6_addr *destination) {
 			if (l3ctx.debug) {
 				printf("deleting old packet with destination ");
 				print_ip(&e->address, "\n");
+				struct in6_addr src = packet_get_src(p->data);
+				icmp6_send_dest_unreachable(&src, p, (&l3ctx.ipmgr_ctx)->sockfd);
 			}
 
 			free(p->data);
@@ -374,7 +383,45 @@ void ipmgr_route_appeared(ipmgr_ctx *ctx, const struct in6_addr *destination) {
 	ipmgr_handle_out(ctx, ctx->fd);
 }
 
+static inline int setsockopt_int(int socket, int level, int option, int value) {
+	return setsockopt(socket, level, option, &value, sizeof(value));
+}
 
 bool ipmgr_init(ipmgr_ctx *ctx, char *tun_name, unsigned int mtu) {
-	return tun_open(ctx, tun_name, mtu, "/dev/net/tun");
+	bool tun = tun_open(ctx, tun_name, mtu, "/dev/net/tun");
+	int sock_fd = socket(PF_INET6, SOCK_RAW | SOCK_NONBLOCK, IPPROTO_ICMPV6);
+	setsockopt_int(sock_fd, IPPROTO_RAW, IPV6_CHECKSUM, 2);
+	setsockopt_int(sock_fd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, 255);
+	setsockopt_int(sock_fd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, 1);
+	setsockopt_int(sock_fd, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, 1);
+	setsockopt_int(sock_fd, IPPROTO_IPV6, IPV6_AUTOFLOWLABEL, 0);
+	ctx->sockfd = sock_fd;
+
+/*
+//	struct ifreq req = {};
+//	strncpy(req.ifr_name, tun_name, IFNAMSIZ-1);
+//	ioctl(ctx->fd, SIOCGIFHWADDR, &req);
+//	memcpy(ctx->mac, req.ifr_hwaddr.sa_data, 6);
+
+//	strncpy(req.ifr_name, tun_name, IFNAMSIZ-1);
+//	ioctl(ctx->fd, SIOCGIFINDEX, &req);
+
+	struct sockaddr_ll saddr;
+
+	// Bind the socket to the interface we're interested in
+	memset(&saddr, 0, sizeof(saddr));
+	saddr.sll_family = PF_PACKET;
+	saddr.sll_protocol = htons(ETH_P_IPV6);
+//	saddr.sll_ifindex = req.ifr_ifindex;
+	saddr.sll_hatype = 0;
+	saddr.sll_pkttype = 0;
+	saddr.sll_halen = ETH_ALEN;
+	memcpy(saddr.sll_addr, &l3ctx.intercom_ctx.ip, sizeof(struct in6_addr));
+
+	if (bind(ctx->sockfd, (struct sockaddr *)&saddr, sizeof(saddr)) ) {
+		perror("BIND FAILED");
+		return false;
+	}
+*/
+	return tun;
 }
