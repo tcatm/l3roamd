@@ -208,7 +208,7 @@ bool should_we_really_seek(struct in6_addr *destination) {
 		printf("================= FAT WARNING ===================\n");
 		printf("=================================================\n");
 		printf("seek task was scheduled, there are packets to be delivered to the host: ");
-		print_ip(destination, " BUT it is a known client. This should not happen. If it does, do something about it.\n");
+		print_ip(destination, ",\nwhich is a known client. This should not happen. If it does, do something about it.\n");
 		return false;
 	}
 
@@ -218,15 +218,18 @@ bool should_we_really_seek(struct in6_addr *destination) {
 }
 
 void purge_old_packets(struct in6_addr *destination) {
-	//TODO: check implementation. it seems to work but READ THIS 
 	struct entry *e = find_entry(&l3ctx.ipmgr_ctx, destination);
+
+	if (!e)
+		return;
+
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
 
 	struct timespec then = now;
 	then.tv_sec -= PACKET_TIMEOUT;
 
-	for (int i = 0; i < VECTOR_LEN(e->packets); i++) {
+	for (int i = VECTOR_LEN(e->packets) - 1; i>=0; i--) {
 		struct packet *p = VECTOR_INDEX(e->packets, i);
 
 		if (timespec_cmp(p->timestamp, then) <= 0) {
@@ -240,14 +243,10 @@ void purge_old_packets(struct in6_addr *destination) {
 			free(p->data);
 			free(p);
 			VECTOR_DELETE(e->packets, i);
-			i--;
 		}
 	}
 
-	then = now;
-	then.tv_sec -= SEEK_INTERVAL;
-
-	if (VECTOR_LEN(e->packets) == 0 && timespec_cmp(e->timestamp, then) <= 0) {
+	if (VECTOR_LEN(e->packets) == 0) {
 		VECTOR_FREE(e->packets);
 		delete_entry(&e->address);
 	}
