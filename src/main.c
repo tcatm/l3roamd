@@ -182,6 +182,9 @@ void usage() {
 	puts("get_prefixes         This return a list of all prefixes being handled by l3roamd.");
 	puts("add_prefix <prefix>  This will treat <prefix> as if it was added using -p");
 	puts("del_prefix <prefix>  This will remove <prefix> from the list of client-prefixes and stop accepting queries for clients within that prefix.");
+	puts("add_address <addr> <mac> This will add the ipv6 address to the client represented by <mac>");
+	puts("del_address <addr> <mac> This will remove the ipv6 address from the client represented by <mac>");
+	puts("probe <addr> <mac>   This will start a neighbour discovery for a neighbour <mac> with address <addr>");
 }
 
 
