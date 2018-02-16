@@ -7,9 +7,6 @@
 #include <netinet/in.h>
 #include <time.h>
 
-#define CLIENT_TIMEOUT 300
-#define NODE_CLIENT_PREFIX "fec0::"
-
 enum ip_state {
 	IP_INACTIVE = 0, // ip address is known but not in use
 	IP_ACTIVE,   // address is in used
@@ -31,14 +28,13 @@ typedef struct client {
 	VECTOR(struct client_ip) addresses;
 } client_t;
 
-
-
 typedef struct {
 	struct l3ctx *l3ctx;
 	VECTOR(struct prefix) prefixes;
 	struct prefix v4prefix;
 	unsigned int export_table;
 	int nat46ifindex;
+	struct prefix node_client_prefix;
 	VECTOR(struct client) clients;
 } clientmgr_ctx;
 
@@ -63,5 +59,5 @@ bool clientmgr_is_known_address(clientmgr_ctx *ctx, const struct in6_addr *addre
 void add_special_ip(clientmgr_ctx *ctx, struct client *client);
 struct client_ip *get_client_ip(struct client *client, const struct in6_addr *address);
 void mac_addr_n2a(char *mac_addr, unsigned char *arg);
-struct in6_addr mac2ipv6(uint8_t mac[6], char * prefix);
+struct in6_addr mac2ipv6(uint8_t mac[6], struct prefix *prefix);
 

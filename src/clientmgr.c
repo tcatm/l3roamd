@@ -36,9 +36,8 @@ void mac_addr_n2a(char *mac_addr, unsigned char *arg) {
 //	snprintf(&addr_str[0], INET6_ADDRSTRLEN, "ff02::1:ff%02x:%02x%02x", mac[3], mac[4], mac[5]);
 //}
 
-struct in6_addr mac2ipv6(uint8_t mac[6], char * prefix) {
-	struct in6_addr address = {};
-	inet_pton(AF_INET6, prefix, &address);
+struct in6_addr mac2ipv6(uint8_t mac[6], struct prefix *prefix) {
+	struct in6_addr address = prefix->prefix;
 
 	address.s6_addr[8] = mac[0] ^ 0x02;
 	address.s6_addr[9] = mac[1];
@@ -126,7 +125,7 @@ bool client_is_active(const struct client *client) {
 /** Adds the special node client IP address.
   */
 void add_special_ip(clientmgr_ctx *ctx, struct client *client) {
-	struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
+	struct in6_addr address = mac2ipv6(client->mac, &ctx->node_client_prefix);
 	printf("Adding special address: ");
 	print_ip(&address, "\n");
 	rtnl_add_address(CTX(routemgr), &address);
@@ -135,7 +134,7 @@ void add_special_ip(clientmgr_ctx *ctx, struct client *client) {
 /** Removes the special node client IP address.
   */
 void remove_special_ip(clientmgr_ctx *ctx, struct client *client) {
-	struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
+	struct in6_addr address = mac2ipv6(client->mac, &ctx->node_client_prefix);
 	printf("Removing special address: ");
 	print_ip(&address, "\n");
 	rtnl_remove_address(CTX(routemgr), &address);
@@ -499,7 +498,7 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 	if (!was_active) {
 		if (l3ctx.debug)
 			printf("Claiming client [%s]\n", mac_str);
-		struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
+		struct in6_addr address = mac2ipv6(client->mac, &ctx->node_client_prefix);
 		intercom_claim(CTX(intercom), &address, client);
 		// intercom_claim(CTX(intercom), NULL, client);
 	}
@@ -542,7 +541,7 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 	// this means that we cannot support multiple client interfaces and that we absolutely need the client bridge.
 	client->ifindex = ifindex;
 
-	struct in6_addr address = mac2ipv6(client->mac, NODE_CLIENT_PREFIX);
+	struct in6_addr address = mac2ipv6(client->mac, &ctx->node_client_prefix);
 	intercom_claim(CTX(intercom), &address, client);
 	// intercom_claim(CTX(intercom), NULL, client);
 

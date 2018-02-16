@@ -169,6 +169,7 @@ void usage() {
 	puts("  -d                 use debug logging");
 	puts("  -c <file>          configuration file"); // TODO: do we really need this?
 	puts("  -p <prefix>        Accept queries for this prefix. May be provided multiple times.");
+	puts("  -P <prefix>      Defines the node-client prefix. Default: fec0::/64.");
 	puts("  -s <socketpath>    provide statistics and allow control using this socket. See below for usage instructions.");
 	puts("  -i <clientif>      client interface");
 	puts("  -m <meshif>        mesh interface. may be specified multiple times");
@@ -235,9 +236,13 @@ int main(int argc, char *argv[]) {
 
 	l3ctx.debug = false;
 	l3ctx.l3device = strdup("l3roam0");
+	
+	struct prefix _tprefix = {};
+	parse_prefix(&_tprefix, "fec::/64");
+	l3ctx.clientmgr_ctx.node_client_prefix = _tprefix;
 
 	int c;
-	while ((c = getopt(argc, argv, "dha:b:p:i:m:t:c:4:n:s:d:VD:")) != -1)
+	while ((c = getopt(argc, argv, "dha:b:p:i:m:t:c:4:n:s:d:VD:P:")) != -1)
 		switch (c) {
 			case 'V':
 				printf("l3roamd %s\n", SOURCE_VERSION);
@@ -261,6 +266,13 @@ int main(int argc, char *argv[]) {
 			case 'c':
 				//TODO: this is not implemented.
 				parse_config(optarg);
+				break;
+			case 'P':;
+				 printf("parsing prefix %s\n",optarg);
+				struct prefix _ncprefix = {};
+				if(!parse_prefix(&_ncprefix, optarg))
+					exit_error("Can not parse node-client-prefix that passed by -P");
+				l3ctx.clientmgr_ctx.node_client_prefix = _ncprefix;
 				break;
 			case 'p':
 				p_initialized=true;

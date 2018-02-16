@@ -331,7 +331,9 @@ void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 	if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, addr, &_client)) {
 		// find ll-address of the client. if it exists, use that as target for our NS
 		struct in6_addr lladdr = {};
-		lladdr = mac2ipv6(_client->mac, "fe80::");
+		struct prefix _prefix = {};
+		parse_prefix(&_prefix, "fe80::/64");
+		lladdr = mac2ipv6(_client->mac, &_prefix);
 
 		if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &lladdr, &_client)) {
 			memcpy(&dst.sin6_addr, &lladdr, 16);
