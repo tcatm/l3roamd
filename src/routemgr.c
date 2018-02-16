@@ -98,7 +98,19 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 			if (nh->nlmsg_type == RTM_NEWNEIGH) {// TODO: re-try sending NS if no NA is received
 				if (l3ctx.debug)
 					printf("NEWNEIGH & NUD_FAILED received - sending NS for ip %s [%s]\n", ip_str, mac_str);
-				icmp6_send_solicitation(CTX(icmp6), &dst_address); // we cannot replace this with our probe-function or we will endlessly loop between states.
+
+				// we cannot directly use probe here because
+				// that would lead to an endless loop.
+				// TODO: let the kernel do the probing and
+				// remember how often we where in this state
+				// for each client. If that was >3 times,
+				// remove client.
+				if (clientmgr_is_ipv4(CTX(clientmgr), &dst_address)) {
+					arp_send_request(CTX(arp), &dst_address);
+				}
+				else {
+					icmp6_send_solicitation(CTX(icmp6), &dst_address);
+				}
 			}
 			else if (nh->nlmsg_type == RTM_DELNEIGH) {
 				if (l3ctx.debug)
