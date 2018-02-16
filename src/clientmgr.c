@@ -447,7 +447,7 @@ void clientmgr_remove_address(clientmgr_ctx *ctx, struct client *client, struct 
 	}
 
 	if (client) {
-		delete_client_ip(client, address, false);
+		delete_client_ip(client, address, true);
 	}
 
 	if (!client_is_active(client)) {
