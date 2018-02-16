@@ -20,6 +20,7 @@
 static bool tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name);
 static void ipmgr_ns_task(void *d);
 static void seek_task(void *d);
+static void ipmgr_purge_task(void *d);
 
 /* open l3roamd's tun device that is used to obtain packets for unknown clients */
 bool tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name) {
@@ -111,6 +112,13 @@ void delete_entry(const struct in6_addr *k) {
 	}
 }
 
+void schedule_purge_task(struct in6_addr *destination) {
+	struct ip_task *purge_data = calloc(1, sizeof(struct ip_task));
+
+	purge_data->ctx = &l3ctx.ipmgr_ctx;
+	memcpy(&purge_data->address, destination, sizeof(struct in6_addr));
+	post_task(&l3ctx.taskqueue_ctx, PACKET_TIMEOUT, 0, ipmgr_purge_task, free, purge_data);
+}
 
 /** This will seek an address by checking locally and if needed querying the network by scheduling a task */
 void ipmgr_seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
@@ -138,8 +146,11 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 	struct in6_addr dst;
 	struct in6_addr src;
 
+	printf("Got packet from ");
 	memcpy(&dst, packet + 24, 16);
 	src = packet_get_src(packet);
+
+	print_ip(&src, " destined to ");
 
 	uint8_t a0 = dst.s6_addr[0];
 
@@ -148,8 +159,6 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 		return;
 
 
-	printf("Got packet from ");
-	print_ip(&src, " destined to ");
 	print_ip(&dst, "\n");
 
 
@@ -190,6 +199,8 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 
 	if (new_unknown_dst)
 		ipmgr_seek_address(ctx, &dst);
+
+	schedule_purge_task(&dst);
 }
 
 bool should_we_really_seek(struct in6_addr *destination) {
@@ -217,6 +228,17 @@ bool should_we_really_seek(struct in6_addr *destination) {
 	return true;
 }
 
+void remove_packet_from_vector(struct entry *entry, int element) {
+	struct packet *p = VECTOR_INDEX(entry->packets, element);
+
+	struct in6_addr src = packet_get_src(p->data);
+	icmp6_send_dest_unreachable(&src, p, (&l3ctx.ipmgr_ctx)->sockfd);
+
+	free(p->data);
+	free(p);
+	VECTOR_DELETE(entry->packets, element);
+}
+
 void purge_old_packets(struct in6_addr *destination) {
 	struct entry *e = find_entry(&l3ctx.ipmgr_ctx, destination);
 
@@ -231,18 +253,13 @@ void purge_old_packets(struct in6_addr *destination) {
 
 	for (int i = VECTOR_LEN(e->packets) - 1; i>=0; i--) {
 		struct packet *p = VECTOR_INDEX(e->packets, i);
-
 		if (timespec_cmp(p->timestamp, then) <= 0) {
 			if (l3ctx.debug) {
 				printf("deleting old packet with destination ");
 				print_ip(&e->address, "\n");
-				struct in6_addr src = packet_get_src(p->data);
-				icmp6_send_dest_unreachable(&src, p, (&l3ctx.ipmgr_ctx)->sockfd);
 			}
 
-			free(p->data);
-			free(p);
-			VECTOR_DELETE(e->packets, i);
+			remove_packet_from_vector(e, i);
 		}
 	}
 
@@ -253,11 +270,15 @@ void purge_old_packets(struct in6_addr *destination) {
 }
 
 
+void ipmgr_purge_task(void *d) {
+	struct ip_task *data = d;
+
+	purge_old_packets(&data->address);
+}
+
 void ipmgr_ns_task(void *d) {
 	struct ip_task *data = d;
 	char str[INET6_ADDRSTRLEN];
-
-	purge_old_packets(&data->address);
 
 	if (should_we_really_seek(&data->address)) {
 		inet_ntop(AF_INET6, &data->address, str, sizeof str);

@@ -9,6 +9,7 @@
 typedef struct {
 	struct l3ctx *l3ctx;
 	int fd;
+	int unreachfd;
 	int nsfd;
 	bool ok;
 	uint8_t mac[6];

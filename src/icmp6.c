@@ -53,13 +53,23 @@ void icmp6_init(icmp6_ctx *ctx) {
 	setsockopt_int(fd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, 1);
 	setsockopt_int(fd, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, 1);
 	setsockopt_int(fd, IPPROTO_IPV6, IPV6_AUTOFLOWLABEL, 0);
-
+	
 	struct icmp6_filter filter;
 	ICMP6_FILTER_SETBLOCKALL(&filter);
 	ICMP6_FILTER_SETPASS(ND_NEIGHBOR_ADVERT, &filter);
 	setsockopt(fd, IPPROTO_ICMPV6, ICMP6_FILTER, &filter, sizeof(filter));
 
+
+	int unreachfd = socket(AF_INET6, SOCK_RAW,IPPROTO_ICMPV6);
+	struct icmp6_filter filterv6;
+
+	ICMP6_FILTER_SETBLOCKALL(&filterv6);
+	ICMP6_FILTER_SETPASS(ICMP6_DST_UNREACH, &filterv6);
+	setsockopt(unreachfd, IPPROTO_ICMPV6, ICMP6_FILTER, &filterv6, sizeof (filterv6));
+
 	ctx->fd = fd;
+
+	ctx->unreachfd = unreachfd;
 
 	ctx->nsfd = icmp6_init_packet();
 
@@ -77,10 +87,10 @@ void icmp6_setup_interface(icmp6_ctx *ctx) {
 	printf("Setting up icmp6 interface: %i\n", rc);
 
 	if (rc < 0) {
-		perror("icmp6 - setsockopt:");
+		perror("icmp6 - setsockopt fd:");
 		return;
 	}
-
+	
 	struct ifreq req = {};
 	strncpy(req.ifr_name, ctx->clientif, IFNAMSIZ-1);
 	ioctl(ctx->fd, SIOCGIFHWADDR, &req);
@@ -268,17 +278,22 @@ void icmp6_send_dest_unreachable(const struct in6_addr *addr, const struct packe
 	struct sockaddr_in6 dst = {};
 	dst.sin6_family = AF_INET6;
 	dst.sin6_flowinfo = 0;
-	memcpy(&dst.sin6_addr, &addr, 16);
+	memcpy(&dst.sin6_addr, addr, 16);
 
 	int len=0;
 	int retries = 3;
 	while (len <= 0 && retries > 0){
-		// TODO: send the unreachable packet to where it belongs, which can be any interface
-		len = sendto((&l3ctx.ipmgr_ctx)->sockfd, &packet, sizeof(packet.hdr) + dlen, 0, (struct sockaddr*)&dst, sizeof(dst));
-		printf("sent %i bytes ICMP6 destination unreachable to ", len);
-		print_ip(addr, "\n");
-		if (len < 0)
-			perror("Error while sending ICMP destination unreachable, retrying");
+		len = sendto((&l3ctx.icmp6_ctx)->unreachfd, &packet, sizeof(packet.hdr) + dlen, 0, (struct sockaddr*)&dst, sizeof(dst));
+
+		if (l3ctx.debug && len > 0) {
+			printf("sent %i bytes ICMP6 destination unreachable to ", len);
+			print_ip(addr, "\n");
+		}
+		else if (len < 0) {
+			printf("Error while sending ICMP destination unreachable, retrying ");
+			print_ip(addr, "\n");
+			perror("sendto");
+		}
 		retries--;
 	}
 }
