@@ -358,7 +358,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
 	bool nop = false;
-// TODO: trigger multiple NS when going into IP_TENTATIVE state. after the last try, deactivate the IP.
+
 	switch (ip->state) {
 		case IP_INACTIVE:
 			switch (state) {

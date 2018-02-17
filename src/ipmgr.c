@@ -219,11 +219,11 @@ bool should_we_really_seek(struct in6_addr *destination) {
 		printf("================= FAT WARNING ===================\n");
 		printf("=================================================\n");
 		printf("seek task was scheduled, there are packets to be delivered to the host: ");
-		print_ip(destination, ",\nwhich is a known client. This should not happen. If it does, do something about it.\n");
+		print_ip(destination, ",\nwhich is a known client. This should not happen. Flushing packets for this destination\n");
+		ipmgr_route_appeared(&l3ctx.ipmgr_ctx, destination);
+
 		return false;
 	}
-
-	// TODO: we could check if a route to this destination is known. If the route_appeared logic is ok, this however should not be necessary. Make the decision if we want the check or not and remove this message.
 
 	return true;
 }
