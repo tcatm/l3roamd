@@ -179,8 +179,8 @@ void handle_kernel_routes(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	if (clientmgr_valid_address(&l3ctx.clientmgr_ctx, &route.prefix)) {
 		if (nh->nlmsg_type == RTM_NEWROUTE)
 			ipmgr_route_appeared(CTX(ipmgr), &route.prefix);
-		else if (nh->nlmsg_type == RTM_DELROUTE) {
-			printf("KERNEL ROUTE WAS REMOVED - TODO: SHOULD WE HANDLE THIS? ");
+/*		else if (nh->nlmsg_type == RTM_DELROUTE) {
+			printf("KERNEL ROUTE WAS REMOVED - SHOULD WE HANDLE THIS? ");
 			print_ip(&route.prefix, "\n");
 			struct client *_client = NULL;
 			if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &route.prefix, &_client)) {
@@ -191,6 +191,7 @@ void handle_kernel_routes(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 				//client_ip_set_state(&l3ctx.clientmgr_ctx, struct client *client, struct client_ip *ip, IP_INACTIVE);
 			}
 		}
+		*/
 	}
 }
 
