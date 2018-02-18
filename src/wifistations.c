@@ -22,7 +22,12 @@
 
 #include <linux/nl80211.h>
 
+static int no_seq_check(struct nl_msg *msg, void *arg) {
+	return NL_OK;
+}
+
 void wifistations_handle_in(wifistations_ctx *ctx) {
+	printf("wifistations_handle_in\n");
 	nl_recvmsgs(ctx->nl_sock, ctx->cb);
 }
 
@@ -56,7 +61,7 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
 			mac_addr_n2a(macbuf, nla_data(tb[NL80211_ATTR_MAC]));
 
 			printf("new wifi station [%s] found on interface %s\n", macbuf, ifname);
-//			ifindex = ctx->l3ctx->icmp6_ctx.ifindex;
+			ifindex = ctx->l3ctx->icmp6_ctx.ifindex;
 			clientmgr_notify_mac(CTX(clientmgr), nla_data(tb[NL80211_ATTR_MAC]), ifindex);
 			break;
 		case NL80211_CMD_DEL_STATION:
@@ -73,6 +78,7 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
 }
 
 void wifistations_init(wifistations_ctx *ctx) {
+	printf("initializing detection of wifistations\n");
 	ctx->nl_sock = nl_socket_alloc();
 	if (!ctx->nl_sock)
 		exit_error("Failed to allocate netlink socket.\n");
@@ -104,6 +110,8 @@ void wifistations_init(wifistations_ctx *ctx) {
 		int ret = nl_socket_add_membership(ctx->nl_sock, mcid);
 		if (ret)
 			goto fail;
+	} else {
+		printf("error obtaining multicast id\n");
 	}
 
 	ctx->cb = nl_cb_alloc(NL_CB_DEFAULT);
@@ -111,6 +119,7 @@ void wifistations_init(wifistations_ctx *ctx) {
 	if (!ctx->cb)
 		exit_error("failed to allocate netlink callbacks\n");
 
+	nl_cb_set(ctx->cb, NL_CB_SEQ_CHECK, NL_CB_CUSTOM, no_seq_check, NULL);
 	nl_cb_set(ctx->cb, NL_CB_VALID, NL_CB_CUSTOM, wifistations_handle_event, ctx);
 
 	ctx->fd = nl_socket_get_fd(ctx->nl_sock);
