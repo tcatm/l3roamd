@@ -128,9 +128,22 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 
 void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	const struct ifinfomsg *msg = NLMSG_DATA(nh);
+        struct rtattr * tb[IFLA_MAX+1];
+	memset(tb, 0, sizeof(struct rtattr *) * (NDA_MAX + 1));
+	char ifname[IFNAMSIZ];
+	if_indextoname(msg->ifi_index,ifname);
+	
+	parse_rtattr(tb, NDA_MAX, NDA_RTA(msg), nh->nlmsg_len - NLMSG_LENGTH(sizeof(*msg)));
+
+// TODO: filter for correct device
+
+	char str_mac[6*3];
+	mac_addr_n2a(str_mac, RTA_DATA(tb[IFLA_ADDRESS]));
 	switch (nh->nlmsg_type) {
 		case RTM_NEWLINK:
-			printf("new link %i\n", msg->ifi_index);
+			printf("new station [%s] found in fdb on interface %s\n", str_mac, ifname);
+			int ifindex = ctx->l3ctx->icmp6_ctx.ifindex;
+			clientmgr_notify_mac(CTX(clientmgr), RTA_DATA(tb[IFLA_ADDRESS]), ifindex);
 			break;
 
 		case RTM_SETLINK:
@@ -139,9 +152,12 @@ void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 
 		case RTM_DELLINK:
 			printf("del link %i\n", msg->ifi_index);
+			printf("fdb-entry was removed for [%s]. Removing client.\n", str_mac);
+			clientmgr_delete_client(CTX(clientmgr), RTA_DATA(tb[IFLA_ADDRESS]));
 			break;
 	}
 
+	// TODO: do we really need to call interfaces_changed here?
 	interfaces_changed(nh->nlmsg_type, msg);
 }
 
@@ -196,7 +212,7 @@ void handle_kernel_routes(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 }
 
 void rtnl_handle_msg(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
-	if (ctx->fdb_disabled)
+	if (ctx->nl_disabled)
 		return;
 
 	switch (nh->nlmsg_type) {
@@ -262,6 +278,18 @@ void routemgr_init(routemgr_ctx *ctx) {
 
 		routemgr_insert_route(ctx, 254, if_nametoindex(CTX(ipmgr)->ifname), (struct in6_addr*)(prefix->prefix.s6_addr), prefix->plen );
 	}
+
+	// set route for clat-prefix
+	 /*
+	char str[INET6_ADDRSTRLEN+1];
+	struct prefix *prefix = &l3ctx.clientmgr_ctx.v4prefix;
+	inet_ntop(AF_INET6, prefix->prefix.s6_addr, str, INET6_ADDRSTRLEN);
+	printf("Activating route for prefix %s/%i on clat-device %i in main routing-table\n", str, prefix->plen, l3ctx.clientmgr_ctx.nat46ifindex);
+
+	routemgr_insert_route(ctx, 254, l3ctx.clientmgr_ctx.nat46ifindex, (struct in6_addr*)(prefix->prefix.s6_addr), prefix->plen );
+*/
+
+
 
 	ctx->clientif_index = if_nametoindex(ctx->clientif);
 	if (!ctx->clientif_index) {

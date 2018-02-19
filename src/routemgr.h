@@ -49,7 +49,7 @@ typedef struct {
 	int clientif_index;
 	char *clientif;
 	char *client_bridge;
-	bool fdb_disabled;
+	bool nl_disabled;
 } routemgr_ctx;
 
 void handle_route(routemgr_ctx *ctx, struct kernel_route *route);

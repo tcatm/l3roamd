@@ -164,21 +164,23 @@ void loop() {
 }
 
 void usage() {
-	puts("Usage: l3roamd [-h] [-d] [-b <client-bridge>] -a <ip6> -p <prefix> [-i <clientif>] -m <meshif> ... -t <export table> [-4 prefix] [-D <devicename>]");
+	puts("Usage: l3roamd [-h] [-d] [-b <client-bridge>] -a <ip6> [-n <clatif>] -p <prefix> [-e <prefix>] [-i <clientif>] -m <meshif> ... -t <export table> [-4 prefix] [-D <devicename>]");
 	puts("  -a <ip6>           ip address of this node");
 	puts("  -b <client-bridge> this is the bridge where all clients are connected");
 	puts("  -d                 use debug logging");
 	puts("  -c <file>          configuration file"); // TODO: do we really need this?
 	puts("  -p <prefix>        Accept queries for this prefix. May be provided multiple times.");
-	puts("  -P <prefix>      Defines the node-client prefix. Default: fec0::/64.");
+	puts("  -P <prefix>        Defines the node-client prefix. Default: fec0::/64.");
+	puts("  -e <prefix>        Defines the plat-prefix if this node is to be a local exit. This must be a /96");
 	puts("  -s <socketpath>    provide statistics and allow control using this socket. See below for usage instructions.");
 	puts("  -i <clientif>      client interface");
 	puts("  -m <meshif>        mesh interface. may be specified multiple times");
+	puts("  -n <clatif>        clat-interface.");
 	puts("  -t <export table>  export routes to this table");
 	puts("  -4 <prefix>        IPv4 translation prefix");
 	puts("  -V|--version       show version information");
 	puts("  -D                 Device name for the l3roamd tun-device");
-	puts("  --no-fdb           do not use fdb to learn new clients");
+	puts("  --no-netlink       do not use fdb or neighbour-table to learn new clients");
 	puts("  --no-ndp           do not use ndp to learn new clients");
 	puts("  --no-nl80211       do not use nl80211 to learn new clients");
 	puts("  -h|--help          this help\n");
@@ -238,7 +240,7 @@ int main(int argc, char *argv[]) {
 	bool a_initialized = false;
 	bool p_initialized = false;
 	bool clientif_set = false;
-	l3ctx.routemgr_ctx.fdb_disabled = false;
+	l3ctx.routemgr_ctx.nl_disabled = false;
 	l3ctx.wifistations_ctx.nl80211_disabled = false;
 	l3ctx.icmp6_ctx.ndp_disabled = false;
 
@@ -252,7 +254,7 @@ int main(int argc, char *argv[]) {
 	int option_index = 0;
 	struct option long_options[] = {
 		{ "help",       0, NULL, 'h' },
-		{ "no-fdb",     0, NULL, 'F' },
+		{ "no-netlink",     0, NULL, 'F' },
 		{ "no-nl80211", 0, NULL, 'N' },
 		{ "no-ndp",     0, NULL, 'X' },
 		{ "version",     0, NULL, 'V' }
@@ -350,7 +352,7 @@ int main(int argc, char *argv[]) {
 				l3ctx.l3device = strdupa(optarg);
 				break;
 			case 'F':
-				l3ctx.routemgr_ctx.fdb_disabled = true;
+				l3ctx.routemgr_ctx.nl_disabled = true;
 				break;
 			case 'N':
 				l3ctx.icmp6_ctx.ndp_disabled = true;
