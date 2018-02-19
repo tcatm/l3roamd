@@ -246,7 +246,7 @@ int main(int argc, char *argv[]) {
 	l3ctx.l3device = strdup("l3roam0");
 	
 	struct prefix _tprefix = {};
-	parse_prefix(&_tprefix, "fec::/64");
+	parse_prefix(&_tprefix, "fec0::/64");
 	l3ctx.clientmgr_ctx.node_client_prefix = _tprefix;
 
 	int option_index = 0;
