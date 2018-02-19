@@ -46,6 +46,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
 #include <fcntl.h>
@@ -175,9 +176,13 @@ void usage() {
 	puts("  -m <meshif>        mesh interface. may be specified multiple times");
 	puts("  -t <export table>  export routes to this table");
 	puts("  -4 <prefix>        IPv4 translation prefix");
-	puts("  -V                 show version information");
+	puts("  -V|--version       show version information");
 	puts("  -D                 Device name for the l3roamd tun-device");
-	puts("  -h                 this help\n\n");
+	puts("  --no-fdb           do not use fdb to learn new clients");
+	puts("  --no-ndp           do not use ndp to learn new clients");
+	puts("  --no-nl80211       do not use nl80211 to learn new clients");
+	puts("  -h|--help          this help\n");
+
 	puts("The socket will accept the following commands:");
 	puts("get_clients          The daemon will reply with a json structure, currently providing client count.");
 	puts("get_prefixes         This return a list of all prefixes being handled by l3roamd.");
@@ -233,6 +238,9 @@ int main(int argc, char *argv[]) {
 	bool a_initialized = false;
 	bool p_initialized = false;
 	bool clientif_set = false;
+	l3ctx.routemgr_ctx.fdb_disabled = false;
+	l3ctx.wifistations_ctx.nl80211_disabled = false;
+	l3ctx.icmp6_ctx.ndp_disabled = false;
 
 	l3ctx.debug = false;
 	l3ctx.l3device = strdup("l3roam0");
@@ -241,8 +249,17 @@ int main(int argc, char *argv[]) {
 	parse_prefix(&_tprefix, "fec::/64");
 	l3ctx.clientmgr_ctx.node_client_prefix = _tprefix;
 
+	int option_index = 0;
+	struct option long_options[] = {
+		{ "help",       0, NULL, 'h' },
+		{ "no-fdb",     0, NULL, 'F' },
+		{ "no-nl80211", 0, NULL, 'N' },
+		{ "no-ndp",     0, NULL, 'X' },
+		{ "version",     0, NULL, 'V' }
+	};
+
 	int c;
-	while ((c = getopt(argc, argv, "dha:b:p:i:m:t:c:4:n:s:d:VD:P:")) != -1)
+	while ((c = getopt_long(argc, argv, "dha:b:p:i:m:t:c:4:n:s:d:VD:P:", long_options, &option_index)) != -1)
 		switch (c) {
 			case 'V':
 				printf("l3roamd %s\n", SOURCE_VERSION);
@@ -331,6 +348,15 @@ int main(int argc, char *argv[]) {
 			case 'D':
 				free(l3ctx.l3device);
 				l3ctx.l3device = strdupa(optarg);
+				break;
+			case 'F':
+				l3ctx.routemgr_ctx.fdb_disabled = true;
+				break;
+			case 'N':
+				l3ctx.icmp6_ctx.ndp_disabled = true;
+				break;
+			case 'X':
+				l3ctx.wifistations_ctx.nl80211_disabled = true;
 				break;
 			default:
 				fprintf(stderr, "Invalid parameter %c ignored.\n", c);

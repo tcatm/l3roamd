@@ -4,6 +4,7 @@
 
 #include <arpa/inet.h>
 #include <linux/rtnetlink.h>
+#include <stdbool.h>
 
 #define KERNEL_INFINITY 0xffff
 #define ROUTE_PROTO 158
@@ -48,6 +49,7 @@ typedef struct {
 	int clientif_index;
 	char *clientif;
 	char *client_bridge;
+	bool fdb_disabled;
 } routemgr_ctx;
 
 void handle_route(routemgr_ctx *ctx, struct kernel_route *route);

@@ -196,6 +196,9 @@ void handle_kernel_routes(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 }
 
 void rtnl_handle_msg(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
+	if (ctx->fdb_disabled)
+		return;
+
 	switch (nh->nlmsg_type) {
 		case RTM_NEWROUTE:
 		case RTM_DELROUTE:

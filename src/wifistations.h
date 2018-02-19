@@ -15,6 +15,7 @@ typedef struct {
 	struct nl_sock *nl_sock;
 	struct nl_cb *cb;
 	VECTOR(wifistations_if) interfaces;
+	bool nl80211_disabled;
 } wifistations_ctx;
 
 void wifistations_handle_in(wifistations_ctx *ctx);

@@ -15,6 +15,7 @@ typedef struct {
 	uint8_t mac[6];
 	char *clientif;
 	unsigned int ifindex;
+	bool ndp_disabled;
 } icmp6_ctx;
 
 void icmp6_handle_in(icmp6_ctx *ctx, int fd);

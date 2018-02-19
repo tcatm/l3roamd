@@ -212,6 +212,9 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 }
 
 void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
+	if (ctx->ndp_disabled)
+		return;
+
 	struct msghdr msghdr;
 	memset (&msghdr, 0, sizeof (msghdr));
 

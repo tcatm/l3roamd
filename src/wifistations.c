@@ -33,6 +33,9 @@ void wifistations_handle_in(wifistations_ctx *ctx) {
 
 int wifistations_handle_event(struct nl_msg *msg, void *arg) {
 	wifistations_ctx *ctx = arg;
+	if (ctx->nl80211_disabled)
+		return 0;
+
 	struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
 	struct nlattr *tb[8];
 	char macbuf[6*3];
