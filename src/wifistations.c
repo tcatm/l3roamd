@@ -27,7 +27,6 @@ static int no_seq_check(struct nl_msg *msg, void *arg) {
 }
 
 void wifistations_handle_in(wifistations_ctx *ctx) {
-	printf("wifistations_handle_in\n");
 	nl_recvmsgs(ctx->nl_sock, ctx->cb);
 }
 
@@ -38,32 +37,31 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
 
 	struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
 	struct nlattr *tb[8];
-	char macbuf[6*3];
+	char str_mac[6*3];
 
 
-	// TODO filtern auf interfaces, die uns interessieren
-	// TODO liste von interfaces pflegen (netlink)
+	// TODO only handle events from interfaces we care about.
 
-	printf("event %i\n", gnlh->cmd);
+	if (l3ctx.debug)
+		printf("WIFISTATIONS received nl80211-event %i\n", gnlh->cmd);
 
-	char ifname[IFNAMSIZ];
 
 	nla_parse(tb, 8, genlmsg_attrdata(gnlh, 0),
 	genlmsg_attrlen(gnlh, 0), NULL);
-
-	unsigned int ifindex = nla_get_u32(tb[NL80211_ATTR_IFINDEX]);
-
-	if_indextoname(ifindex, ifname);
 
 	// TODO warum kann das NULL sein?
 	if (gnlh == NULL)
 		return 0;
 
+	char ifname[IFNAMSIZ];
+	unsigned int ifindex = nla_get_u32(tb[NL80211_ATTR_IFINDEX]);
+	if_indextoname(ifindex, ifname);
+
+	mac_addr_n2a(str_mac, nla_data(tb[NL80211_ATTR_MAC]));
 	switch (gnlh->cmd) {
 		case NL80211_CMD_NEW_STATION:
-			mac_addr_n2a(macbuf, nla_data(tb[NL80211_ATTR_MAC]));
 
-			printf("new wifi station [%s] found on interface %s\n", macbuf, ifname);
+			printf("new wifi station [%s] found on interface %s\n", str_mac, ifname);
 			ifindex = ctx->l3ctx->icmp6_ctx.ifindex;
 			clientmgr_notify_mac(CTX(clientmgr), nla_data(tb[NL80211_ATTR_MAC]), ifindex);
 			break;
@@ -72,7 +70,7 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
 			// just directly removing it. The client may have
 			// roamed and we would like to allow for a
 			// claim/info-cycle.
-			printf("NL80211_CMD_DEL_STATION fpr [%s] RECEIVED on interface %s. Removing.\n", macbuf, ifname);
+			printf("NL80211_CMD_DEL_STATION for [%s] RECEIVED on interface %s. Removing.\n", str_mac, ifname);
 			clientmgr_delete_client(CTX(clientmgr), nla_data(tb[NL80211_ATTR_MAC]));
 			break;
 	}
