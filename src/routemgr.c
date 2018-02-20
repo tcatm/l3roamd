@@ -56,9 +56,9 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	struct ndmsg *msg = NLMSG_DATA(nh);
 	parse_rtattr(tb, NDA_MAX, NDA_RTA(msg), nh->nlmsg_len - NLMSG_LENGTH(sizeof(*msg)));
 
-	if (tb[NDA_LLADDR]) {
+	if (tb[NDA_LLADDR])
 		mac_addr_n2a(mac_str, RTA_DATA(tb[NDA_LLADDR]));
-	}
+
 	struct in6_addr dst_address = {};
 
 	if (tb[NDA_DST]) {
@@ -131,13 +131,18 @@ void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
         struct rtattr * tb[IFLA_MAX+1];
 	memset(tb, 0, sizeof(struct rtattr *) * (NDA_MAX + 1));
 	char ifname[IFNAMSIZ];
+	char str_mac[6*3];
 	if_indextoname(msg->ifi_index,ifname);
 	
 	parse_rtattr(tb, NDA_MAX, NDA_RTA(msg), nh->nlmsg_len - NLMSG_LENGTH(sizeof(*msg)));
 
 // TODO: filter for correct device
 
-	char str_mac[6*3];
+	if (!tb[IFLA_ADDRESS]) {
+		printf("handle_link called but mac could not be extracted - ignoring.\n");
+		return;
+	}
+
 	mac_addr_n2a(str_mac, RTA_DATA(tb[IFLA_ADDRESS]));
 	switch (nh->nlmsg_type) {
 		case RTM_NEWLINK:
@@ -152,8 +157,7 @@ void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 
 		case RTM_DELLINK:
 			printf("del link %i\n", msg->ifi_index);
-			printf("fdb-entry was removed for [%s]. Removing client.\n", str_mac);
-			clientmgr_delete_client(CTX(clientmgr), RTA_DATA(tb[IFLA_ADDRESS]));
+			printf("fdb-entry was removed for [%s].\n", str_mac); // not removing clients, we want to be able to answer claims for it in the near future in case of roaming
 			break;
 	}
 
