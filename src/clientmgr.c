@@ -316,13 +316,6 @@ void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[6]) {
 		}
 	}
 
-	if (VECTOR_LEN(client->addresses)) {
-		// TODO: remove this block after clients with 4+ addresses could be removed without it being triggered
-		printf("freeing addresses - this should not happen\n");
-		print_client(client);
-		VECTOR_FREE(client->addresses);
-	}
-
 	if (!client_is_active(client))  {
 		if (l3ctx.debug)
 			printf("client is not active, removing\n");
