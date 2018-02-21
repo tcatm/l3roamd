@@ -7,6 +7,8 @@
 #include <netinet/in.h>
 #include <time.h>
 
+#define OLDCLIENTS_KEEP_SECONDS 5 * 60
+
 enum ip_state {
 	IP_INACTIVE = 0, // ip address is known but not in use
 	IP_ACTIVE,   // address is in used
@@ -36,6 +38,7 @@ typedef struct {
 	int nat46ifindex;
 	struct prefix node_client_prefix;
 	VECTOR(struct client) clients;
+	VECTOR(struct client) oldclients;
 } clientmgr_ctx;
 
 struct client_task {
@@ -60,4 +63,4 @@ void add_special_ip(clientmgr_ctx *ctx, struct client *client);
 struct client_ip *get_client_ip(struct client *client, const struct in6_addr *address);
 void mac_addr_n2a(char *mac_addr, unsigned char *arg);
 struct in6_addr mac2ipv6(uint8_t mac[6], struct prefix *prefix);
-
+void clientmgr_init();

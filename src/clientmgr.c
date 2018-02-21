@@ -284,6 +284,27 @@ void clientmgr_purge_clients(clientmgr_ctx *ctx) {
 	}
 }
 
+void client_copy_to_old(struct client *client) {
+	struct timespec then;
+	struct timespec now;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+
+	VECTOR_ADD(l3ctx.clientmgr_ctx.oldclients, *client);
+	struct client *_client = &VECTOR_INDEX(l3ctx.clientmgr_ctx.oldclients, VECTOR_LEN(l3ctx.clientmgr_ctx.oldclients)-1);
+	then.tv_sec = now.tv_sec + OLDCLIENTS_KEEP_SECONDS;
+	then.tv_nsec = 0;
+	_client->timeout = then;
+	
+	for (int i=VECTOR_LEN(client->addresses)-1;i>=0;i--) {
+		VECTOR_ADD(_client->addresses, VECTOR_INDEX(client->addresses, i));
+	}
+
+	if (l3ctx.debug) {
+		printf("copied client to old-queue:\n");
+		print_client(_client);
+	}
+}
+
 /** Given a MAC address deletes a client. Safe to call if the client is not
   known.
   */
@@ -303,7 +324,8 @@ void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[6]) {
 	printf("\033[34mREMOVING client %s and invalidating its IP-addresses\033[0m\n", mac_str);
 	print_client(client);
 
-	// TODO: schedule removal in n minutes instead of removing directly.
+	client_copy_to_old(client);
+
 	remove_special_ip(ctx, client);
 
 	if (VECTOR_LEN(client->addresses) > 0) {
@@ -314,18 +336,11 @@ void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[6]) {
 		}
 	}
 
-	if (!client_is_active(client))  {
-		if (l3ctx.debug)
-			printf("client is not active, removing\n");
-
-		for (int i=VECTOR_LEN(ctx->clients)-1;i>=0;i--) {
-			if (memcmp(&(VECTOR_INDEX(ctx->clients, i).mac), mac, sizeof(uint8_t)*6) == 0) {
-				VECTOR_DELETE(ctx->clients, i);
-				break;
-			}
+	for (int i=VECTOR_LEN(ctx->clients)-1;i>=0;i--) {
+		if (memcmp(&(VECTOR_INDEX(ctx->clients, i).mac), mac, sizeof(uint8_t)*6) == 0) {
+			VECTOR_DELETE(ctx->clients, i);
+			break;
 		}
-	} else {
-		printf("WARNING: CLIENT WAS TO BE REMOVED BUT IS STILL ACTIVE THIS SHOULD NOT HAPPEN.\n");
 	}
 }
 
@@ -442,7 +457,7 @@ void clientmgr_remove_address(clientmgr_ctx *ctx, struct client *client, struct 
 	}
 
 	if (!client_is_active(client)) {
-		printf("no active IP-addresses left in client. Deleting client.\n"); //TODO: do this in a couple of minutes
+		printf("no active IP-addresses left in client. Deleting client.\n");
 		clientmgr_delete_client(&l3ctx.clientmgr_ctx, client->mac);
 	}
 }
@@ -528,8 +543,6 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 
 	printf("\033[34mnew client %s on %s\033[0m\n", mac_str, ifname);
 
-	// TODO It is rather nasty to hard-code the client-interface here. Still, all clients should appear on the client-interface, not anywhere else. Using the fdb detection mechanism, clients might end up appearing on the client bridge or somewhere else which should be prevented.
-	// this means that we cannot support multiple client interfaces and that we absolutely need the client bridge.
 	client->ifindex = ifindex;
 
 	struct in6_addr address = mac2ipv6(client->mac, &ctx->node_client_prefix);
@@ -547,9 +560,53 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 	icmp6_send_solicitation(CTX(icmp6), &address);
 }
 
+void free_client_addresses(struct client *client) {
+	if (VECTOR_LEN(client->addresses) > 0) {
+		for (int i=VECTOR_LEN(client->addresses)-1; i>=0; i--) {
+			VECTOR_DELETE(client->addresses, i);
+		}
+	}
+}
+
+void purge_oldclientlist_from_old_clients() {
+	struct client *_client = NULL;
+	struct timespec now;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+
+	if (l3ctx.debug)
+		printf("Purging old clients\n");
+
+	if (VECTOR_LEN(l3ctx.clientmgr_ctx.oldclients) == 0)
+		return;
+
+	for (int i = VECTOR_LEN(l3ctx.clientmgr_ctx.oldclients);i>=0;i--) {
+		_client = &VECTOR_INDEX(l3ctx.clientmgr_ctx.oldclients, i);
+
+		if (timespec_cmp(_client->timeout, now) <= 0) {
+			if (l3ctx.debug) {
+				printf("removing client from old-queue\n");
+				print_client(_client);
+			}
+
+			free_client_addresses(_client);
+			VECTOR_DELETE(l3ctx.clientmgr_ctx.oldclients, i);
+		}
+	}
+}
+
+void purge_oldclients_task() {
+	purge_oldclientlist_from_old_clients();
+
+	post_task(&l3ctx.taskqueue_ctx, OLDCLIENTS_KEEP_SECONDS, 0, purge_oldclients_task, NULL, NULL);
+}
+
+
+
+
 /** This will set all IP addresses of the client to IP_INACTIVE and remove the special IP & route
 */
 void client_deactivate(struct client *client) {
+	client_copy_to_old(client);
 	for (int i=0; i<VECTOR_LEN(client->addresses); i++) {
 		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
 		if (ip)
@@ -610,7 +667,7 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bo
 
 //		VECTOR_ADD(client->addresses, *foreign_ip);
 //		ip = &VECTOR_INDEX(client->addresses, VECTOR_LEN(client->addresses) - 1);
-//		client_ip_set_state(ctx, client, ip, IP_TENTATIVE);
+//		client_ip_set_state(ctx, client, ip, IP_ACTIVE);
 	
 		clientmgr_add_address(ctx, &foreign_ip->addr, foreign_client->mac, l3ctx.icmp6_ctx.ifindex);
 
@@ -624,3 +681,6 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bo
 	printf("\n");
 }
 
+void clientmgr_init() {
+	post_task(&l3ctx.taskqueue_ctx, OLDCLIENTS_KEEP_SECONDS, 0, purge_oldclients_task, NULL, NULL);
+}
