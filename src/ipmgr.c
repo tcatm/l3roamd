@@ -136,29 +136,36 @@ void ipmgr_seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
 	data->check_task = post_task(CTX(taskqueue), 0, 300, seek_task, free, data);
 }
 
-struct in6_addr packet_get_src(uint8_t packet[]) {
+
+
+
+struct in6_addr packet_get_ip(uint8_t packet[], int offset) {
 	struct in6_addr src;
-	memcpy(&src, packet + 8, 16);
+	memcpy(&src, packet + offset, 16);
 	return src;
+}
+
+struct in6_addr packet_get_src(uint8_t packet[]) {
+	return packet_get_ip(packet, 8);
+}
+struct in6_addr packet_get_dst(uint8_t packet[]) {
+	return packet_get_ip(packet, 24);
 }
 
 void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 	struct in6_addr dst;
 	struct in6_addr src;
 
-	printf("Got packet from ");
-	memcpy(&dst, packet + 24, 16);
-	src = packet_get_src(packet);
-
-	print_ip(&src, " destined to ");
-
-	uint8_t a0 = dst.s6_addr[0];
 
 	// Ignore multicast
+	dst = packet_get_dst(packet);
+	uint8_t a0 = dst.s6_addr[0];
 	if (a0 == 0xff)
 		return;
 
-
+	printf("Got packet from ");
+	src = packet_get_src(packet);
+	print_ip(&src, " destined to ");
 	print_ip(&dst, "\n");
 
 
