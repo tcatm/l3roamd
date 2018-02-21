@@ -320,7 +320,7 @@ void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[6]) {
 		if (l3ctx.debug)
 			printf("client is not active, removing\n");
 
-		for (int i=0;i<VECTOR_LEN(ctx->clients);i++) {
+		for (int i=VECTOR_LEN(ctx->clients)-1;i>=0;i--) {
 			if (memcmp(&(VECTOR_INDEX(ctx->clients, i).mac), mac, sizeof(uint8_t)*6) == 0) {
 				VECTOR_DELETE(ctx->clients, i);
 				break;
@@ -606,13 +606,16 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bo
 		struct client_ip *foreign_ip = &VECTOR_INDEX(foreign_client->addresses, i);
 		struct client_ip *ip = get_client_ip(client, &foreign_ip->addr);
 
-		// Skip if we know this IP address
+		// Skip if we already know this IP address
 		if (ip != NULL)
 			continue;
 
-		VECTOR_ADD(client->addresses, *foreign_ip);
-		ip = &VECTOR_INDEX(client->addresses, VECTOR_LEN(client->addresses) - 1);
-		client_ip_set_state(ctx, client, ip, IP_TENTATIVE);
+//		VECTOR_ADD(client->addresses, *foreign_ip);
+//		ip = &VECTOR_INDEX(client->addresses, VECTOR_LEN(client->addresses) - 1);
+//		client_ip_set_state(ctx, client, ip, IP_TENTATIVE);
+	
+		clientmgr_add_address(ctx, &foreign_ip->addr, foreign_client->mac, l3ctx.icmp6_ctx.ifindex);
+
 	}
 
 	if (relinquished)
