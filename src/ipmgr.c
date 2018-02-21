@@ -314,15 +314,6 @@ void seek_task(void *d) {
 		}
 		intercom_seek(&l3ctx.intercom_ctx, (const struct in6_addr*) &(data->address));
 
-/* // WHY do we need to set the client ip to inactive? we are only seeking if
-** there is no route to this ip known.
-		struct client *client = NULL;
-		if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &data->address, &client)) {
-			struct client_ip *ip = get_client_ip(client, &data->address);
-			if (ip)
-				client_ip_set_state(&l3ctx.clientmgr_ctx, client, ip, IP_INACTIVE);
-		}
-		*/
 		struct ip_task *_data = calloc(1, sizeof(struct ip_task));
 
 		_data->ctx = data->ctx;
@@ -425,31 +416,5 @@ bool ipmgr_init(ipmgr_ctx *ctx, char *tun_name, unsigned int mtu) {
 	setsockopt_int(sock_fd, IPPROTO_IPV6, IPV6_AUTOFLOWLABEL, 0);
 	ctx->sockfd = sock_fd;
 
-/*
-//	struct ifreq req = {};
-//	strncpy(req.ifr_name, tun_name, IFNAMSIZ-1);
-//	ioctl(ctx->fd, SIOCGIFHWADDR, &req);
-//	memcpy(ctx->mac, req.ifr_hwaddr.sa_data, 6);
-
-//	strncpy(req.ifr_name, tun_name, IFNAMSIZ-1);
-//	ioctl(ctx->fd, SIOCGIFINDEX, &req);
-
-	struct sockaddr_ll saddr;
-
-	// Bind the socket to the interface we're interested in
-	memset(&saddr, 0, sizeof(saddr));
-	saddr.sll_family = PF_PACKET;
-	saddr.sll_protocol = htons(ETH_P_IPV6);
-//	saddr.sll_ifindex = req.ifr_ifindex;
-	saddr.sll_hatype = 0;
-	saddr.sll_pkttype = 0;
-	saddr.sll_halen = ETH_ALEN;
-	memcpy(saddr.sll_addr, &l3ctx.intercom_ctx.ip, sizeof(struct in6_addr));
-
-	if (bind(ctx->sockfd, (struct sockaddr *)&saddr, sizeof(saddr)) ) {
-		perror("BIND FAILED");
-		return false;
-	}
-*/
 	return tun;
 }
