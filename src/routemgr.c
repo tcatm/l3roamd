@@ -137,9 +137,8 @@ void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	parse_rtattr(tb, NDA_MAX, NDA_RTA(msg), nh->nlmsg_len - NLMSG_LENGTH(sizeof(*msg)));
 
 // TODO: filter for correct device
-
 	if (!tb[IFLA_ADDRESS]) {
-		printf("handle_link called but mac could not be extracted - ignoring.\n");
+		printf("handle_link called but mac could not be extracted - ignoring event.\n");
 		return;
 	}
 
