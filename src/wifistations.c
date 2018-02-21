@@ -46,15 +46,15 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
 	if (gnlh == NULL)
 		return 0;
 
-	if (l3ctx.debug)
-		printf("WIFISTATIONS received nl80211-event %i\n", gnlh->cmd);
+	// if (l3ctx.debug)
+	//	printf("WIFISTATIONS received nl80211-event %i\n", gnlh->cmd);
 
 	nla_parse(tb, 8, genlmsg_attrdata(gnlh, 0),
 	genlmsg_attrlen(gnlh, 0), NULL);
 
 
 	if (!tb[NL80211_ATTR_MAC]) {
-		printf("wifistations_handle_event: no mac address found in nl80211-message - aborting\n");
+	//	printf("wifistations_handle_event: no mac address found in nl80211-message - aborting\n");
 		return 0;
 	}
 
