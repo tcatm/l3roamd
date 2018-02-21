@@ -232,24 +232,21 @@ bool clientmgr_is_known_address(clientmgr_ctx *ctx, const struct in6_addr *addre
 
 	for (int i = 0; i < VECTOR_LEN(ctx->clients); i++) {
 		struct client *c = &VECTOR_INDEX(ctx->clients, i);
-		for (int j = 0; j < VECTOR_LEN(c->addresses);j++) {
-			struct client_ip *a = &VECTOR_INDEX(c->addresses, j);
-			if (&a->addr) {
-				if ( !memcmp(address, &a->addr, sizeof(struct in6_addr))) {
-					if (l3ctx.debug) {
-						if (l3ctx.debug) {
-							char mac_str[18];
-							mac_addr_n2a(mac_str, c->mac);
-							print_ip(address, "is attached to local client ");
-							printf("%s\n", mac_str);
-						}
-					}
 
-					if (client) {
-						*client = c;
-					}
-					return true;
+		for (int j = VECTOR_LEN(c->addresses)-1; j>=0; j--) {
+			struct client_ip *a = &VECTOR_INDEX(c->addresses, j);
+			if ( !memcmp(address, &a->addr, sizeof(struct in6_addr))) {
+				if (l3ctx.debug) {
+					char mac_str[18];
+					mac_addr_n2a(mac_str, c->mac);
+					print_ip(address, "is attached to local client ");
+					printf("%s\n", mac_str);
 				}
+
+				if (client) {
+					*client = c;
+				}
+				return true;
 			}
 		}
 	}
@@ -294,6 +291,7 @@ void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[6]) {
 	struct client *client = get_client(ctx, mac);
 	char mac_str[18];
 	mac_addr_n2a(mac_str, mac);
+	
 
 	if (client == NULL) {
 		if (l3ctx.debug) {
