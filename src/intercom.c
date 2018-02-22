@@ -58,6 +58,8 @@ void intercom_update_interfaces(intercom_ctx *ctx) {
 
 		if (join_mcast(ctx->fd, ctx->groupaddr.sin6_addr, iface))
 			iface->ok = true;
+
+		// TODO: do we have to re-bind?
 	}
 }
 
@@ -113,11 +115,16 @@ void intercom_init(intercom_ctx *ctx) {
 	struct sockaddr_in6 server_addr = {};
 
 	server_addr.sin6_family = AF_INET6;
-//	server_addr.sin6_addr = in6addr_any;
-	memcpy(&server_addr.sin6_addr, ctx->ip.s6_addr, 16);
+	server_addr.sin6_addr = in6addr_any;
 	server_addr.sin6_port = htons(INTERCOM_PORT);
 
 	if (bind(ctx->fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+		perror("bind failed");
+		exit(EXIT_FAILURE);
+	}
+
+	memcpy(&server_addr.sin6_addr, ctx->ip.s6_addr, 16);
+	if (bind(ctx->unicastfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
 		perror("bind failed");
 		exit(EXIT_FAILURE);
 	}
@@ -136,14 +143,11 @@ void intercom_seek(intercom_ctx *ctx, const struct in6_addr *address) {
 		.ttl = 255,
 	};
 
-	memcpy(&packet.hdr.sender, ctx->ip.s6_addr, sizeof(uint8_t) * 16);
-
 	memcpy(&packet.address, address, 16);
 
 	intercom_recently_seen_add(ctx, &packet.hdr);
 
 	intercom_send_packet(ctx, (uint8_t*)&packet, sizeof(packet));
-
 }
 
 bool intercom_send_packet_unicast(intercom_ctx *ctx, const struct in6_addr *recipient, uint8_t *packet, ssize_t packet_len) {
@@ -153,7 +157,7 @@ bool intercom_send_packet_unicast(intercom_ctx *ctx, const struct in6_addr *reci
 		.sin6_addr = *recipient
 	};
 
-	ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, (struct sockaddr*)&addr, sizeof(addr));
+	ssize_t rc = sendto(ctx->unicastfd, packet, packet_len, 0, (struct sockaddr*)&addr, sizeof(addr));
 	if (l3ctx.debug) {
 		printf("sent intercom packet rc: %zi to ", rc);
 		print_ip(recipient, "\n");
@@ -283,7 +287,7 @@ void intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet) {
 	clientmgr_handle_info(CTX(clientmgr), &client, packet->relinquished);
 }
 
-void intercom_handle_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len) {
+void intercom_handle_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len, const bool forward) {
 	intercom_packet_hdr *hdr = (intercom_packet_hdr*) packet;
 
 	if (intercom_recently_seen(ctx, hdr))
@@ -302,7 +306,8 @@ void intercom_handle_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_l
 
 	hdr->ttl--;
 
-	if (hdr->ttl > 0)
+
+	if (forward && hdr->ttl > 0)
 		intercom_send_packet(ctx, packet, packet_len);
 }
 
@@ -311,6 +316,7 @@ void intercom_handle_in(intercom_ctx *ctx, int fd) {
 	uint8_t buf[1500];
 
 	while (1) {
+		bool forward = (fd == ctx->fd);
 		count = read(fd, buf, sizeof buf);
 
 		if (count == -1) {
@@ -326,7 +332,7 @@ void intercom_handle_in(intercom_ctx *ctx, int fd) {
 			break;
 		}
 
-		intercom_handle_packet(ctx, buf, count);
+		intercom_handle_packet(ctx, buf, count, forward);
 	}
 }
 
@@ -344,8 +350,6 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 		.nonce = nonce,
 		.ttl = 1,
 	};
-
-	memcpy(&packet->hdr.sender, ctx->ip.s6_addr, sizeof(uint8_t) * 16);
 
 	memcpy(&packet->mac, client->mac, sizeof(uint8_t) * 6);
 	packet->relinquished = relinquished;
@@ -451,8 +455,6 @@ bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct 
 		.nonce = nonce,
 		.ttl = 255,
 	};
-
-	memcpy(&packet.hdr.sender, ctx->ip.s6_addr, sizeof(uint8_t) * 16);
 
 	memcpy(&packet.mac, client->mac, 6);
 

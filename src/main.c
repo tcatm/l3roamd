@@ -104,6 +104,7 @@ void loop() {
 	}
 
 	add_fd(efd, l3ctx.intercom_ctx.fd, EPOLLIN | EPOLLET);
+	add_fd(efd, l3ctx.intercom_ctx.unicastfd, EPOLLIN | EPOLLET);
 	add_fd(efd, l3ctx.taskqueue_ctx.fd, EPOLLIN);
 
 	if (l3ctx.socket_ctx.fd >= 0) {
@@ -149,7 +150,7 @@ void loop() {
 			} else if (l3ctx.arp_ctx.fd == events[i].data.fd) {
 				if (events[i].events & EPOLLIN)
 					arp_handle_in(&l3ctx.arp_ctx, events[i].data.fd);
-			} else if (l3ctx.intercom_ctx.fd == events[i].data.fd) {
+			} else if (l3ctx.intercom_ctx.fd == events[i].data.fd || l3ctx.intercom_ctx.unicastfd == events[i].data.fd ) {
 				if (events[i].events & EPOLLIN)
 					intercom_handle_in(&l3ctx.intercom_ctx, events[i].data.fd);
 			} else if (l3ctx.socket_ctx.fd == events[i].data.fd) {
