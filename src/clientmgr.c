@@ -576,10 +576,7 @@ void purge_oldclientlist_from_old_clients() {
 	if (l3ctx.debug)
 		printf("Purging old clients\n");
 
-	if (VECTOR_LEN(l3ctx.clientmgr_ctx.oldclients) == 0)
-		return;
-
-	for (int i = VECTOR_LEN(l3ctx.clientmgr_ctx.oldclients);i>=0;i--) {
+	for (int i = VECTOR_LEN(l3ctx.clientmgr_ctx.oldclients)-1;i>=0;i--) {
 		_client = &VECTOR_INDEX(l3ctx.clientmgr_ctx.oldclients, i);
 
 		if (timespec_cmp(_client->timeout, now) <= 0) {
