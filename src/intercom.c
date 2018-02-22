@@ -100,8 +100,8 @@ void intercom_init(intercom_ctx *ctx) {
 
 	if (ctx->fd < 0)
 		exit_error("creating socket");
-	
-	for (int i=0;i<VECTOR_LEN(ctx->interfaces);i++) {
+
+	for (int i=VECTOR_LEN(ctx->interfaces)-1;i>=0;i--) {
 		if (l3ctx.debug)
 			printf("binding to interface %s\n", VECTOR_INDEX(ctx->interfaces, i).ifname);
 		if(setsockopt(ctx->fd, SOL_SOCKET, SO_BINDTODEVICE, VECTOR_INDEX(ctx->interfaces, i).ifname, strnlen(VECTOR_INDEX(ctx->interfaces, i).ifname, IFNAMSIZ-1))) {
@@ -113,7 +113,8 @@ void intercom_init(intercom_ctx *ctx) {
 	struct sockaddr_in6 server_addr = {};
 
 	server_addr.sin6_family = AF_INET6;
-	server_addr.sin6_addr = in6addr_any;
+//	server_addr.sin6_addr = in6addr_any;
+	memcpy(&server_addr.sin6_addr, ctx->ip.s6_addr, 16);
 	server_addr.sin6_port = htons(INTERCOM_PORT);
 
 	if (bind(ctx->fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
@@ -151,6 +152,7 @@ bool intercom_send_packet_unicast(intercom_ctx *ctx, const struct in6_addr *reci
 		.sin6_port = htons(INTERCOM_PORT),
 		.sin6_addr = *recipient
 	};
+
 	ssize_t rc = sendto(ctx->fd, packet, packet_len, 0, (struct sockaddr*)&addr, sizeof(addr));
 	if (l3ctx.debug) {
 		printf("sent intercom packet rc: %zi to ", rc);
