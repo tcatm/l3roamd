@@ -230,7 +230,7 @@ void socket_handle_in(socket_ctx *ctx) {
 			str_address = strtok(&line[12], " ");
 			str_mac = strtok(NULL, " ");
 			sscanf(str_mac, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx", &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
-			struct client *client = get_client(&l3ctx.clientmgr_ctx, mac);
+			struct client *client = get_client(mac);
 			if (client) {
 				if (inet_pton(AF_INET6, str_address, &address) == 1) {
 					rtmgr_client_remove_address(&address);

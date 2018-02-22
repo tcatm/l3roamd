@@ -215,15 +215,24 @@ void clientmgr_client_remove_route(clientmgr_ctx *ctx, struct client *client, st
 /** Given a MAC address returns a client object.
     Returns NULL if the client is not known.
     */
-struct client *get_client(clientmgr_ctx *ctx, const uint8_t mac[6]) {
-	for (int i = 0; i < VECTOR_LEN(ctx->clients); i++) {
-		struct client *e = &VECTOR_INDEX(ctx->clients, i);
+struct client *findinvector(void *_vector, const uint8_t mac[6]) {
+	VECTOR(struct client) *vector = _vector;
+	for (int i = 0; i < VECTOR_LEN(*vector); i++) {
+		struct client *e = &VECTOR_INDEX(*vector, i);
 
 		if (e->mac && memcmp(mac, e->mac, sizeof(uint8_t) * 6) == 0)
 			return e;
 	}
 
 	return NULL;
+}
+
+struct client *get_client(const uint8_t mac[6]) {
+	return findinvector(&l3ctx.clientmgr_ctx.clients, mac);
+}
+
+struct client *get_client_old(const uint8_t mac[6]) {
+	return findinvector(&l3ctx.clientmgr_ctx.oldclients, mac);
 }
 
 /** Given an ip-address, this returns true if there is a local client connected having this IP-address and false otherwise
@@ -260,7 +269,7 @@ bool clientmgr_is_known_address(clientmgr_ctx *ctx, const struct in6_addr *addre
 /** Get a client or create a new, empty one.
   */
 struct client *get_or_create_client(clientmgr_ctx *ctx, const uint8_t mac[6], unsigned int ifindex) {
-	struct client *client = get_client(ctx, mac);
+	struct client *client = get_client(mac);
 
 	if (client == NULL) {
 		struct client _client = {};
@@ -309,7 +318,7 @@ void client_copy_to_old(struct client *client) {
   known.
   */
 void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[6]) {
-	struct client *client = get_client(ctx, mac);
+	struct client *client = get_client(mac);
 	char mac_str[18];
 	mac_addr_n2a(mac_str, mac);
 	
@@ -603,6 +612,7 @@ void purge_oldclients_task() {
 /** This will set all IP addresses of the client to IP_INACTIVE and remove the special IP & route
 */
 void client_deactivate(struct client *client) {
+	client = get_client(client->mac);
 	client_copy_to_old(client);
 	for (int i=0; i<VECTOR_LEN(client->addresses); i++) {
 		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
@@ -615,13 +625,19 @@ void client_deactivate(struct client *client) {
 /** Handle claim (info request).
   */
 void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[6]) {
-	struct client *client = get_client(ctx, mac);
+	bool old = false;
+	struct client *client = get_client(mac);
 	if (l3ctx.debug) {
 		printf("handle claim for client: ");
 		if (client)
 			print_client(client);
 		else
 			printf("unknown\n");
+	}
+
+	if (client == NULL) {
+		client = get_client_old(mac);
+		old = true;
 	}
 
 	if (client == NULL)
@@ -633,16 +649,17 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 	// intercom_info(CTX(intercom), sender, client, !active);
 //	if (active)
 //		return;
-
-	printf("Dropping client %02x:%02x:%02x:%02x:%02x:%02x in response to claim from sender",  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-	print_ip(sender, "\n");
-	client_deactivate(client);
+	if (!old) {
+		printf("Dropping client %02x:%02x:%02x:%02x:%02x:%02x in response to claim from sender",  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+		print_ip(sender, "\n");
+		client_deactivate(client);
+	}
 }
 
 /** Handle incoming client info.
   */
 void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bool relinquished) {
-	struct client *client = get_client(ctx, foreign_client->mac);
+	struct client *client = get_client(foreign_client->mac);
 	if (l3ctx.debug) {
 		printf("handling info message in clientmgr_handle_info() for foreign_client");
 		print_client(foreign_client);
