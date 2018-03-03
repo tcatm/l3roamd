@@ -506,11 +506,6 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 
 	// this will set NUD_REACHABLE for the clients address we are working on	
 	routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, address, client->mac);
-
-	// TODO: only create INTERCOM_INFO when a seek or claim was received within the last second (DEFINE).
-	// TODO: WHY do we need to send an info here this is only relevant if a seek happened before and then the info is discarded on the target because the client is not known there. 
-//	if (ip_is_new)
-//		intercom_info(CTX(intercom), NULL, client, false);
 }
 
 /** Notify the client manager about a new MAC (e.g. a new wifi client).
