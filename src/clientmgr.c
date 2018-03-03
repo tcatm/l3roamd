@@ -6,6 +6,7 @@
 #include "l3roamd.h"
 #include "util.h"
 #include "ipmgr.h"
+#include "prefix.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -49,21 +50,6 @@ struct in6_addr mac2ipv6(uint8_t mac[6], struct prefix *prefix) {
 	address.s6_addr[15] = mac[5];
 
 	return address;
-}
-
-bool prefix_contains(const struct prefix *prefix, struct in6_addr *addr) {
-	int mask=0xff;
-//	print_ip(&prefix->prefix, "<- prefix\n");
-//	print_ip(addr, "<- addr\n");
-	for (int remaining_plen = prefix->plen, i=0;remaining_plen > 0; remaining_plen-= 8) {
-		if (remaining_plen < 8)
-			mask = 0xff & (0xff00 >>remaining_plen);
-
-		if ((addr->s6_addr[i] & mask) != prefix->prefix.s6_addr[i])
-			return false;
-		i++;
-	}
-	return true;
 }
 
 void print_client(struct client *client) {

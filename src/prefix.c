@@ -77,3 +77,16 @@ bool del_prefix(void *prefixes, struct prefix _prefix) {
 	return false;
 }
 
+bool prefix_contains(const struct prefix *prefix, struct in6_addr *addr) {
+	int mask=0xff;
+	for (int remaining_plen = prefix->plen, i=0;remaining_plen > 0; remaining_plen-= 8) {
+		if (remaining_plen < 8)
+			mask = 0xff & (0xff00 >>remaining_plen);
+
+		if ((addr->s6_addr[i] & mask) != prefix->prefix.s6_addr[i])
+			return false;
+		i++;
+	}
+	return true;
+}
+
