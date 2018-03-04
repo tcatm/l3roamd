@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
+#include <sys/epoll.h>
 
 /* Static functions used only in this file. */
 static bool client_is_active(const struct client *client);
@@ -115,14 +117,49 @@ void add_special_ip(clientmgr_ctx *ctx, struct client *client) {
 	printf("Adding special address: ");
 	print_ip(&address, "\n");
 	rtnl_add_address(CTX(routemgr), &address);
+
+	struct sockaddr_in6 server_addr = {
+		.sin6_family = AF_INET6,
+		.sin6_port = htons(INTERCOM_PORT),
+		.sin6_addr = address,
+	};
+
+	client->fd = socket(PF_INET6, SOCK_DGRAM | SOCK_NONBLOCK, 0);
+	if (client->fd < 0) {
+		perror("creating socket for listening on node-client-IP failed:");
+		exit_error("creating socket for intercom on node-client-IP");
+	}
+
+	int one = 1;
+	if (setsockopt(client->fd, SOL_SOCKET, SO_REUSEADDR, &one , sizeof(one)) < 0 ) {
+		perror("could not set SO_REUSEADDR");
+		exit_error("setsockopt: SO_REUSEADDR");
+	}
+
+	while (bind(client->fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+		// the address may not be assigned yet, and netlink is async by design.
+		// We could register a netlink handler to check for correct assignment of the IP-address and bind the socket in this very handler.
+		// Retry in a short while until the bind is successful for now. 
+		// TODO: attempt to bind only after the network stack is set up correctly
+		perror("bind socket to node-client-IP failed.");
+		printf("Retrying bind on client-fd: %i\n", client->fd);
+		sleep(0.002);
+	}
+
+	add_fd(l3ctx.efd, client->fd, EPOLLIN);
 }
 
 /** Removes the special node client IP address.
-  */
+*/
 void remove_special_ip(clientmgr_ctx *ctx, struct client *client) {
 	struct in6_addr address = mac2ipv6(client->mac, &ctx->node_client_prefix);
 	printf("Removing special address: ");
 	print_ip(&address, "\n");
+	if (client->fd) {
+		del_fd(l3ctx.efd, client->fd);
+		close(client->fd);
+		client->fd=-1;
+	}
 	rtnl_remove_address(CTX(routemgr), &address);
 }
 
@@ -492,9 +529,9 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 		memcpy(&_ip.addr, address, sizeof(struct in6_addr));
 		VECTOR_ADD(client->addresses, _ip);
 		ip = &VECTOR_INDEX(client->addresses, VECTOR_LEN(client->addresses) - 1);
+		print_client(client);
 	}
 	client_ip_set_state(ctx, client, ip, IP_ACTIVE);
-	print_client(client);
 	
 	if (!was_active) {
 		if (l3ctx.debug)

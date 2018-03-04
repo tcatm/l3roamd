@@ -28,6 +28,7 @@ typedef struct client {
 	struct timespec timeout;
 	uint8_t mac[6];
 	VECTOR(struct client_ip) addresses;
+	int fd;
 } client_t;
 
 typedef struct {

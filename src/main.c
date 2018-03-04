@@ -60,9 +60,20 @@ void add_fd(int efd, int fd, uint32_t events) {
 	event.events = events;
 
 	int s = epoll_ctl(efd, EPOLL_CTL_ADD, fd, &event);
-	if (s == -1)
+	if (s == -1) {
+		perror("epoll_ctl (ADD):");
 		exit_error("epoll_ctl");
+	}
 }
+
+void del_fd(int efd, int fd) {
+	int s = epoll_ctl(efd, EPOLL_CTL_DEL, fd, NULL);
+	if (s == -1) {
+		perror("epoll_ctl (DEL):");
+		exit_error("epoll_ctl");
+	}
+}
+
 
 void sig_term_handler(int signum, siginfo_t *info, void *ptr)
 {
@@ -87,7 +98,9 @@ void loop() {
 	if (efd == -1) {
 		perror("epoll_create");
 		abort();
-	}
+	} 
+
+	l3ctx.efd = efd;
 
 	add_fd(efd, l3ctx.ipmgr_ctx.fd, EPOLLIN | EPOLLET);
 	add_fd(efd, l3ctx.routemgr_ctx.fd, EPOLLIN | EPOLLET);
@@ -103,8 +116,11 @@ void loop() {
 		add_fd(efd, l3ctx.arp_ctx.fd, EPOLLIN);
 	}
 
-	add_fd(efd, l3ctx.intercom_ctx.fd, EPOLLIN | EPOLLET);
-	add_fd(efd, l3ctx.intercom_ctx.unicastfd, EPOLLIN | EPOLLET);
+	for (int i=VECTOR_LEN(l3ctx.intercom_ctx.interfaces) - 1; i>=0; i--) {
+		add_fd(efd, VECTOR_INDEX(l3ctx.intercom_ctx.interfaces, i).mcast_recv_fd, EPOLLIN);
+	}
+
+	add_fd(efd, l3ctx.intercom_ctx.unicast_nodeip_fd, EPOLLIN);
 	add_fd(efd, l3ctx.taskqueue_ctx.fd, EPOLLIN);
 
 	if (l3ctx.socket_ctx.fd >= 0) {
@@ -124,14 +140,13 @@ void loop() {
 		int n;
 		n = epoll_wait(efd, events, maxevents, -1);
 		for(int i = 0; i < n; i++) {
-			if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP)) {
-				if (errno == EAGAIN) {
-					printf("EAGAIN received on fd %i, continuing. taskqueue.fd: %i routemgr: %i ipmgr: %i icmp6: %i icmp6.ns: %i arp: %i intercom: %i socket: %i, wifistations: %i\n", events[i].data.fd, l3ctx.taskqueue_ctx.fd, l3ctx.routemgr_ctx.fd, l3ctx.ipmgr_ctx.fd, l3ctx.icmp6_ctx.fd, l3ctx.icmp6_ctx.nsfd, l3ctx.arp_ctx.fd, l3ctx.intercom_ctx.fd, l3ctx.socket_ctx.fd, l3ctx.wifistations_ctx.fd);
-					continue; // TODO: this seems to be causing 100% CPU load when suspending and waking my laptop with a running l3roamd on fd for arp and icmp6. Find the cause and fix it.
-				}
+			if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) ||  (!(events[i].events & EPOLLIN || events[i].events & EPOLLIN & EPOLLET))) {
+				printf("epoll error received on fd %i, continuing. taskqueue.fd: %i routemgr: %i ipmgr: %i icmp6: %i icmp6.ns: %i arp: %i socket: %i, wifistations: %i\n", events[i].data.fd, l3ctx.taskqueue_ctx.fd, l3ctx.routemgr_ctx.fd, l3ctx.ipmgr_ctx.fd, l3ctx.icmp6_ctx.fd, l3ctx.icmp6_ctx.nsfd, l3ctx.arp_ctx.fd, l3ctx.socket_ctx.fd, l3ctx.wifistations_ctx.fd);
+				del_fd(efd, events[i].data.fd);
+				close(events[i].data.fd);
+				// continue; // TODO: this seems to be causing 100% CPU load when suspending and waking my laptop with a running l3roamd on fd for arp and icmp6. Find the cause and fix it. This probably means that the icmp6 and arp interface should be re-initialized when it changes.
 				perror("epoll error. This is a bug. Fix this.");
 				sig_term_handler(0, 0, 0);
-				close(events[i].data.fd);
 				// TODO: routemgr is handling routes from kernel AND direct neighbours from fdb. Refactor this at is actually a netlink-handler
 			} else if (l3ctx.taskqueue_ctx.fd == events[i].data.fd) {
 				taskqueue_run(&l3ctx.taskqueue_ctx);
@@ -150,13 +165,36 @@ void loop() {
 			} else if (l3ctx.arp_ctx.fd == events[i].data.fd) {
 				if (events[i].events & EPOLLIN)
 					arp_handle_in(&l3ctx.arp_ctx, events[i].data.fd);
-			} else if (l3ctx.intercom_ctx.fd == events[i].data.fd || l3ctx.intercom_ctx.unicastfd == events[i].data.fd ) {
-				if (events[i].events & EPOLLIN)
-					intercom_handle_in(&l3ctx.intercom_ctx, events[i].data.fd);
 			} else if (l3ctx.socket_ctx.fd == events[i].data.fd) {
 				socket_handle_in(&l3ctx.socket_ctx);
 			} else if (l3ctx.wifistations_ctx.fd == events[i].data.fd) {
 				wifistations_handle_in(&l3ctx.wifistations_ctx);
+			} else {
+				printf("fd %i is ready for IO. taskqueue.fd: %i routemgr: %i ipmgr: %i icmp6: %i icmp6.ns: %i arp: %i socket: %i, wifistations: %i\n", events[i].data.fd, l3ctx.taskqueue_ctx.fd, l3ctx.routemgr_ctx.fd, l3ctx.ipmgr_ctx.fd, l3ctx.icmp6_ctx.fd, l3ctx.icmp6_ctx.nsfd, l3ctx.arp_ctx.fd, l3ctx.socket_ctx.fd, l3ctx.wifistations_ctx.fd);
+				
+				bool intercom = false;
+				
+				for (int j=VECTOR_LEN(l3ctx.intercom_ctx.interfaces) - 1; j>=0; j--) {
+					if (VECTOR_INDEX(l3ctx.intercom_ctx.interfaces, j).mcast_recv_fd == events[i].data.fd) {
+						printf("received intercom packet on one of the mesh interfaces\n");
+						intercom = true;
+						break;
+					}
+				}
+
+				for (int j=VECTOR_LEN(l3ctx.clientmgr_ctx.clients) -1; j>=0; j--) {
+					if (VECTOR_INDEX(l3ctx.clientmgr_ctx.clients, j).fd == events[i].data.fd) {
+						printf("received intercom packet for a locally connected client\n");
+						intercom = true;
+						break;
+					}
+				}
+
+				if ( intercom || l3ctx.intercom_ctx.unicast_nodeip_fd == events[i].data.fd ) {
+					printf("handling intercom\n");
+					if (events[i].events & EPOLLIN)
+						intercom_handle_in(&l3ctx.intercom_ctx, events[i].data.fd);
+				}
 			}
 		}
 	}

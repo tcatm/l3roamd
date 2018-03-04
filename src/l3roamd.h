@@ -31,10 +31,14 @@ struct l3ctx {
 	routemgr_ctx routemgr_ctx;
 	socket_ctx socket_ctx;
 	bool debug;
+	int efd;
 };
 
 extern l3ctx_t l3ctx;
 
 void interfaces_changed(int type, const struct ifinfomsg *msg);
+void add_fd(int efd, int fd, uint32_t events);
+void del_fd(int efd, int fd);
 
+#define INTERCOM_PORT 5523
 #define CTX(tgt) (&ctx->l3ctx->tgt ## _ctx)

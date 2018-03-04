@@ -46,6 +46,7 @@ typedef struct {
 	bool ok;
 	unsigned int ifindex;
 	char *ifname;
+	int mcast_recv_fd;
 } intercom_if;
 
 struct claim_task {
@@ -61,8 +62,7 @@ typedef struct {
 
 typedef struct {
 	struct l3ctx *l3ctx;
-	int fd;
-	int unicastfd;
+	int unicast_nodeip_fd;
 	struct sockaddr_in6 groupaddr;
 	struct in6_addr ip;
 	VECTOR(intercom_packet_hdr) recent_packets;
