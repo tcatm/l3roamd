@@ -94,8 +94,8 @@ struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 		}
 	}
 
-	if (l3ctx.debug)
-		print_ip(k, " is not on the unknown-clients list\n");
+//	if (l3ctx.debug)
+//		print_ip(k, " is not on the unknown-clients list\n");
 
 	return NULL;
 }
