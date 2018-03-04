@@ -53,13 +53,15 @@ void icmp6_init(icmp6_ctx *ctx) {
 	setsockopt_int(fd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, 1);
 	setsockopt_int(fd, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, 1);
 	setsockopt_int(fd, IPPROTO_IPV6, IPV6_AUTOFLOWLABEL, 0);
-	
+
+	// receive NA on fd	
 	struct icmp6_filter filter;
 	ICMP6_FILTER_SETBLOCKALL(&filter);
 	ICMP6_FILTER_SETPASS(ND_NEIGHBOR_ADVERT, &filter);
 	setsockopt(fd, IPPROTO_ICMPV6, ICMP6_FILTER, &filter, sizeof(filter));
 
 
+	// send icmp6 unreachable on unreachfd
 	int unreachfd = socket(AF_INET6, SOCK_RAW,IPPROTO_ICMPV6);
 	struct icmp6_filter filterv6;
 
@@ -83,7 +85,6 @@ void icmp6_setup_interface(icmp6_ctx *ctx) {
 	ctx->ok = false;
 
 	int rc = setsockopt(ctx->fd, SOL_SOCKET, SO_BINDTODEVICE, ctx->clientif, strnlen(ctx->clientif, IFNAMSIZ-1));
-
 	printf("Setting up icmp6 interface: %i\n", rc);
 
 	if (rc < 0) {
@@ -96,8 +97,9 @@ void icmp6_setup_interface(icmp6_ctx *ctx) {
 	ioctl(ctx->fd, SIOCGIFHWADDR, &req);
 	memcpy(ctx->mac, req.ifr_hwaddr.sa_data, 6);
 
-	strncpy(req.ifr_name, ctx->clientif, IFNAMSIZ-1);
-	ioctl(ctx->fd, SIOCGIFINDEX, &req);
+	struct ifreq req1 = {};
+	strncpy(req1.ifr_name, ctx->clientif, IFNAMSIZ-1);
+	ioctl(ctx->fd, SIOCGIFINDEX, &req1);
 
 	struct sockaddr_ll lladdr;
 
@@ -105,15 +107,16 @@ void icmp6_setup_interface(icmp6_ctx *ctx) {
 	memset(&lladdr, 0, sizeof(lladdr));
 	lladdr.sll_family = PF_PACKET;
 	lladdr.sll_protocol = htons(ETH_P_IPV6);
-	lladdr.sll_ifindex = req.ifr_ifindex;
+	lladdr.sll_ifindex = req1.ifr_ifindex;
 	lladdr.sll_hatype = 0;
 	lladdr.sll_pkttype = 0;
 	lladdr.sll_halen = ETH_ALEN;
 
-	bind(ctx->fd, (struct sockaddr *)&lladdr, sizeof(lladdr));
-	bind(ctx->nsfd, (struct sockaddr *)&lladdr, sizeof(lladdr));
+	while (bind(ctx->nsfd, (struct sockaddr *)&lladdr, sizeof(lladdr)) < 0 ) {
+		perror("bind on icmp6 ns fd failed, retrying");
+	}
 
-	ctx->ifindex = req.ifr_ifindex;
+	ctx->ifindex = req1.ifr_ifindex;
 
 	ctx->ok = true;
 }
