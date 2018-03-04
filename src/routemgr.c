@@ -71,6 +71,8 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 			memcpy(&dst_address, RTA_DATA(tb[NDA_DST]),16);
 
 		inet_ntop(AF_INET6, &dst_address, ip_str, INET6_ADDRSTRLEN);
+
+
 	}
 
 	unsigned int br_index = if_nametoindex(ctx->client_bridge);
@@ -256,6 +258,7 @@ static void routemgr_initial_neighbours(routemgr_ctx *ctx, uint8_t family) {
 
 void routemgr_destroy(routemgr_ctx *ctx) {
 	// TODO: remove all routes here
+	del_fd(l3ctx.efd, ctx->fd);
 	close(ctx->fd);
 }
 
