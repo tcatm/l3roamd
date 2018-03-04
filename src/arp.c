@@ -115,7 +115,9 @@ void arp_setup_interface(arp_ctx *ctx) {
 		.sll_halen = ETH_ALEN,
 	};
 
-	bind(ctx->fd, (struct sockaddr *)&lladdr, sizeof(lladdr));
+	while (bind(ctx->fd, (struct sockaddr *)&lladdr, sizeof(lladdr)) < 0 ) {
+		perror("bind on arp fd failed, retrying");
+	}
 
 	ctx->ifindex = req.ifr_ifindex;
 	printf("arp-fd: %i %i\n", ctx->fd, ctx->ifindex);
