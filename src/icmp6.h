@@ -8,9 +8,9 @@
 
 typedef struct {
 	struct l3ctx *l3ctx;
-	int fd;
-	int unreachfd;
-	int nsfd;
+	int fd; // used to learn addresses from NA and send solicitations
+	int unreachfd; // used to send ICMP destination unreachable
+	int nsfd; // used to read NS from clients to learn ip addresses
 	bool ok;
 	uint8_t mac[6];
 	char *clientif;
