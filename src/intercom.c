@@ -446,8 +446,8 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 void claim_retry_task(void *d) {
 	struct claim_task *data = d;
 
-	int i;
-	if (!find_repeatable_claim(data->client->mac, &i))
+	int repeatable_claim_index;
+	if (!find_repeatable_claim(data->client->mac, &repeatable_claim_index))
 		return;
 
 	if (data->recipient != NULL) {
@@ -469,6 +469,7 @@ void claim_retry_task(void *d) {
 	else {
 		// we have not received an info message, otherwise we would not have run out of retries => noone knew the client and it is new to the mesh.
 		// => adding the special IP
+		VECTOR_DELETE(l3ctx.intercom_ctx.repeatable_claims, repeatable_claim_index);
 		add_special_ip(&l3ctx.clientmgr_ctx, get_client(data->client->mac));
 	}
 
@@ -501,8 +502,14 @@ void schedule_claim_retry(struct claim_task *data, int timeout) {
 bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client) {
 	int i;
 
-	if (find_repeatable_claim(client->mac, &i))
+	if (find_repeatable_claim(client->mac, &i)) {
+		if (l3ctx.debug) {
+			char mac_str[18];
+			mac_addr_n2a(mac_str, client->mac);
+			printf("WOULD BE RUNNING CLAIM for [%s] but a repeatable claim is still in the queue - returning\n",mac_str);
+		}
 		return true;
+	}
 
 	intercom_packet_claim packet;
 	uint32_t nonce;
