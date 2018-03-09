@@ -355,17 +355,13 @@ void ipmgr_handle_in(ipmgr_ctx *ctx, int fd) {
 }
 
 void ipmgr_handle_out(ipmgr_ctx *ctx, int fd) {
-	ssize_t count;
 	struct timespec now, then;
 
-	while (1) {
-		if (VECTOR_LEN(ctx->output_queue) == 0)
-			break;
+	while (VECTOR_LEN(ctx->output_queue) > 0) {
 
 		struct packet *packet = &VECTOR_INDEX(ctx->output_queue, 0);
-		count = write(fd, packet->data, packet->len);
 
-		if (count == -1) {
+		if  (write(fd, packet->data, packet->len) == -1) {
 			if (errno != EAGAIN)
 				perror("Could not send packet to newly visible client, discarding this packet.");
 			else {
