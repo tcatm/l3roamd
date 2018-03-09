@@ -30,6 +30,7 @@ struct l3ctx {
 	arp_ctx arp_ctx;
 	routemgr_ctx routemgr_ctx;
 	socket_ctx socket_ctx;
+	int client_mtu;
 	bool debug;
 	int efd;
 };

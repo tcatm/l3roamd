@@ -26,9 +26,6 @@
 // Announce at most 32 addresses per client
 #define INFO_MAX 32
 
-// work with intercom packets of max MTU byte
-#define MTU 1500
-
 void schedule_claim_retry(struct claim_task*, int timeout);
 
 bool join_mcast(const int sock, const struct in6_addr addr, intercom_if *iface) {
@@ -381,12 +378,12 @@ void intercom_handle_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_l
 
 void intercom_handle_in(intercom_ctx *ctx, int fd) {
 	ssize_t count;
-	uint8_t buf[MTU];
+	uint8_t buf[ctx->mtu];
 	if (l3ctx.debug)
 		printf("HANDLING INTERCOM PACKET on fd %i ", fd);
 
 	while (1) {
-		count = read(fd, buf, MTU);
+		count = read(fd, buf, ctx->mtu);
 		if (l3ctx.debug)
 			printf("- read %zi Bytes of data\n", count);
 		if (count == -1) {

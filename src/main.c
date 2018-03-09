@@ -270,6 +270,9 @@ int main(int argc, char *argv[]) {
 	l3ctx.icmp6_ctx.l3ctx = &l3ctx;
 	l3ctx.arp_ctx.l3ctx = &l3ctx;
 
+	l3ctx.client_mtu = 1500;
+	l3ctx.intercom_ctx.mtu = 1500;
+
 	l3ctx.routemgr_ctx.client_bridge = strdup("\0");
 	l3ctx.routemgr_ctx.clientif = strdup("\0");
 	l3ctx.icmp6_ctx.clientif = strdup("\0");
@@ -285,7 +288,7 @@ int main(int argc, char *argv[]) {
 
 	l3ctx.debug = false;
 	l3ctx.l3device = strdup("l3roam0");
-	
+
 	struct prefix _tprefix = {};
 	parse_prefix(&_tprefix, "fec0::/64");
 	l3ctx.clientmgr_ctx.node_client_prefix = _tprefix;

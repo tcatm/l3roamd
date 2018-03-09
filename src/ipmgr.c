@@ -324,7 +324,7 @@ void seek_task(void *d) {
 
 void ipmgr_handle_in(ipmgr_ctx *ctx, int fd) {
 	ssize_t count;
-	uint8_t buf[1500];
+	uint8_t buf[l3ctx.client_mtu];
 
 	while (1) {
 		count = read(fd, buf, sizeof buf);
