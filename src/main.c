@@ -171,11 +171,16 @@ void loop() {
 				perror("epoll error. Exiting now.");
 				sig_term_handler(0, 0, 0);
 				// TODO: routemgr is handling routes from kernel AND direct neighbours from fdb. Refactor this at is actually a netlink-handler
+			} else if (l3ctx.wifistations_ctx.fd == events[i].data.fd) {
+				wifistations_handle_in(&l3ctx.wifistations_ctx);
 			} else if (l3ctx.taskqueue_ctx.fd == events[i].data.fd) {
 				taskqueue_run(&l3ctx.taskqueue_ctx);
 			} else if (l3ctx.routemgr_ctx.fd == events[i].data.fd) {
 				if (events[i].events & EPOLLIN)
 					routemgr_handle_in(&l3ctx.routemgr_ctx, events[i].data.fd);
+			} else if (intercom_ready(events[i].data.fd)) {
+				if (events[i].events & EPOLLIN)
+					intercom_handle_in(&l3ctx.intercom_ctx, events[i].data.fd);
 			} else if (l3ctx.ipmgr_ctx.fd == events[i].data.fd) {
 				if (events[i].events & EPOLLIN)
 					ipmgr_handle_in(&l3ctx.ipmgr_ctx, events[i].data.fd);
@@ -190,11 +195,6 @@ void loop() {
 					arp_handle_in(&l3ctx.arp_ctx, events[i].data.fd);
 			} else if (l3ctx.socket_ctx.fd == events[i].data.fd) {
 				socket_handle_in(&l3ctx.socket_ctx);
-			} else if (l3ctx.wifistations_ctx.fd == events[i].data.fd) {
-				wifistations_handle_in(&l3ctx.wifistations_ctx);
-			} else if (intercom_ready(events[i].data.fd)) {
-				if (events[i].events & EPOLLIN)
-					intercom_handle_in(&l3ctx.intercom_ctx, events[i].data.fd);
 			}
 		}
 	}
