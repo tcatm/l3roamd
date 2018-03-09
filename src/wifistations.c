@@ -71,13 +71,11 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
 			clientmgr_notify_mac(CTX(clientmgr), nla_data(tb[NL80211_ATTR_MAC]), ifindex);
 			break;
 		case NL80211_CMD_DEL_STATION:
-			// station was disconnected. We are not triggering an
-			// action because the addresses will be invalidated by
-			// NDP eventually. Until then, keep them in memory such
-			// that we are able to answer claims.
+			// station was disconnected, remove the client moving
+			// it to the old-queue
 			if (l3ctx.debug)
 				printf("NL80211_CMD_DEL_STATION for [%s] RECEIVED on interface %s.\n", str_mac, ifname);
-			// clientmgr_delete_client(CTX(clientmgr), nla_data(tb[NL80211_ATTR_MAC]));
+			clientmgr_delete_client(CTX(clientmgr), nla_data(tb[NL80211_ATTR_MAC]));
 			break;
 	}
 
