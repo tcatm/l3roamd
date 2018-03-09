@@ -26,6 +26,9 @@
 // Announce at most 32 addresses per client
 #define INFO_MAX 32
 
+// work with intercom packets of max MTU byte
+#define MTU 1500
+
 void schedule_claim_retry(struct claim_task*, int timeout);
 
 bool join_mcast(const int sock, const struct in6_addr addr, intercom_if *iface) {
@@ -197,6 +200,7 @@ void intercom_seek(intercom_ctx *ctx, const struct in6_addr *address) {
 		.ttl = 255,
 	};
 
+	memcpy(&packet.hdr.sender, &ctx->ip, 16);
 	memcpy(&packet.address, address, 16);
 
 	intercom_recently_seen_add(ctx, &packet.hdr);
@@ -280,6 +284,8 @@ void intercom_handle_claim(intercom_ctx *ctx, intercom_packet_claim *packet) {
 	struct in6_addr sender;
 
 	memcpy(&sender.s6_addr, &packet->hdr.sender, sizeof(uint8_t) * 16);
+	printf("handling claim from: ");
+	print_ip(&sender, "\n");
 
 	clientmgr_handle_claim(CTX(clientmgr), &sender, packet->mac);
 }
@@ -318,10 +324,16 @@ bool find_repeatable_claim(uint8_t mac[6], int *index) {
 void intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet) {
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
-
 	struct client client = {};
 
 	memcpy(client.mac, &packet->mac, sizeof(uint8_t) * 6);
+
+	printf("handling info for client ");
+	print_client(&client);
+
+	struct in6_addr sender;
+	memcpy(&sender.s6_addr, &packet->hdr.sender, sizeof(uint8_t) * 16);
+	print_ip(&sender, "\n");
 
 	int i;
 
@@ -369,12 +381,12 @@ void intercom_handle_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_l
 
 void intercom_handle_in(intercom_ctx *ctx, int fd) {
 	ssize_t count;
-	uint8_t buf[1500];
+	uint8_t buf[MTU];
 	if (l3ctx.debug)
 		printf("HANDLING INTERCOM PACKET on fd %i ", fd);
 
 	while (1) {
-		count = read(fd, buf, sizeof buf);
+		count = read(fd, buf, MTU);
 		if (l3ctx.debug)
 			printf("- read %zi Bytes of data\n", count);
 		if (count == -1) {
@@ -409,6 +421,7 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 		.ttl = 1, // we only send info messages via unicast
 	};
 
+	memcpy(&packet->hdr.sender, &ctx->ip, 16);
 	memcpy(&packet->mac, client->mac, sizeof(uint8_t) * 6);
 	packet->relinquished = relinquished;
 
@@ -506,7 +519,7 @@ bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct 
 		if (l3ctx.debug) {
 			char mac_str[18];
 			mac_addr_n2a(mac_str, client->mac);
-			printf("WOULD BE RUNNING CLAIM for [%s] but a repeatable claim is still in the queue - returning\n",mac_str);
+			printf("   WOULD BE RUNNING CLAIM for [%s] but a repeatable claim is still in the queue - returning\n",mac_str);
 		}
 		return true;
 	}
@@ -521,6 +534,8 @@ bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct 
 		.nonce = nonce,
 		.ttl = 255,
 	};
+
+	memcpy(&packet.hdr.sender, &ctx->ip, 16);
 
 	memcpy(&packet.mac, client->mac, 6);
 
