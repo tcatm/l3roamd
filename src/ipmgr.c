@@ -356,6 +356,7 @@ void ipmgr_handle_in(ipmgr_ctx *ctx, int fd) {
 
 void ipmgr_handle_out(ipmgr_ctx *ctx, int fd) {
 	ssize_t count;
+	struct timespec now, then;
 
 	while (1) {
 		if (VECTOR_LEN(ctx->output_queue) == 0)
@@ -364,14 +365,24 @@ void ipmgr_handle_out(ipmgr_ctx *ctx, int fd) {
 		struct packet *packet = &VECTOR_INDEX(ctx->output_queue, 0);
 		count = write(fd, packet->data, packet->len);
 
-		// TODO refactor to use epoll.
-
 		if (count == -1) {
 			if (errno != EAGAIN)
-				perror("Could not send packet to newly visible client, requeueing and trying again.");
+				perror("Could not send packet to newly visible client, discarding this packet.");
 			else {
-				// we received eagain, so let's requeue this packet 
-				VECTOR_ADD(ctx->output_queue, *packet);
+				clock_gettime(CLOCK_MONOTONIC, &now);
+				then = now;
+				then.tv_sec -= PACKET_TIMEOUT;
+				perror("Could not send packet to newly visible client.");
+				if (timespec_cmp(packet->timestamp, then) <= 0) {
+					printf("packet is still young enough, requeueing\n");
+					// TODO: consider if output_queue
+					// really is the correct queue when
+					// requeueing
+					VECTOR_ADD(ctx->output_queue, *packet);
+				} 
+				else {
+					printf("packet is too old, discarding.\n");
+				}
 			}
 
 			break;
