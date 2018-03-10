@@ -211,6 +211,7 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 }
 
 bool should_we_really_seek(struct in6_addr *destination) {
+	struct client *client = NULL;
 	struct entry *e = find_entry(&l3ctx.ipmgr_ctx, destination);
 	// if a route to this client appeared, the queue will be emptied -- no seek necessary
 	if (!e) {
@@ -221,7 +222,7 @@ bool should_we_really_seek(struct in6_addr *destination) {
 		return false;
 	}
 
-	if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, destination, NULL)) {
+	if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, destination, &client) && client_is_active(client)) {
 		printf("=================================================\n");
 		printf("================= FAT WARNING ===================\n");
 		printf("=================================================\n");
