@@ -15,7 +15,6 @@
 #include <sys/epoll.h>
 
 /* Static functions used only in this file. */
-static bool client_is_active(const struct client *client);
 static const char *state_str(enum ip_state state);
 
 void mac_addr_n2a(char *mac_addr, unsigned char *arg) {
@@ -73,7 +72,7 @@ void print_client(struct client *client) {
 		printf(")\n");
 	}
 
-	for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
+	for (int i = VECTOR_LEN(client->addresses) - 1; i >= 0; i--) {
 		struct client_ip *addr = &VECTOR_INDEX(client->addresses, i);
 
 		char str[INET6_ADDRSTRLEN];
@@ -90,7 +89,7 @@ void print_client(struct client *client) {
 				printf("  %s %s (tries left: %d)\n", state_str(addr->state), str, addr->tentative_retries_left);
 				break;
 			default:
-				exit_error("Invalid IP state");
+				exit_error("Invalid IP state - exiting due to memory corruption");
 		}
 	}
 }
@@ -100,7 +99,7 @@ void print_client(struct client *client) {
     currently active or tentative.
     */
 bool client_is_active(const struct client *client) {
-	for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
+	for (int i = VECTOR_LEN(client->addresses)-1;i>=0; i--) {
 		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
 
 		if (ip->state == IP_ACTIVE || ip->state == IP_TENTATIVE)
@@ -167,7 +166,7 @@ void remove_special_ip(clientmgr_ctx *ctx, struct client *client) {
     Returns NULL if no object is found.
     */
 struct client_ip *get_client_ip(struct client *client, const struct in6_addr *address) {
-	for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
+	for (int i = VECTOR_LEN(client->addresses)-1;i>=0; i--) {
 		struct client_ip *e = &VECTOR_INDEX(client->addresses, i);
 
 		if (memcmp(address, &e->addr, sizeof(struct in6_addr)) == 0)
@@ -240,7 +239,7 @@ void clientmgr_client_remove_route(clientmgr_ctx *ctx, struct client *client, st
     */
 struct client *findinvector(void *_vector, const uint8_t mac[6]) {
 	VECTOR(struct client) *vector = _vector;
-	for (int i = 0; i < VECTOR_LEN(*vector); i++) {
+	for (int i = VECTOR_LEN(*vector) -1 ; i>=0; i--) {
 		struct client *e = &VECTOR_INDEX(*vector, i);
 
 		if (e->mac && memcmp(mac, e->mac, sizeof(uint8_t) * 6) == 0)
@@ -262,7 +261,8 @@ struct client *get_client_old(const uint8_t mac[6]) {
 */
 bool clientmgr_is_known_address(clientmgr_ctx *ctx, const struct in6_addr *address, struct client **client) {
 
-	for (int i = 0; i < VECTOR_LEN(ctx->clients); i++) {
+	// TODO: we probably should make this more efficient for large lists of clients and IP addresses at one point.
+	for (int i = VECTOR_LEN(ctx->clients) - 1; i>=0; i--) {
 		struct client *c = &VECTOR_INDEX(ctx->clients, i);
 
 		for (int j = VECTOR_LEN(c->addresses)-1; j>=0; j--) {
@@ -271,7 +271,7 @@ bool clientmgr_is_known_address(clientmgr_ctx *ctx, const struct in6_addr *addre
 				if (l3ctx.debug) {
 					char mac_str[18];
 					mac_addr_n2a(mac_str, c->mac);
-					print_ip(address, "is attached to local client ");
+					print_ip(address, " is attached to local client ");
 					printf("%s\n", mac_str);
 				}
 
@@ -320,22 +320,43 @@ void client_copy_to_old(struct client *client) {
 	struct timespec then;
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
-
-	VECTOR_ADD(l3ctx.clientmgr_ctx.oldclients, *client);
-	struct client *_client = &VECTOR_INDEX(l3ctx.clientmgr_ctx.oldclients, VECTOR_LEN(l3ctx.clientmgr_ctx.oldclients)-1);
 	then.tv_sec = now.tv_sec + OLDCLIENTS_KEEP_SECONDS;
 	then.tv_nsec = 0;
-	_client->timeout = then;
 	
+	struct client _client = {
+		.ifindex = client->ifindex,
+		.timeout = then
+	};
+	memcpy(_client.mac, client->mac, sizeof(uint8_t) * 6);
+	VECTOR_ADD(l3ctx.clientmgr_ctx.oldclients, _client);
+
+
+	struct client *_clientp = &VECTOR_INDEX(l3ctx.clientmgr_ctx.oldclients, VECTOR_LEN(l3ctx.clientmgr_ctx.oldclients)-1);
+
 	for (int i=VECTOR_LEN(client->addresses)-1;i>=0;i--) {
-		VECTOR_ADD(_client->addresses, VECTOR_INDEX(client->addresses, i));
+		VECTOR_ADD(_clientp->addresses, VECTOR_INDEX(client->addresses, i));
 	}
 
 	if (l3ctx.debug) {
 		printf("copied client to old-queue:\n");
-		print_client(_client);
+		print_client(_clientp);
 	}
 }
+
+
+/** This will set all IP addresses of the client to IP_INACTIVE and remove the special IP & route
+*/
+void client_deactivate(struct client *client) {
+	client = get_client(client->mac);
+	client_copy_to_old(client);
+	for (int i=VECTOR_LEN(client->addresses) - 1; i>=0; i--) {
+		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
+		if (ip)
+			client_ip_set_state(&l3ctx.clientmgr_ctx, client, ip, IP_INACTIVE);
+	}
+	remove_special_ip(&l3ctx.clientmgr_ctx, client);
+}
+
 
 /** Given a MAC address deletes a client. Safe to call if the client is not
   known.
@@ -458,7 +479,7 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 /** Check whether an IP address is contained in a client prefix.
   */
 bool clientmgr_valid_address(clientmgr_ctx *ctx, struct in6_addr *address) {
-	for (int i = 0; i < VECTOR_LEN(ctx->prefixes); i++) {
+	for (int i = VECTOR_LEN(ctx->prefixes) - 1; i>=0; i--) {
 		struct prefix *_prefix = &VECTOR_INDEX(ctx->prefixes, i);
 		if (prefix_contains(_prefix, address))
 			return true;
@@ -576,7 +597,7 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 	intercom_claim(CTX(intercom), &address, client);
 	// intercom_claim(CTX(intercom), NULL, client);
 
-	for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
+	for (int i = VECTOR_LEN(client->addresses)-1; i >= 0; i--) {
 		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
 
 		if (ip->state == IP_TENTATIVE || ip->state == IP_INACTIVE)
@@ -624,22 +645,6 @@ void purge_oldclients_task() {
 	post_task(&l3ctx.taskqueue_ctx, OLDCLIENTS_KEEP_SECONDS, 0, purge_oldclients_task, NULL, NULL);
 }
 
-
-
-
-/** This will set all IP addresses of the client to IP_INACTIVE and remove the special IP & route
-*/
-void client_deactivate(struct client *client) {
-	client = get_client(client->mac);
-	client_copy_to_old(client);
-	for (int i=0; i<VECTOR_LEN(client->addresses); i++) {
-		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
-		if (ip)
-			client_ip_set_state(&l3ctx.clientmgr_ctx, client, ip, IP_INACTIVE);
-	}
-	remove_special_ip(&l3ctx.clientmgr_ctx, client);
-}
-
 /** Handle claim (info request).
   */
 void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[6]) {
@@ -670,7 +675,8 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 	if (!old) {
 		printf("Dropping client %02x:%02x:%02x:%02x:%02x:%02x in response to claim from sender",  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 		print_ip(sender, "\n");
-		client_deactivate(client);
+		clientmgr_delete_client(ctx, client->mac);
+		// client_deactivate(client);
 	}
 }
 
@@ -689,7 +695,7 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bo
 		return;
 	}
 
-	for (int i = 0; i < VECTOR_LEN(foreign_client->addresses); i++) {
+	for (int i = VECTOR_LEN(foreign_client->addresses) - 1; i >= 0; i++) {
 		struct client_ip *foreign_ip = &VECTOR_INDEX(foreign_client->addresses, i);
 		struct client_ip *ip = get_client_ip(client, &foreign_ip->addr);
 

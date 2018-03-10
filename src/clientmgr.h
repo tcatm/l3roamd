@@ -65,3 +65,5 @@ struct client_ip *get_client_ip(struct client *client, const struct in6_addr *ad
 void mac_addr_n2a(char *mac_addr, unsigned char *arg);
 struct in6_addr mac2ipv6(uint8_t mac[6], struct prefix *prefix);
 void clientmgr_init();
+bool client_is_active(const struct client *client);
+
