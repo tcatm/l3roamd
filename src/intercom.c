@@ -359,7 +359,8 @@ void intercom_handle_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_l
 		return;
 
 	intercom_recently_seen_add(ctx, hdr);
-
+// TODO: if the claim was for a local client, there is no need to forward the claim further.
+// TODO: if the seek was for a local client, there is no need to forward the seek further.
 	if (hdr->type == INTERCOM_SEEK)
 		intercom_handle_seek(ctx, (intercom_packet_seek*)packet);
 
@@ -388,8 +389,12 @@ void intercom_handle_in(intercom_ctx *ctx, int fd) {
 			printf("- read %zi Bytes of data\n", count);
 		if (count == -1) {
 			/* If errno == EAGAIN, that means we have read all
-				 data. So go back to the main loop. */
-			if (errno != EAGAIN) {
+				 data. So go back to the main loop.
+			   if the last intercom packet was a claim for a local client, then we have just dropped the local client and will receive EBADF on the fd for the node-client-IP. This is not an error.*/
+			if (errno == EBADF) {
+				perror("read error - if we just dropped a local client due to this intercom packet being a claim then this is all right. otherwise there is something crazy going on. - returning to the main loop");
+			}
+			else if (errno != EAGAIN) {
 				perror("read error - this should not happen - going back to main loop");
 			}
 			break;
@@ -398,7 +403,8 @@ void intercom_handle_in(intercom_ctx *ctx, int fd) {
 				 connection. */
 			break;
 		}
-		
+
+	// TODO if this is a claim for a local client, we should just stop iterating and get rid of the EBADF check above
 		intercom_handle_packet(ctx, buf, count);
 	}
 }
