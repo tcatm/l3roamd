@@ -97,7 +97,7 @@ bool intercom_ready(const int fd){
 		}
 	}
 
-	for (int j=VECTOR_LEN(l3ctx.clientmgr_ctx.clients) -1; j>=0; j--) {
+	for (int j=VECTOR_LEN(l3ctx.clientmgr_ctx.clients) - 1; j>=0; j--) {
 		if (VECTOR_INDEX(l3ctx.clientmgr_ctx.clients, j).fd == fd) {
 			if (l3ctx.debug)
 				printf("received intercom packet for a locally connected client\n");
@@ -123,14 +123,16 @@ void loop() {
 	if (efd == -1) {
 		perror("epoll_create");
 		abort();
-	} 
+	}
 
 	l3ctx.efd = efd;
 
-	add_fd(efd, l3ctx.ipmgr_ctx.fd, EPOLLIN | EPOLLET);
-	add_fd(efd, l3ctx.routemgr_ctx.fd, EPOLLIN | EPOLLET);
+	add_fd(efd, l3ctx.ipmgr_ctx.fd, EPOLLIN);
+//	add_fd(efd, l3ctx.ipmgr_ctx.fd, EPOLLIN | EPOLLET);
+	// add_fd(efd, l3ctx.routemgr_ctx.fd, EPOLLIN | EPOLLET);
+	add_fd(efd, l3ctx.routemgr_ctx.fd, EPOLLIN);
 
-	if (strlen(l3ctx.icmp6_ctx.clientif)) {	
+	if (strlen(l3ctx.icmp6_ctx.clientif)) {
 		printf("adding icmp6-fd to epoll\n");
 		add_fd(efd, l3ctx.icmp6_ctx.fd, EPOLLIN);
 		add_fd(efd, l3ctx.icmp6_ctx.nsfd, EPOLLIN);
@@ -164,6 +166,10 @@ void loop() {
 	while (1) {
 		int n = epoll_wait(efd, events, maxevents, -1);
 		for(int i = 0; i < n; i++) {
+			if (l3ctx.debug) {
+				printf("handling event on fd %i. taskqueue.fd: %i routemgr: %i ipmgr: %i icmp6: %i icmp6.ns: %i arp: %i socket: %i, wifistations: %i, intercom_unicast_nodeip_fd: %i - ", events[i].data.fd, l3ctx.taskqueue_ctx.fd, l3ctx.routemgr_ctx.fd, l3ctx.ipmgr_ctx.fd, l3ctx.icmp6_ctx.fd, l3ctx.icmp6_ctx.nsfd, l3ctx.arp_ctx.fd, l3ctx.socket_ctx.fd, l3ctx.wifistations_ctx.fd, l3ctx.intercom_ctx.unicast_nodeip_fd);
+			}
+
 			if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) ||  (!(events[i].events & EPOLLIN || events[i].events & EPOLLET))) {
 				printf("epoll error received on fd %i, continuing. taskqueue.fd: %i routemgr: %i ipmgr: %i icmp6: %i icmp6.ns: %i arp: %i socket: %i, wifistations: %i\n", events[i].data.fd, l3ctx.taskqueue_ctx.fd, l3ctx.routemgr_ctx.fd, l3ctx.ipmgr_ctx.fd, l3ctx.icmp6_ctx.fd, l3ctx.icmp6_ctx.nsfd, l3ctx.arp_ctx.fd, l3ctx.socket_ctx.fd, l3ctx.wifistations_ctx.fd);
 				del_fd(efd, events[i].data.fd);
@@ -172,28 +178,52 @@ void loop() {
 				sig_term_handler(0, 0, 0);
 				// TODO: routemgr is handling routes from kernel AND direct neighbours from fdb. Refactor this at is actually a netlink-handler
 			} else if (l3ctx.wifistations_ctx.fd == events[i].data.fd) {
+				if (l3ctx.debug)
+					printf("handling wifistations event\n");
 				wifistations_handle_in(&l3ctx.wifistations_ctx);
 			} else if (l3ctx.taskqueue_ctx.fd == events[i].data.fd) {
+				if (l3ctx.debug)
+					printf("handling taskqueue event\n");
 				taskqueue_run(&l3ctx.taskqueue_ctx);
 			} else if (l3ctx.routemgr_ctx.fd == events[i].data.fd) {
-				if (events[i].events & EPOLLIN)
+				if (l3ctx.debug)
+					printf("handling routemgr_in event");
+				if (events[i].events & EPOLLIN) {
+					if (l3ctx.debug)
+						printf(" INBOUND\n");
 					routemgr_handle_in(&l3ctx.routemgr_ctx, events[i].data.fd);
+				} else {
+					if (l3ctx.debug)
+						printf("\n");
+				}
 			} else if (intercom_ready(events[i].data.fd)) {
+				if (l3ctx.debug)
+					printf("handling intercom event\n");
 				if (events[i].events & EPOLLIN)
 					intercom_handle_in(&l3ctx.intercom_ctx, events[i].data.fd);
 			} else if (l3ctx.ipmgr_ctx.fd == events[i].data.fd) {
+				if (l3ctx.debug)
+					printf("handling ipmgr event\n");
 				if (events[i].events & EPOLLIN)
 					ipmgr_handle_in(&l3ctx.ipmgr_ctx, events[i].data.fd);
 			} else if (l3ctx.icmp6_ctx.fd == events[i].data.fd) {
+				if (l3ctx.debug)
+					printf("handling icmp6 event\n");
 				if (events[i].events & EPOLLIN)
 					icmp6_handle_in(&l3ctx.icmp6_ctx, events[i].data.fd);
 			} else if (l3ctx.icmp6_ctx.nsfd == events[i].data.fd) {
+				if (l3ctx.debug)
+					printf("handling icmp6-NS event\n");
 				if (events[i].events & EPOLLIN)
 					icmp6_handle_ns_in(&l3ctx.icmp6_ctx, events[i].data.fd);
 			} else if (l3ctx.arp_ctx.fd == events[i].data.fd) {
+				if (l3ctx.debug)
+					printf("handling arp event\n");
 				if (events[i].events & EPOLLIN)
 					arp_handle_in(&l3ctx.arp_ctx, events[i].data.fd);
 			} else if (l3ctx.socket_ctx.fd == events[i].data.fd) {
+				if (l3ctx.debug)
+					printf("handling socket event\n");
 				socket_handle_in(&l3ctx.socket_ctx);
 			}
 		}
@@ -240,6 +270,9 @@ void interfaces_changed(int type, const struct ifinfomsg *msg) {
 	intercom_update_interfaces(&l3ctx.intercom_ctx);
 	icmp6_interface_changed(&l3ctx.icmp6_ctx, type, msg);
 	arp_interface_changed(&l3ctx.arp_ctx, type, msg);
+	// TODO: re-initialize routemgr-fd
+	// TODO: re-initialize ipmgr-fd
+	// TODO: re-initialize wifistations-fd
 }
 
 
