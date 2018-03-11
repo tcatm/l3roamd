@@ -172,8 +172,35 @@ void loop() {
 
 			if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) ||  (!(events[i].events & EPOLLIN || events[i].events & EPOLLET))) {
 				printf("epoll error received on fd %i, continuing. taskqueue.fd: %i routemgr: %i ipmgr: %i icmp6: %i icmp6.ns: %i arp: %i socket: %i, wifistations: %i\n", events[i].data.fd, l3ctx.taskqueue_ctx.fd, l3ctx.routemgr_ctx.fd, l3ctx.ipmgr_ctx.fd, l3ctx.icmp6_ctx.fd, l3ctx.icmp6_ctx.nsfd, l3ctx.arp_ctx.fd, l3ctx.socket_ctx.fd, l3ctx.wifistations_ctx.fd);
+
 				del_fd(efd, events[i].data.fd);
 				close(events[i].data.fd);
+				if (events[i].data.fd == l3ctx.routemgr_ctx.fd) {
+					routemgr_init(&l3ctx.routemgr_ctx);
+					add_fd(efd, l3ctx.routemgr_ctx.fd, EPOLLIN);
+					continue;
+				}
+				else if (events[i].data.fd == l3ctx.arp_ctx.fd) {
+					arp_init(&l3ctx.arp_ctx);
+					add_fd(efd, l3ctx.arp_ctx.fd, EPOLLIN);
+					continue;
+				}
+				else if (events[i].data.fd == l3ctx.icmp6_ctx.fd) {
+					del_fd(efd,l3ctx.icmp6_ctx.nsfd);
+					close(l3ctx.icmp6_ctx.nsfd);
+					icmp6_init(&l3ctx.icmp6_ctx);
+					add_fd(efd, l3ctx.icmp6_ctx.fd, EPOLLIN);
+					add_fd(efd, l3ctx.icmp6_ctx.nsfd, EPOLLIN);
+					continue;
+				}
+				else if (events[i].data.fd == l3ctx.icmp6_ctx.nsfd) {
+					del_fd(efd,l3ctx.icmp6_ctx.fd);
+					close(l3ctx.icmp6_ctx.fd);
+					icmp6_init(&l3ctx.icmp6_ctx);
+					add_fd(efd, l3ctx.icmp6_ctx.fd, EPOLLIN);
+					add_fd(efd, l3ctx.icmp6_ctx.nsfd, EPOLLIN);
+					continue;
+				}
 				perror("epoll error. Exiting now.");
 				sig_term_handler(0, 0, 0);
 				// TODO: routemgr is handling routes from kernel AND direct neighbours from fdb. Refactor this at is actually a netlink-handler
