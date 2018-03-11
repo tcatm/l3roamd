@@ -362,7 +362,7 @@ int main(int argc, char *argv[]) {
 				parse_config(optarg);
 				break;
 			case 'P':;
-				 printf("parsing prefix %s\n",optarg);
+				printf("parsing prefix %s\n",optarg);
 				struct prefix _ncprefix = {};
 				if(!parse_prefix(&_ncprefix, optarg))
 					exit_error("Can not parse node-client-prefix that passed by -P");
@@ -383,8 +383,9 @@ int main(int argc, char *argv[]) {
 				if (!parse_prefix(&l3ctx.clientmgr_ctx.v4prefix, optarg))
 					exit_error("Can not parse IPv4 prefix");
 
-				if (l3ctx.clientmgr_ctx.v4prefix.plen != 96)
-					exit_error("IPv4 prefix must be /96");
+
+				//if (l3ctx.clientmgr_ctx.v4prefix.plen != 96)
+				//	exit_error("IPv4 prefix must be /96");
 
 				l3ctx.arp_ctx.prefix = l3ctx.clientmgr_ctx.v4prefix.prefix;
 
