@@ -520,8 +520,10 @@ void clientmgr_remove_address(clientmgr_ctx *ctx, struct client *client, struct 
 void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex) {
 
 	if (!clientmgr_valid_address(ctx, address) ) {
-		if (l3ctx.debug)
-			printf("address is not within a client-prefix and not ll-address, not adding.\n");
+		if (l3ctx.debug) {
+			printf("address is not within a client-prefix and not ll-address, not adding: ");
+			print_ip(address, "\n");
+		}
 		return;
 	}
 	
@@ -559,7 +561,6 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 			printf("Claiming client [%s]\n", mac_str);
 		struct in6_addr address = mac2ipv6(client->mac, &ctx->node_client_prefix);
 		intercom_claim(CTX(intercom), &address, client);
-		// intercom_claim(CTX(intercom), NULL, client);
 	}
 
 	// this will set NUD_REACHABLE for the clients address we are working on	
@@ -650,6 +651,11 @@ void purge_oldclients_task() {
 void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[6]) {
 	bool old = false;
 	struct client *client = get_client(mac);
+	if (client == NULL) {
+		client = get_client_old(mac);
+		old = true;
+	}
+
 	if (l3ctx.debug) {
 		printf("handle claim for client: ");
 		if (client)
@@ -658,18 +664,12 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 			printf("unknown\n");
 	}
 
-	if (client == NULL) {
-		client = get_client_old(mac);
-		old = true;
-	}
-
 	if (client == NULL)
 		return;
 
 //	bool active = client_is_active(client);
 
 	intercom_info(CTX(intercom), sender, client, true);
-	// intercom_info(CTX(intercom), sender, client, !active);
 //	if (active)
 //		return;
 	if (!old) {
