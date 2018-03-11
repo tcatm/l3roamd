@@ -321,31 +321,31 @@ bool find_repeatable_claim(uint8_t mac[6], int *index) {
 void intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet) {
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
-	struct client client = {};
+	struct client client = { 0 };
 
 	memcpy(client.mac, &packet->mac, sizeof(uint8_t) * 6);
 
-	printf("handling info for client ");
+	printf("handling info with %i addresses for client ", packet->num_addresses);
 	print_client(&client);
 
 	struct in6_addr sender;
 	memcpy(&sender.s6_addr, &packet->hdr.sender, sizeof(uint8_t) * 16);
 	print_ip(&sender, "\n");
 
-	int i;
-
+	int i = 0;
 	if (find_repeatable_claim(packet->mac, &i))
 		VECTOR_DELETE(ctx->repeatable_claims, i);
 
-	struct client_ip ip = {
-		.state = IP_INACTIVE
-	};
+	struct client_ip ip = { 0 };
+	ip.state = IP_INACTIVE;
 
 	intercom_packet_info_entry *entry = (intercom_packet_info_entry*)((uint8_t*)(packet) + sizeof(intercom_packet_info));
 
 	for (i = 0; i < packet->num_addresses; i++) {
 		memcpy(&ip.addr.s6_addr, &entry->address, sizeof(uint8_t) * 16);
 		VECTOR_ADD(client.addresses, ip);
+		if (l3ctx.debug)
+			print_ip(&ip.addr, " learnt from info packet\n");
 		entry++;
 	}
 
@@ -413,6 +413,10 @@ void intercom_handle_in(intercom_ctx *ctx, int fd) {
 /* recipient = NULL -> send to neighbours */
 void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client, bool relinquished) {
 	intercom_packet_info *packet = malloc(sizeof(intercom_packet_info) + INFO_MAX * sizeof(intercom_packet_info_entry));
+	if (packet == NULL) {
+		exit_error("could not allocate memory when generating info packet");
+	}
+
 	int i=0;
 	uint32_t nonce;
 
@@ -436,9 +440,13 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 		entry++;
 	}
 
-	packet->num_addresses = i;
+	packet->num_addresses = VECTOR_LEN(client->addresses);
+	if (l3ctx.debug) {
+		printf("sending info with %i addresses for client ", packet->num_addresses);
+		print_client(client);
+	}
 
-	ssize_t packet_len = sizeof(intercom_packet_info) + i * sizeof(intercom_packet_info_entry);
+	ssize_t packet_len = sizeof(intercom_packet_info) + packet->num_addresses * sizeof(intercom_packet_info_entry);
 
 	if (recipient != NULL) {
 		if (l3ctx.debug) {
