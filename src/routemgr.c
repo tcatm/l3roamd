@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include "icmp6.h"
 #include "util.h"
+#include <sys/epoll.h>
 
 static void rtnl_change_address(routemgr_ctx *ctx, struct in6_addr *address, int type, int flags);
 static void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh);
@@ -71,8 +72,6 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 			memcpy(&dst_address, RTA_DATA(tb[NDA_DST]),16);
 
 		inet_ntop(AF_INET6, &dst_address, ip_str, INET6_ADDRSTRLEN);
-
-
 	}
 
 	unsigned int br_index = if_nametoindex(ctx->client_bridge);
@@ -570,8 +569,15 @@ void rtmgr_rtnl_talk(routemgr_ctx *ctx, struct nlmsghdr *req) {
 	while (sendmsg(ctx->fd, &msg, 0) <= 0 && count < 5) {
 		fprintf(stderr, "retrying(%i/5) ", ++count);
 		perror("sendmsg on rtmgr_rtnl_talk()");
+		if (errno == EBADF) {
+			del_fd(l3ctx.efd, ctx->fd);
+			close(ctx->fd);
+			routemgr_init(&l3ctx.routemgr_ctx);
+			add_fd(l3ctx.efd, l3ctx.routemgr_ctx.fd, EPOLLIN);
+		}
 	}
 }
+
 
 void routemgr_insert_neighbor4(routemgr_ctx *ctx, const int ifindex, struct in_addr *address, uint8_t mac[6]) {
 	struct nlneighreq req = {
