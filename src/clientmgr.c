@@ -112,6 +112,9 @@ bool client_is_active(const struct client *client) {
 /** Adds the special node client IP address.
   */
 void add_special_ip(clientmgr_ctx *ctx, struct client *client) {
+	if (client == NULL) // this can happen if the client was removed before the claim cycle was finished
+		return;
+
 	struct in6_addr address = mac2ipv6(client->mac, &ctx->node_client_prefix);
 	printf("Adding special address: ");
 	print_ip(&address, "\n");
@@ -708,7 +711,6 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bo
 //		client_ip_set_state(ctx, client, ip, IP_ACTIVE);
 	
 		clientmgr_add_address(ctx, &foreign_ip->addr, foreign_client->mac, l3ctx.icmp6_ctx.ifindex);
-
 	}
 
 	if (relinquished)
