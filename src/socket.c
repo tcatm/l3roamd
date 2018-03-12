@@ -166,6 +166,9 @@ void get_clients(struct json_object *obj) {
 }
 
 void socket_handle_in(socket_ctx *ctx) {
+	if (l3ctx.debug)
+		printf("handling socket event\n");
+
 	int fd = accept(ctx->fd, NULL, NULL);
 	char line[LINEBUFFER_SIZE];
 

@@ -165,6 +165,8 @@ struct __attribute__((__packed__)) adv_packet {
 };
 
 void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
+
+
 	struct msghdr msghdr = {};
 	memset (&msghdr, 0, sizeof (msghdr));
 
@@ -193,8 +195,14 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 
 	ssize_t rc = recvmsg(ctx->nsfd, &hdr, 0);
 
+	if (ctx->ndp_disabled)
+		return;
+	
 	if (rc == -1)
 		return;
+	
+	if (l3ctx.debug)
+		printf("handling icmp6-NS event\n");
 	
 	uint8_t *mac = lladdr.sll_addr;
 
@@ -217,6 +225,9 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 	if (ctx->ndp_disabled)
 		return;
+	
+	if (l3ctx.debug)
+		printf("handling icmp6 event\n");
 
 	struct msghdr msghdr;
 	memset (&msghdr, 0, sizeof (msghdr));

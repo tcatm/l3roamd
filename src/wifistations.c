@@ -31,6 +31,8 @@ void wifistations_handle_in(wifistations_ctx *ctx) {
 }
 
 int wifistations_handle_event(struct nl_msg *msg, void *arg) {
+	if (l3ctx.debug)
+		printf("handling wifistations event\n");
 	wifistations_ctx *ctx = arg;
 	if (ctx->nl80211_disabled)
 		return 0;

@@ -31,6 +31,7 @@
 #include "taskqueue.h"
 #include "error.h"
 #include "timespec.h"
+#include "l3roamd.h"
 
 void taskqueue_init(taskqueue_ctx *ctx) {
 	ctx->fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
@@ -87,6 +88,8 @@ void taskqueue_schedule(taskqueue_ctx *ctx) {
 }
 
 void taskqueue_run(taskqueue_ctx *ctx) {
+	if (l3ctx.debug)
+		printf("handling taskqueue event\n");
 	unsigned long long nEvents;
 
 	struct timespec now;

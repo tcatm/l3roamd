@@ -342,6 +342,8 @@ int parse_kernel_route_rta(struct rtmsg *rtm, int len, struct kernel_route *rout
 }
 
 void routemgr_handle_in(routemgr_ctx *ctx, int fd) {
+	if (l3ctx.debug)
+		printf("handling routemgr_in event");
 	while (1) {
 		ssize_t count;
 		uint8_t buf[8192];

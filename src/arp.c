@@ -36,6 +36,9 @@ void arp_handle_in(arp_ctx *ctx, int fd) {
 	if (rc == -1)
 		return;
 
+	if (l3ctx.debug)
+		printf("handling arp event\n");
+
 	if (packet.op != htons(ARP_REPLY))
 		return;
 	
