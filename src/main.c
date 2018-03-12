@@ -260,7 +260,7 @@ void usage() {
 	puts("  -d                 use debug logging");
 	puts("  -c <file>          configuration file"); // TODO: do we really need this?
 	puts("  -p <prefix>        Accept queries for this prefix. May be provided multiple times.");
-	puts("  -P <prefix>        Defines the node-client prefix. Default: fec0::/64.");
+	puts("  -P <prefix>        Defines the node-client prefix. Default: fec0::/48.");
 	puts("  -e <prefix>        Defines the plat-prefix if this node is to be a local exit. This must be a /96");
 	puts("  -s <socketpath>    provide statistics and allow control using this socket. See below for usage instructions.");
 	puts("  -i <clientif>      client interface");
@@ -344,7 +344,7 @@ int main(int argc, char *argv[]) {
 	l3ctx.l3device = strdup("l3roam0");
 
 	struct prefix _tprefix = {};
-	parse_prefix(&_tprefix, "fec0::/64");
+	parse_prefix(&_tprefix, "fec0::/48");
 	l3ctx.clientmgr_ctx.node_client_prefix = _tprefix;
 
 	int option_index = 0;
