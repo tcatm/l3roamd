@@ -229,9 +229,6 @@ void loop() {
 					if (l3ctx.debug)
 						printf("\n");
 				}
-			} else if (intercom_ready(events[i].data.fd)) {
-				if (events[i].events & EPOLLIN)
-					intercom_handle_in(&l3ctx.intercom_ctx, events[i].data.fd);
 			} else if (l3ctx.ipmgr_ctx.fd == events[i].data.fd) {
 				if (events[i].events & EPOLLIN)
 					ipmgr_handle_in(&l3ctx.ipmgr_ctx, events[i].data.fd);
@@ -246,6 +243,15 @@ void loop() {
 					arp_handle_in(&l3ctx.arp_ctx, events[i].data.fd);
 			} else if (l3ctx.socket_ctx.fd == events[i].data.fd) {
 				socket_handle_in(&l3ctx.socket_ctx);
+			} else if (intercom_ready(events[i].data.fd)) {
+				if (l3ctx.debug)
+					printf("handling intercom event\n");
+				if (events[i].events & EPOLLIN)
+					intercom_handle_in(&l3ctx.intercom_ctx, events[i].data.fd);
+			} else {
+				char buffer[512];
+				int tmp = read(events[i].data.fd, buffer, 512);
+				printf("  WE JUST READ %i Byte from unknown socket %i with content %s - If this was 0 bytes, then this was a closed socket and everything is fine.\n", tmp, events[i].data.fd, buffer);
 			}
 		}
 	}
