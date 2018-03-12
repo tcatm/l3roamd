@@ -169,6 +169,12 @@ void loop() {
 			if (l3ctx.debug) {
 				printf("handling event on fd %i. taskqueue.fd: %i routemgr: %i ipmgr: %i icmp6: %i icmp6.ns: %i arp: %i socket: %i, wifistations: %i, intercom_unicast_nodeip_fd: %i - ", events[i].data.fd, l3ctx.taskqueue_ctx.fd, l3ctx.routemgr_ctx.fd, l3ctx.ipmgr_ctx.fd, l3ctx.icmp6_ctx.fd, l3ctx.icmp6_ctx.nsfd, l3ctx.arp_ctx.fd, l3ctx.socket_ctx.fd, l3ctx.wifistations_ctx.fd, l3ctx.intercom_ctx.unicast_nodeip_fd);
 			}
+// TODO: what should we do with EAGAIN and why are we even receiving it ie on
+// routemgr
+// Mon Mar 12 01:02:24 2018 daemon.info l3roamd[6323]: Got packet from 2a06:8187:fbab:1:c66e:1fff:feb6:27da destined to 2a06:8187:fbab:2::2001
+// Mon Mar 12 01:02:24 2018 daemon.info l3roamd[6323]: handling event on fd 8. taskqueue.fd: 10 routemgr: 8 ipmgr: 6 icmp6: 11 icmp6.ns: 13 arp: 14 socket: 5, wifistations: 9, intercom_unicast_nodeip_fd: 4 - epoll error received on fd 8, continuing. taskqueue.fd: 10 routemgr: 8 ipmgr: 6 icmp6: 11 icmp6.ns: 13 arp: 14 socket: 5, wifistations: 9
+//Mon Mar 12 01:02:24 2018 daemon.err l3roamd[6323]: epoll error. Exiting now.: Resource temporarily unavailable
+// Mon Mar 12 01:02:24 2018 daemon.err l3roamd[6323]: Exiting. Removing routes for prefixes and clients.
 
 			if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) ||  (!(events[i].events & EPOLLIN || events[i].events & EPOLLET))) {
 				printf("epoll error received on fd %i, continuing. taskqueue.fd: %i routemgr: %i ipmgr: %i icmp6: %i icmp6.ns: %i arp: %i socket: %i, wifistations: %i\n", events[i].data.fd, l3ctx.taskqueue_ctx.fd, l3ctx.routemgr_ctx.fd, l3ctx.ipmgr_ctx.fd, l3ctx.icmp6_ctx.fd, l3ctx.icmp6_ctx.nsfd, l3ctx.arp_ctx.fd, l3ctx.socket_ctx.fd, l3ctx.wifistations_ctx.fd);
