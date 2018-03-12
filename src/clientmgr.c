@@ -688,17 +688,17 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bool relinquished) {
 	struct client *client = get_client(foreign_client->mac);
 	if (l3ctx.debug) {
-		printf("handling info message in clientmgr_handle_info() for foreign_client");
+		printf("handling info message in clientmgr_handle_info() for foreign_client ");
 		print_client(foreign_client);
 	}
 
-	if (client == NULL || !client_is_active(client)) {
+	if (client == NULL) {
 		if (l3ctx.debug)
-			printf("received info message for client but client is either not locally connected or inactive - discarding message\n");
+			printf("received info message for client but client is either not locally connected - discarding message\n");
 		return;
 	}
 
-	for (int i = VECTOR_LEN(foreign_client->addresses) - 1; i >= 0; i++) {
+	for (int i = VECTOR_LEN(foreign_client->addresses) - 1; i >= 0; i--) {
 		struct client_ip *foreign_ip = &VECTOR_INDEX(foreign_client->addresses, i);
 		struct client_ip *ip = get_client_ip(client, &foreign_ip->addr);
 
