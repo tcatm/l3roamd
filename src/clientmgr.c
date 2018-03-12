@@ -159,7 +159,10 @@ void remove_special_ip(clientmgr_ctx *ctx, struct client *client) {
 	print_ip(&address, "\n");
 	if (client->fd) {
 		del_fd(l3ctx.efd, client->fd);
-		close(client->fd);
+		while (close(client->fd)) {
+			printf("could not close client fd %i", client->fd);
+			perror("close");
+		}
 		client->fd=-1;
 	}
 	rtnl_remove_address(CTX(routemgr), &address);
