@@ -116,6 +116,13 @@ void add_special_ip(clientmgr_ctx *ctx, struct client *client) {
 		return;
 
 	struct in6_addr address = mac2ipv6(client->mac, &ctx->node_client_prefix);
+
+	if (client->node_ip_initialized) {
+		printf("we already initialized the special client-ip ");
+		print_ip(&address, ", not doing it again\n");
+		return;
+	}
+
 	printf("Adding special address: ");
 	print_ip(&address, "\n");
 	rtnl_add_address(CTX(routemgr), &address);
@@ -149,6 +156,7 @@ void add_special_ip(clientmgr_ctx *ctx, struct client *client) {
 	}
 
 	add_fd(l3ctx.efd, client->fd, EPOLLIN);
+	client->node_ip_initialized = true;
 }
 
 /** Removes the special node client IP address.
@@ -161,11 +169,12 @@ void remove_special_ip(clientmgr_ctx *ctx, struct client *client) {
 		del_fd(l3ctx.efd, client->fd);
 		while (close(client->fd)) {
 			printf("could not close client fd %i", client->fd);
-			perror("close");
+			perror("close ");
 		}
 		client->fd=-1;
 	}
 	rtnl_remove_address(CTX(routemgr), &address);
+	client->node_ip_initialized = false;
 }
 
 /** Given an IP address returns the client-object of a client.
@@ -295,17 +304,23 @@ bool clientmgr_is_known_address(clientmgr_ctx *ctx, const struct in6_addr *addre
 	return false;
 }
 
+struct client *create_client(client_vector *vector, const uint8_t mac[6],const unsigned int ifindex) {
+	struct client _client = {};
+	memcpy(_client.mac, mac, sizeof(uint8_t) * 6);
+	VECTOR_ADD(*vector, _client);
+	struct client *client = &VECTOR_INDEX(*vector, VECTOR_LEN(*vector) - 1);
+	client->ifindex = ifindex;
+	client->node_ip_initialized = false;
+	return client;
+}
+
 /** Get a client or create a new, empty one.
   */
 struct client *get_or_create_client(clientmgr_ctx *ctx, const uint8_t mac[6], unsigned int ifindex) {
 	struct client *client = get_client(mac);
 
 	if (client == NULL) {
-		struct client _client = {};
-		memcpy(_client.mac, mac, sizeof(uint8_t) * 6);
-		VECTOR_ADD(ctx->clients, _client);
-		client = &VECTOR_INDEX(ctx->clients, VECTOR_LEN(ctx->clients) - 1);
-		client->ifindex = ifindex;
+		client = create_client(&l3ctx.clientmgr_ctx.clients, mac, ifindex);
 	}
 
 	return client;
@@ -329,23 +344,16 @@ void client_copy_to_old(struct client *client) {
 	then.tv_sec = now.tv_sec + OLDCLIENTS_KEEP_SECONDS;
 	then.tv_nsec = 0;
 	
-	struct client _client = {
-		.ifindex = client->ifindex,
-		.timeout = then
-	};
-	memcpy(_client.mac, client->mac, sizeof(uint8_t) * 6);
-	VECTOR_ADD(l3ctx.clientmgr_ctx.oldclients, _client);
-
-
-	struct client *_clientp = &VECTOR_INDEX(l3ctx.clientmgr_ctx.oldclients, VECTOR_LEN(l3ctx.clientmgr_ctx.oldclients)-1);
+	struct client *_client = create_client(&l3ctx.clientmgr_ctx.oldclients,  client->mac, client->ifindex);
+	_client->timeout = then;
 
 	for (int i=VECTOR_LEN(client->addresses)-1;i>=0;i--) {
-		VECTOR_ADD(_clientp->addresses, VECTOR_INDEX(client->addresses, i));
+		VECTOR_ADD(_client->addresses, VECTOR_INDEX(client->addresses, i));
 	}
 
 	if (l3ctx.debug) {
 		printf("copied client to old-queue:\n");
-		print_client(_clientp);
+		print_client(_client);
 	}
 }
 
@@ -353,14 +361,14 @@ void client_copy_to_old(struct client *client) {
 /** This will set all IP addresses of the client to IP_INACTIVE and remove the special IP & route
 */
 void client_deactivate(struct client *client) {
-	client = get_client(client->mac);
-	client_copy_to_old(client);
-	for (int i=VECTOR_LEN(client->addresses) - 1; i>=0; i--) {
-		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
+	struct client *_client = get_client(client->mac);
+	client_copy_to_old(_client);
+	for (int i=VECTOR_LEN(_client->addresses) - 1; i>=0; i--) {
+		struct client_ip *ip = &VECTOR_INDEX(_client->addresses, i);
 		if (ip)
-			client_ip_set_state(&l3ctx.clientmgr_ctx, client, ip, IP_INACTIVE);
+			client_ip_set_state(&l3ctx.clientmgr_ctx, _client, ip, IP_INACTIVE);
 	}
-	remove_special_ip(&l3ctx.clientmgr_ctx, client);
+	remove_special_ip(&l3ctx.clientmgr_ctx, _client);
 }
 
 
@@ -563,10 +571,8 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 	client_ip_set_state(ctx, client, ip, IP_ACTIVE);
 	
 	if (!was_active) {
-		if (l3ctx.debug)
-			printf("Claiming client [%s]\n", mac_str);
 		struct in6_addr address = mac2ipv6(client->mac, &ctx->node_client_prefix);
-		intercom_claim(CTX(intercom), &address, client);
+		intercom_claim(CTX(intercom), &address, client); // this will set the special_ip after the claiming cycle
 	}
 
 	// this will set NUD_REACHABLE for the clients address we are working on	
@@ -682,7 +688,6 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 		printf("Dropping client %02x:%02x:%02x:%02x:%02x:%02x in response to claim from sender",  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 		print_ip(sender, "\n");
 		clientmgr_delete_client(ctx, client->mac);
-		// client_deactivate(client);
 	}
 }
 

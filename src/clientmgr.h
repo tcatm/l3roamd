@@ -15,6 +15,7 @@ enum ip_state {
 	IP_TENTATIVE // address was received info on intercom OR belongs to a re-activated local client
 };
 
+typedef VECTOR(struct client) client_vector;
 
 struct client_ip {
 	enum ip_state state;
@@ -29,6 +30,7 @@ typedef struct client {
 	uint8_t mac[6];
 	VECTOR(struct client_ip) addresses;
 	int fd;
+	bool node_ip_initialized;
 } client_t;
 
 typedef struct {
@@ -38,8 +40,8 @@ typedef struct {
 	unsigned int export_table;
 	int nat46ifindex;
 	struct prefix node_client_prefix;
-	VECTOR(struct client) clients;
-	VECTOR(struct client) oldclients;
+	client_vector clients;
+	client_vector oldclients;
 } clientmgr_ctx;
 
 struct client_task {
