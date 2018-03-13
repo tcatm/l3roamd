@@ -10,7 +10,8 @@ add_executable(l3roamd main.c socket.c config.c intercom.c arp.c ipmgr.c
 
 target_link_libraries(l3roamd ${LIBNL_LIBRARIES} ${LIBNL_GENL_LIBRARIES} ${JSON_C_LIBRARIES})
 
-set_target_properties(l3roamd PROPERTIES COMPILE_FLAGS "-std=gnu11 -Wall" LINK_FLAGS "")
+set_target_properties(l3roamd PROPERTIES COMPILE_FLAGS "-std=gnu11 -Wall -fsanitize=address" LINK_FLAGS " -fno-omit-frame-pointer -fsanitize=address -static-libasan")
+#set_target_properties(l3roamd PROPERTIES COMPILE_FLAGS "-std=gnu11 -Wall" LINK_FLAGS "")
 
 install(TARGETS l3roamd RUNTIME DESTINATION bin)
 
