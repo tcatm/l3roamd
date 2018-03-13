@@ -344,34 +344,69 @@ int parse_kernel_route_rta(struct rtmsg *rtm, int len, struct kernel_route *rout
 void routemgr_handle_in(routemgr_ctx *ctx, int fd) {
 	if (l3ctx.debug)
 		printf("handling routemgr_in event");
-	while (1) {
-		ssize_t count;
-		uint8_t buf[8192];
+	ssize_t count;
+	int buffersize=0;
+	uint8_t *buf = NULL;
+	uint8_t readbuffer[8192];
 
-		count = recv(fd, buf, sizeof buf, 0);
+	// this approach (read everything first, then parse) is
+	// inefficient as it requires data to be copied twice. Also it
+	// uses more memory than necessary. 
+	// TODO: Find a way to parse the data in one pass, getting rid of buf
+	// while preserving the ability to parse arbitrary amounts of messages
+	while (1) {
+		count = recv(fd, readbuffer, sizeof readbuffer, 0);
 		if (count == -1) {
 			if (errno != EAGAIN)
 				perror("read");
 			break;
 		} else if (count == 0)
-			break;
+			break; // TODO: shouldn't we re-open the fd in this case?
 
-		const struct nlmsghdr *nh;
-		struct nlmsgerr *ne;
-		for (nh = (struct nlmsghdr *)buf; NLMSG_OK(nh, count); nh = NLMSG_NEXT(nh, count)) {
-			switch (nh->nlmsg_type) {
-				case NLMSG_DONE:
-					return;
-				case NLMSG_ERROR:
-					perror("handling netlink error-message");
-					ne = NLMSG_DATA(nh);
-					if (ne->error <= 0 )
-						return; // from netlink(7): negative errno or 0 for acknoledgement
-				default:
-					rtnl_handle_msg(ctx, nh);
-			}
+		buf = realloc(buf, buffersize + count);
+		memcpy(&buf[buffersize], readbuffer, count);
+		buffersize+=count;
+
+		if (l3ctx.debug)
+			printf("read %zi Bytes from netlink socket, readbuffer-size is %zi, read %i Bytes in total\n", count, sizeof(readbuffer), buffersize);
+
+	}
+
+	if (l3ctx.debug)
+		printf("parsing buffer\n");
+
+	const struct nlmsghdr *nh;
+	struct nlmsgerr *ne;
+	const int length = buffersize;
+
+	for (nh = (struct nlmsghdr *)buf; NLMSG_OK(nh, buffersize); nh = NLMSG_NEXT(nh, buffersize)) {
+		if (l3ctx.debug)
+			printf("still here, parsed %zi Bytes of data already, remaining: %i\n", (void*)nh-(void*)buf, buffersize);
+		switch (nh->nlmsg_type) {
+			case NLMSG_DONE:
+				continue;
+			case NLMSG_ERROR:
+				perror("handling netlink error-message");
+				ne = NLMSG_DATA(nh);
+				if (ne->error <= 0 )
+					continue;
+			default:
+				if ( ( (void*)buf + length < (void*)nh ) || ( (void*)buf > (void*)nh) ) {
+					printf("something wicked this way comes. nh (%p)points to somewhere outside buf (%p,%p). exiting parsing, discarding this netlink message.\n", (void*)nh, (void*)buf, (void*)buf + length);
+					continue;
+				}
+
+				if (l3ctx.debug)
+					printf("nh (%p)points to somewhere inside buf (%p,%p). - starting handler\n", (void*)nh, (void*)buf, (void*)buf + length );
+
+				rtnl_handle_msg(ctx, nh);
+
+				if (l3ctx.debug)
+					printf("done with the handler\n");
 		}
 	}
+
+	free(buf);
 }
 
 int rtnl_addattr(struct nlmsghdr *n, int maxlen, int type, void *data, int datalen) {
