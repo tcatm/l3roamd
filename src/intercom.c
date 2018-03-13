@@ -381,7 +381,7 @@ void intercom_handle_in(intercom_ctx *ctx, int fd) {
 	ssize_t count;
 	uint8_t buf[ctx->mtu];
 	if (l3ctx.debug)
-		printf("HANDLING INTERCOM PACKET on fd %i ", fd);
+		printf("HANDLING INTERCOM PACKET on fd %i using buffersize of %i ", fd, ctx->mtu);
 
 	while (1) {
 		count = read(fd, buf, ctx->mtu);
@@ -525,14 +525,20 @@ void schedule_claim_retry(struct claim_task *data, int timeout) {
 
 bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client) {
 	int i;
+	char mac_str[18];
+
+	if (l3ctx.debug)
+		mac_addr_n2a(mac_str, client->mac);
 
 	if (find_repeatable_claim(client->mac, &i)) {
 		if (l3ctx.debug) {
-			char mac_str[18];
-			mac_addr_n2a(mac_str, client->mac);
 			printf("   WOULD BE RUNNING CLAIM for [%s] but a repeatable claim is still in the queue - returning\n",mac_str);
 		}
 		return true;
+	}
+	else {
+		if (l3ctx.debug)
+			printf("CLAIMING client [%s]\n", mac_str);
 	}
 
 	intercom_packet_claim packet;
