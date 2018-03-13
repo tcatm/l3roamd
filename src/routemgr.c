@@ -363,10 +363,10 @@ void routemgr_handle_in(routemgr_ctx *ctx, int fd) {
 				case NLMSG_DONE:
 					return;
 				case NLMSG_ERROR:
+					perror("handling netlink error-message");
 					ne = NLMSG_DATA(nh);
 					if (ne->error <= 0 )
 						return; // from netlink(7): negative errno or 0 for acknoledgement
-					perror("handling netlink error-message");
 				default:
 					rtnl_handle_msg(ctx, nh);
 			}
