@@ -94,6 +94,12 @@ void print_client(struct client *client) {
 	}
 }
 
+bool ip_is_active(const struct client_ip *ip) {
+	if (ip->state == IP_ACTIVE || ip->state == IP_TENTATIVE)
+		return true;
+	return false;
+}
+
 /** Check whether a client is currently active.
     A client is considered active when at least one of its IP addresses is
     currently active or tentative.
@@ -102,7 +108,7 @@ bool client_is_active(const struct client *client) {
 	for (int i = VECTOR_LEN(client->addresses)-1;i>=0; i--) {
 		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
 
-		if (ip->state == IP_ACTIVE || ip->state == IP_TENTATIVE)
+		if (ip_is_active(ip))
 			return true;
 	}
 

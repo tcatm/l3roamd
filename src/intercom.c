@@ -187,16 +187,13 @@ void intercom_init(intercom_ctx *ctx) {
 
 void intercom_seek(intercom_ctx *ctx, const struct in6_addr *address) {
 	intercom_packet_seek packet;
-	uint32_t nonce;
-
-	obtainrandom(&nonce, sizeof(uint32_t), 0);
 
 	packet.hdr = (intercom_packet_hdr) {
 		.type = INTERCOM_SEEK,
-		.nonce = nonce,
 		.ttl = 255,
 	};
 
+	obtainrandom(&(packet.hdr.nonce), sizeof(uint32_t), 0);
 	memcpy(&packet.hdr.sender, &ctx->ip, 16);
 	memcpy(&packet.address, address, 16);
 
@@ -417,31 +414,33 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 		exit_error("could not allocate memory when generating info packet");
 	}
 
-	int i=0;
-	uint32_t nonce;
+	packet->relinquished = relinquished;
+	packet->num_addresses = 0;
 
-	obtainrandom(&nonce, sizeof(uint32_t), 0);
+	char str_mac[18];
 
 	packet->hdr = (intercom_packet_hdr) {
 		.type = INTERCOM_INFO,
-		.nonce = nonce,
 		.ttl = 1, // we only send info messages via unicast
 	};
 
+	obtainrandom(&(packet->hdr.nonce), sizeof(uint32_t), 0);
 	memcpy(&packet->hdr.sender, &ctx->ip, 16);
 	memcpy(&packet->mac, client->mac, sizeof(uint8_t) * 6);
-	packet->relinquished = relinquished;
 
 	intercom_packet_info_entry *entry = (intercom_packet_info_entry*)((uint8_t*)(packet) + sizeof(intercom_packet_info));
 
-	for (i = 0; i < VECTOR_LEN(client->addresses) && i < INFO_MAX; i++) {
+	for (int i = 0; i < VECTOR_LEN(client->addresses) && packet->num_addresses < INFO_MAX; i++) {
 		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
-		memcpy(&entry->address, ip->addr.s6_addr, sizeof(uint8_t) * 16);
-		entry++;
+		if (ip_is_active(ip)) {
+			memcpy(&entry->address, ip->addr.s6_addr, sizeof(uint8_t) * 16);
+			entry++;
+			packet->num_addresses++;
+		}
 	}
 
-	packet->num_addresses = VECTOR_LEN(client->addresses);
 	if (l3ctx.debug) {
+		mac_addr_n2a(str_mac, client->mac);
 		printf("sending info with %i addresses for client ", packet->num_addresses);
 		print_client(client);
 	}
@@ -450,18 +449,17 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 
 	if (recipient != NULL) {
 		if (l3ctx.debug) {
-			printf("sending unicast info for client %02x:%02x:%02x:%02x:%02x:%02x to ",  client->mac[0], client->mac[1], client->mac[2], client->mac[3], client->mac[4], client->mac[5]);
+			printf("sending unicast info for client %s to ",  str_mac);
 			print_ip(recipient, "\n");
 		}
 		intercom_send_packet_unicast(ctx, recipient, (uint8_t*)packet, packet_len);
 	}
 	else {
 		// forward packet to other l3roamd instances
-		intercom_recently_seen_add(ctx, &packet->hdr);
-		if (l3ctx.debug) {
-			printf("sending info for client %02x:%02x:%02x:%02x:%02x:%02x to l3roamd neighbours\n",  client->mac[0], client->mac[1], client->mac[2], client->mac[3], client->mac[4], client->mac[5]);
-		}
+		if (l3ctx.debug)
+			printf("sending info for client %s to l3roamd neighbours\n", str_mac);
 
+		intercom_recently_seen_add(ctx, &packet->hdr);
 		intercom_send_packet(ctx, (uint8_t*)packet, packet_len);
 	}
 	free(packet);

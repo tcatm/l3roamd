@@ -68,4 +68,5 @@ void mac_addr_n2a(char *mac_addr, unsigned char *arg);
 struct in6_addr mac2ipv6(uint8_t mac[6], struct prefix *prefix);
 void clientmgr_init();
 bool client_is_active(const struct client *client);
+bool ip_is_active(const struct client_ip *ip);
 
