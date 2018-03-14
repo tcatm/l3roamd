@@ -8,6 +8,7 @@
 #include "icmp6.h"
 #include "util.h"
 #include <sys/epoll.h>
+#include <sys/ioctl.h>
 
 static void rtnl_change_address(routemgr_ctx *ctx, struct in6_addr *address, int type, int flags);
 static void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh);
@@ -127,41 +128,52 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	}
 }
 
-void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
-	const struct ifinfomsg *msg = NLMSG_DATA(nh);
+void client_bridge_changed(const struct nlmsghdr *nh, const struct ifinfomsg *msg) {
         struct rtattr * tb[IFLA_MAX+1];
-	memset(tb, 0, sizeof(struct rtattr *) * (NDA_MAX + 1));
+	memset(tb, 0, sizeof(struct rtattr *) * (IFLA_MAX + 1));
 	char ifname[IFNAMSIZ];
 	char str_mac[6*3];
 	if_indextoname(msg->ifi_index,ifname);
-	
-	parse_rtattr(tb, NDA_MAX, NDA_RTA(msg), nh->nlmsg_len - NLMSG_LENGTH(sizeof(*msg)));
 
-// TODO: filter for correct device
-	if (!tb[IFLA_ADDRESS]) {
-		printf("handle_link called but mac could not be extracted - ignoring event.\n");
-		return;
+	if (!strncmp(ifname,l3ctx.routemgr_ctx.client_bridge,strlen(ifname))) {
+
+		parse_rtattr(tb, IFLA_MAX, IFLA_RTA(msg), nh->nlmsg_len - NLMSG_LENGTH(sizeof(*msg)));
+
+		if (!tb[IFLA_ADDRESS]) {
+			printf("client_bridge_changed called but mac could not be extracted - ignoring event.\n");
+			return;
+		}
+
+		if (!memcmp(RTA_DATA(tb[IFLA_ADDRESS]), l3ctx.routemgr_ctx.bridge_mac, 6)) {
+			printf("client_bridge_changed called, change detected BUT mac [%s] address is the mac of the bridge, not triggering any client actions\n", str_mac);
+			return;
+		}
+
+		mac_addr_n2a(str_mac, RTA_DATA(tb[IFLA_ADDRESS]));
+		switch (nh->nlmsg_type) {
+			case RTM_NEWLINK:
+				printf("new station [%s] found in fdb on interface %s\n", str_mac, ifname);
+				clientmgr_notify_mac(&l3ctx.clientmgr_ctx, RTA_DATA(tb[IFLA_ADDRESS]), msg->ifi_index);
+				break;
+
+			case RTM_SETLINK:
+				printf("set link %i\n", msg->ifi_index);
+				break;
+
+			case RTM_DELLINK:
+				printf("del link %i\n", msg->ifi_index);
+				printf("fdb-entry was removed for [%s].\n", str_mac); // TODO: move client to old-queue
+				break;
+		}
 	}
 
-	mac_addr_n2a(str_mac, RTA_DATA(tb[IFLA_ADDRESS]));
-	switch (nh->nlmsg_type) {
-		case RTM_NEWLINK:
-			printf("new station [%s] found in fdb on interface %s\n", str_mac, ifname);
-			int ifindex = ctx->l3ctx->icmp6_ctx.ifindex;
-			clientmgr_notify_mac(CTX(clientmgr), RTA_DATA(tb[IFLA_ADDRESS]), ifindex);
-			break;
+}
 
-		case RTM_SETLINK:
-			printf("set link %i\n", msg->ifi_index);
-			break;
+void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
+	const struct ifinfomsg *msg = NLMSG_DATA(nh);
 
-		case RTM_DELLINK:
-			printf("del link %i\n", msg->ifi_index);
-			printf("fdb-entry was removed for [%s].\n", str_mac); // not removing clients, we want to be able to answer claims for it in the near future in case of roaming
-			break;
-	}
+	client_bridge_changed(nh, msg);
 
-	// TODO: do we really need to call interfaces_changed here?
 	interfaces_changed(nh->nlmsg_type, msg);
 }
 
@@ -282,6 +294,19 @@ void routemgr_init(routemgr_ctx *ctx) {
 		printf("Activating route for prefix %s/%i on device %s(%i) in main routing-table\n", str, prefix->plen, CTX(ipmgr)->ifname, if_nametoindex(CTX(ipmgr)->ifname));
 
 		routemgr_insert_route(ctx, 254, if_nametoindex(CTX(ipmgr)->ifname), (struct in6_addr*)(prefix->prefix.s6_addr), prefix->plen );
+	}
+
+	// determine mac address of client-bridge
+	memset(ctx->bridge_mac, 0, 6);
+	struct ifreq req = {};
+	strncpy(req.ifr_name, ctx->client_bridge, IFNAMSIZ-1);
+	ioctl(ctx->fd, SIOCGIFHWADDR, &req);
+	memcpy(ctx->bridge_mac, req.ifr_hwaddr.sa_data, 6);
+
+	if (l3ctx.debug) {
+		char str_mac[18];
+		mac_addr_n2a(str_mac, ctx->bridge_mac);
+		printf("extracted mac of client-bridge: %s\n",str_mac);
 	}
 
 	// set route for clat-prefix

@@ -50,6 +50,7 @@ typedef struct {
 	char *clientif;
 	char *client_bridge;
 	bool nl_disabled;
+	uint8_t bridge_mac[6];
 } routemgr_ctx;
 
 void handle_route(routemgr_ctx *ctx, struct kernel_route *route);
