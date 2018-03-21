@@ -121,16 +121,14 @@ void add_special_ip(clientmgr_ctx *ctx, struct client *client) {
 	if (client == NULL) // this can happen if the client was removed before the claim cycle was finished
 		return;
 
-	struct in6_addr address = mac2ipv6(client->mac, &ctx->node_client_prefix);
-
 	if (client->node_ip_initialized) {
-		printf("we already initialized the special client-ip ");
-		print_ip(&address, ", not doing it again\n");
+		char mac_str[18];
+		mac_addr_n2a(mac_str, client->mac);
+		printf("we already initialized the special client [%s] not doing it again\n", mac_str);
 		return;
 	}
 
-	printf("Adding special address: ");
-	print_ip(&address, "\n");
+	struct in6_addr address = mac2ipv6(client->mac, &ctx->node_client_prefix);
 	rtnl_add_address(CTX(routemgr), &address);
 
 	struct sockaddr_in6 server_addr = {
@@ -150,15 +148,15 @@ void add_special_ip(clientmgr_ctx *ctx, struct client *client) {
 		perror("could not set SO_REUSEADDR");
 		exit_error("setsockopt: SO_REUSEADDR");
 	}
+	if (setsockopt(client->fd, SOL_IP, IP_FREEBIND, &one , sizeof(one)) < 0 ) {
+		perror("could not set IP_FREEBIND");
+		exit_error("setsockopt: IP_FREEBIND");
+	}
 
-	while (bind(client->fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-		// the address may not be assigned yet, and netlink is async by design.
-		// We could register a netlink handler to check for correct assignment of the IP-address and bind the socket in this very handler.
-		// Retry in a short while until the bind is successful for now. 
-		// TODO: attempt to bind only after the network stack is set up correctly
-		perror("bind socket to node-client-IP failed.");
-		printf("Retrying bind on client-fd: %i\n", client->fd);
-		sleep(0.002);
+	if (bind(client->fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+		printf("Could not bind to socket %i on special ip for address: ", client->fd);
+		print_ip(&address, " exiting.\n");
+		exit_error("bind socket to node-client-IP failed.");
 	}
 
 	add_fd(l3ctx.efd, client->fd, EPOLLIN);
