@@ -421,7 +421,7 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 
 	packet->hdr = (intercom_packet_hdr) {
 		.type = INTERCOM_INFO,
-		.ttl = 1, // we only send info messages via unicast
+		.ttl = 255,
 	};
 
 	obtainrandom(&(packet->hdr.nonce), sizeof(uint32_t), 0);
@@ -448,6 +448,7 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 	ssize_t packet_len = sizeof(intercom_packet_info) + packet->num_addresses * sizeof(intercom_packet_info_entry);
 
 	if (recipient != NULL) {
+		packet->hdr.ttl = 1;
 		if (l3ctx.debug) {
 			printf("sending unicast info for client %s to ",  str_mac);
 			print_ip(recipient, "\n");
