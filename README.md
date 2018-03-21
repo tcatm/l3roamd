@@ -1,53 +1,57 @@
 # l3roamd
 
-l3roamd, pronunced *ɛl θriː ɹoʊm diː*, is supposed to become a core part of future layer 3 mesh networks.
+l3roamd, pronunced *ɛl θriː ɹoʊm diː*, is a core part of layer 3 mesh networks.
 At first it will be built to work with [babeld](https://github.com/jech/babeld).
 
-l3roamd will be doing quite a few things:
-
- - manage a lot of host routes
- - integrate tightly with the mac80211 layer for monitor the presence of clients
- - manage a distributed database in tandem with all l3roamd nodes within the mesh [DB]
+integrating tightly with mac80211 and netlink, l3roamd will be doing the following things:
+ - monitor the presence of clients
+ - allow network-wide search for IP-addresses
  - manage distribution of prefixes across the mesh (for router advertisements) [RA]
- - proxy neighbour discovery across the mesh
  - monitor babeld for duplicate host routes that this node also announces
  
 Ideally, I'd like to split this up into multiple daemons communicating using standardized protocols:
+
+## Managing clients
+
+l3roamd will directly monitor a set of interfaces for clients.
+On the mac80211/fdb layer it will monitor clients and act whenever a new client appears (query the database or create an entry)
+or when a client disappears. 
+In case of a disappearing client a node removes all host routes for that client. It does
+not yet forget about them completely in case the client re-appears later.
+The routes presence in the routing table is controlled by the presence of the client (subject to some timeout).
+The routes presence in the database is subject to the timeout of the IPs lifetime (as was announced by the RA).
+In worst case two nodes may have to switch routes fast and repeatably due to a client having bad connectivity
+to either node. The whole cycle should be
+These nodes may not be connected directly.
+
  
 ## [DB] Distributed Database
  
-The database could become its own daemon. It's basically a key-value database that can answer a single question:
 
-*Does anyone know a client with this $MAC and if so, what IPs did it use and who has served this client recently?*
+*Does anyone know a client with this $MAC and if so, what IPs did it use?*
 
-This information does not need to be present on all nodes (though that's probably the naïve approach we'll take first).
-It just needs to be reasonable certain that a node noticing a client previously unknown to it can figure out whether
-that client has been known by some other node within the last, say, 15 minutes or so.
-In fact, it may suffice to share a client's information with just the nodes that are sending data to the client.
-This timeout depends primarily on the lifecycle of host routes within l3roamd.
+This information is available by querying a special node-client-IP that is
+calculated based on any given clients mac address. This address is assigned to
+the loopback-interface of the node serving the client.
 
-The most important outcome of querying the database is actually:
-Notify any node that thinks it serves client to let go of it and instruct it to release all host routes.
-Taking over those routes is a welcome side effect as it improves roaming.
-In the worst case neighbour discovery will be able to re-establish these routes, though.
+Using this address, a node can be notified to drop one of its local 
+clients, release all host routes and send an info packet to the 
+requesting node.
+The node requesting this drop will parse the info-packet, extract the
+IP-addresses used by this client and immediately adjust the 
+corresponding
+routes.
 
 ### Data stored about clients
 
  - MAC
- - a set of nodes that have served this client before
  - a set of IPs
  - (optional) a set of multicast groups
 
-This dataset needs some timeouts and so on.
+## [RA] Router Advertisements and Prefix Management
 
-### Set of routeable client prefixes
-
-A secondary usage of the database will probably be managing a set of prefixes used within the mesh.
-There will be some set of prefixes clients may use.
-This set may change at runtime depending on which prefixes may be used within the network.
-l3roamd needs to track these.
-
-## [RA] Router Advertisements
+*THIS PART IS NOT IMPLEMENTED YET AND LIKELY WILL NEVER BE INSIDE L3ROAMD*
+Instead this should be implemented in a separate daemon called prefixd.
 
 Any node should be able to announce a prefix (a /64) to be used by clients.
 This must be announced both within l3roamd and as a default route with a source prefix (set to the announced prefix!)
@@ -67,33 +71,11 @@ I.e. it will actively deprecate prefixes of clients it deems unreliably.
 This is likely to happen during roaming longer distances when a completely different set of uplinks should be used.
 As stated before, this will not break active connections.
 
-## Managing clients
-
-l3roamd will directly monitor a set of wireless interfaces for clients.
-On the mac80211 layer it will monitor clients and act whenever a new client appears (query the database or create an entry)
-or when a client disappears (it should use its own timeout instead relying on the mac80211 internal timeout).
-In case of a disappearing client a node should remove all host routes for that client but
-not yet forget about them completely (in case the client re-appears).
-The routes presence in the routing table is controlled by the presence of the client (subject to some timeout).
-The routes presence in the database is subject to the timeout of the IPs lifetime (as was announced by the RA).
-Getting these mechanics right is crucial for sane roaming behaviour during bad network conditions.
-In worst case two nodes may have to switch routes fast and repeatably due to a client having bad connectivity
-to either node.
-These nodes may not be connected directly.
-
-## The host route lifecycle
-
-Host routes need to have some kind of timeout.
-This directly correlates with management traffic overhead.
-It also affects the worst case amount of time a client will be unreachable in case of severe network conditions.
-
 ## IPv4?
-
-Well, not really. This is IPv6 only.
-We may, however, once everything works nicely, define a way for mapping IPv4 prefixes within IPv6 and rely on
-some other translation mechanism (SIIT, NIIT, whatever) to carry the payload.
-We may also extend the neighbour discovery proxy code to work with ARP.
-Ideally, this will be a seperate daemon.
+IPv4-Clients are supported as well. Inside the mesh there is only 
+ipv6, so we need clat on the node and plat somewhere else on the net. We 
+support using a single exit at the moment and are working on 
+multi-exit-support for plat.
 
 ## Improvements welcome!
 
@@ -112,16 +94,23 @@ This approach makes reviewing and reasoning about changes a lot easier.
 There are currently three packet types used by l3roamd:
 
 - SEEK,
-- QUERY and
+- CLAIM,
 - INFO
 
-All packets can be sent either as unicast or multicast.
-
-## Header
-
-
+SEEK are usually sent as multicast while CLAIM and INFO are sent as 
+unicast.
 
 ## SEEK
+The seek operation is sent to determine where a client having a specific 
+IP address is connected. This triggers local neighbor discovery 
+mechanisms.
 
-This is a multicast packet. SEEK is used to establish a route to an IPv6
-address. The packet contains 
+## CLAIM
+When a client connects to a node, this node sends a claim to the special 
+node-client IP-address via unicast. So whichever node was the previous 
+AP for this client will receive this message, drop all host-routes for 
+this client, drop the node-client-IP and respond with an INFO-message
+
+## INFO
+This packet contains all IP-addresses being used by a given client. It 
+will be sent in response to CLAIM via unicast.
