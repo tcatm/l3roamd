@@ -360,7 +360,8 @@ void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 	int retries = 3;
 	while (len <= 0 && retries > 0){
 		len = sendto(ctx->fd, &packet, sizeof(packet), 0, (struct sockaddr*)&dst, sizeof(dst));
-		printf("sent NS to %s %i\n", str, len);
+		if (l3ctx.debug)
+			printf("sent NS to %s %i\n", str, len);
 		if (len < 0)
 			perror("Error while sending NS, retrying");
 		retries--;
