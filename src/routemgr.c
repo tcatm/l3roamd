@@ -448,6 +448,10 @@ int rtnl_addattr(struct nlmsghdr *n, int maxlen, int type, void *data, int datal
 }
 
 void rtnl_add_address(routemgr_ctx *ctx, struct in6_addr *address) {
+	if (l3ctx.debug) {
+		printf("Adding special address to lo: ");
+		print_ip(address, "\n");
+	}
 	rtnl_change_address(ctx, address, RTM_NEWADDR, NLM_F_CREATE | NLM_F_EXCL | NLM_F_REQUEST);
 }
 
