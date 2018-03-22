@@ -141,8 +141,45 @@ bool client_is_active(const struct client *client) {
 	return false;
 }
 
+int bind_to_address(struct in6_addr *address) {
+	int fd;
+	rtnl_add_address(&l3ctx.routemgr_ctx, address);
+
+	struct sockaddr_in6 server_addr = {
+		.sin6_family = AF_INET6,
+		.sin6_port = htons(INTERCOM_PORT),
+		.sin6_addr = *address,
+	};
+
+	fd = socket(PF_INET6, SOCK_DGRAM | SOCK_NONBLOCK, 0);
+	if (fd < 0) {
+		perror("creating socket for listening on node-client-IP failed:");
+		exit_error("creating socket for intercom on node-client-IP");
+	}
+
+	int one = 1;
+	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one , sizeof(one)) < 0 ) {
+		perror("could not set SO_REUSEADDR");
+		exit_error("setsockopt: SO_REUSEADDR");
+	}
+	if (setsockopt(fd, SOL_IP, IP_FREEBIND, &one , sizeof(one)) < 0 ) {
+		perror("could not set IP_FREEBIND");
+		exit_error("setsockopt: IP_FREEBIND");
+	}
+
+	if (bind(fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+		printf("Could not bind to socket %i on special ip for address: ", fd);
+		print_ip(address, " exiting.\n");
+		exit_error("bind socket to node-client-IP failed.");
+	}
+
+	add_fd(l3ctx.efd, fd, EPOLLIN);
+	return fd;
+}
+
+
 /** Adds the special node client IP address.
-  */
+*/
 void add_special_ip(clientmgr_ctx *ctx, struct client *client) {
 	if (client == NULL) // this can happen if the client was removed before the claim cycle was finished
 		return;
@@ -155,38 +192,22 @@ void add_special_ip(clientmgr_ctx *ctx, struct client *client) {
 	}
 
 	struct in6_addr address = mac2ipv6(client->mac, &ctx->node_client_prefix);
-	rtnl_add_address(CTX(routemgr), &address);
+	client->fd = bind_to_address(&address);
 
-	struct sockaddr_in6 server_addr = {
-		.sin6_family = AF_INET6,
-		.sin6_port = htons(INTERCOM_PORT),
-		.sin6_addr = address,
-	};
-
-	client->fd = socket(PF_INET6, SOCK_DGRAM | SOCK_NONBLOCK, 0);
-	if (client->fd < 0) {
-		perror("creating socket for listening on node-client-IP failed:");
-		exit_error("creating socket for intercom on node-client-IP");
-	}
-
-	int one = 1;
-	if (setsockopt(client->fd, SOL_SOCKET, SO_REUSEADDR, &one , sizeof(one)) < 0 ) {
-		perror("could not set SO_REUSEADDR");
-		exit_error("setsockopt: SO_REUSEADDR");
-	}
-	if (setsockopt(client->fd, SOL_IP, IP_FREEBIND, &one , sizeof(one)) < 0 ) {
-		perror("could not set IP_FREEBIND");
-		exit_error("setsockopt: IP_FREEBIND");
-	}
-
-	if (bind(client->fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-		printf("Could not bind to socket %i on special ip for address: ", client->fd);
-		print_ip(&address, " exiting.\n");
-		exit_error("bind socket to node-client-IP failed.");
-	}
-
-	add_fd(l3ctx.efd, client->fd, EPOLLIN);
 	client->node_ip_initialized = true;
+}
+
+/** close and remove an fd from a client
+**/
+void close_client_fd(int *fd) {
+	if (*fd>0) {
+		del_fd(l3ctx.efd, *fd);
+		while (close(*fd)) {
+			printf("could not close client fd %i", *fd);
+			perror("close ");
+		}
+		*fd=-1;
+	}
 }
 
 /** Removes the special node client IP address.
@@ -195,14 +216,7 @@ void remove_special_ip(clientmgr_ctx *ctx, struct client *client) {
 	struct in6_addr address = mac2ipv6(client->mac, &ctx->node_client_prefix);
 	printf("Removing special address: ");
 	print_ip(&address, "\n");
-	if (client->fd) {
-		del_fd(l3ctx.efd, client->fd);
-		while (close(client->fd)) {
-			printf("could not close client fd %i", client->fd);
-			perror("close ");
-		}
-		client->fd=-1;
-	}
+	close_client_fd(&client->fd);
 	rtnl_remove_address(CTX(routemgr), &address);
 	client->node_ip_initialized = false;
 }
@@ -409,7 +423,6 @@ void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[6]) {
 	struct client *client = get_client(mac);
 	char mac_str[18];
 	mac_addr_n2a(mac_str, mac);
-	
 
 	if (client == NULL) {
 		if (l3ctx.debug) {
