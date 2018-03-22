@@ -63,6 +63,7 @@ void mac_addr_n2a(char *mac_addr, unsigned char *arg) {
 //	snprintf(&addr_str[0], INET6_ADDRSTRLEN, "ff02::1:ff%02x:%02x%02x", mac[3], mac[4], mac[5]);
 //}
 
+// generate mac-based ipv6-address in prefix link-local-address-style
 struct in6_addr mac2ipv6(uint8_t mac[6], struct prefix *prefix) {
 	struct in6_addr address = prefix->prefix;
 
