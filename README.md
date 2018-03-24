@@ -101,6 +101,7 @@ SEEK are usually sent as multicast while CLAIM and INFO are sent as
 unicast.
 
 Each packet consists of a common header structure:
+```
 0        7        15       23       31
 +--------+--------+--------+--------+
 |  TTL   | nonce1 | nonce2 | nonce3 |
@@ -115,7 +116,7 @@ Each packet consists of a common header structure:
 +-----------------------------------+
 |sender15|sender16|
 +-----------------+
-
+```
 TTL    - this is decremented whenever a multicast-packet is forwarded.
 nonce  - this is a random number that is used to identify duplicate packets and drop them
 type   - this is the packet-type, one of INTERCOM_SEEK, INTERCOM_CLAIM, INTERCOM_INFO
@@ -127,7 +128,7 @@ IP address is connected. This triggers local neighbor discovery
 mechanisms. SEEK-packets have the following structure:
 
 addr contains the unknown ipv6-address.
-
+```
 0        7        15       23       31
 +--------+--------+--------+--------+
 |  TTL   | nonce1 | nonce2 | nonce3 |
@@ -150,18 +151,14 @@ addr contains the unknown ipv6-address.
 +-----------------------------------+
 | addr15 | addr16 |
 +-----------------+
-
-
-
-
-
+```
 ## CLAIM
 When a client connects to a node, this node sends a claim to the special 
 node-client IP-address via unicast. So whichever node was the previous 
 AP for this client will receive this message, drop all host-routes for 
 this client, drop the node-client-IP and respond with an INFO-message
 CLAIM-packets have the following structure:
-
+```
 0        7        15       23       31
 +--------+--------+--------+--------+
 |  TTL   | nonce1 | nonce2 | nonce3 |
@@ -178,14 +175,14 @@ CLAIM-packets have the following structure:
 +-----------------------------------+
 |  MAC3  |  MAC4  |  MAC5  |  MAC6  |
 +-----------------------------------+
-
+```
 MAC - is the mac-address of the client being claimed.
 
 ## INFO
 This packet contains all IP-addresses being in active use by a given client. It 
 will be sent in response to CLAIM via unicast.
 INFO-packets have the following structure:
-
+```
 0        7        15       23       31
 +--------+--------+--------+--------+
 |  TTL   | nonce1 | nonce2 | nonce3 |
@@ -228,7 +225,7 @@ INFO-packets have the following structure:
 +-----------------------------------+
 |addr#_15|addr#_16|
 +-----------------+
-
+```
 MAC is the mac-address of the client
 #addr is the amount of client-6ipv6-addresses in the packet. There is a 
 compile-time flag having a default of 32
