@@ -100,17 +100,136 @@ There are currently three packet types used by l3roamd:
 SEEK are usually sent as multicast while CLAIM and INFO are sent as 
 unicast.
 
+Each packet consists of a common header structure:
+0        7        15       23       31
++--------+--------+--------+--------+
+|  TTL   | nonce1 | nonce2 | nonce3 |
++-----------------------------------+
+| nonce4 |  type  |sender1 |sender2 |
++-----------------------------------+
+|sender3 |sender4 |sender5 |sender6 |
++-----------------------------------+
+|sender7 |sender8 |sender9 |sender10|
++-----------------------------------+
+|sender11|sender12|sender13|sender14|
++-----------------------------------+
+|sender15|sender16|
++-----------------+
+
+TTL    - this is decremented whenever a multicast-packet is forwarded.
+nonce  - this is a random number that is used to identify duplicate packets and drop them
+type   - this is the packet-type, one of INTERCOM_SEEK, INTERCOM_CLAIM, INTERCOM_INFO
+sender - ipv6-address of the sender of the packet
+
 ## SEEK
 The seek operation is sent to determine where a client having a specific 
 IP address is connected. This triggers local neighbor discovery 
-mechanisms.
+mechanisms. SEEK-packets have the following structure:
+
+addr contains the unknown ipv6-address.
+
+0        7        15       23       31
++--------+--------+--------+--------+
+|  TTL   | nonce1 | nonce2 | nonce3 |
++-----------------------------------+
+| nonce4 |  type  | sender1| sender2|
++-----------------------------------+
+|sender3 |sender4 |sender5 |sender6 |
++-----------------------------------+
+|sender7 |sender8 |sender9 |sender10|
++-----------------------------------+
+|sender11|sender12|sender13|sender14|
++-----------------------------------+
+|sender15|sender16| addr1  | addr2  |
++-----------------------------------+
+| addr3  | addr4  | addr5  | addr6  |
++-----------------------------------+
+| addr7  | addr8  | addr9  | addr10 |
++-----------------------------------+
+| addr11 | addr12 | addr13 | addr14 |
++-----------------------------------+
+| addr15 | addr16 |
++-----------------+
+
+
+
+
 
 ## CLAIM
 When a client connects to a node, this node sends a claim to the special 
 node-client IP-address via unicast. So whichever node was the previous 
 AP for this client will receive this message, drop all host-routes for 
 this client, drop the node-client-IP and respond with an INFO-message
+CLAIM-packets have the following structure:
+
+0        7        15       23       31
++--------+--------+--------+--------+
+|  TTL   | nonce1 | nonce2 | nonce3 |
++-----------------------------------+
+| nonce4 |  type  | sender1| sender2|
++-----------------------------------+
+|sender3 |sender4 |sender5 |sender6 |
++-----------------------------------+
+|sender7 |sender8 |sender9 |sender10|
++-----------------------------------+
+|sender11|sender12|sender13|sender14|
++-----------------------------------+
+|sender15|sender16|  MAC1  |  MAC2  |
++-----------------------------------+
+|  MAC3  |  MAC4  |  MAC5  |  MAC6  |
++-----------------------------------+
+
+MAC - is the mac-address of the client being claimed.
 
 ## INFO
-This packet contains all IP-addresses being used by a given client. It 
+This packet contains all IP-addresses being in active use by a given client. It 
 will be sent in response to CLAIM via unicast.
+INFO-packets have the following structure:
+
+0        7        15       23       31
++--------+--------+--------+--------+
+|  TTL   | nonce1 | nonce2 | nonce3 |
++-----------------------------------+
+| nonce4 |  type  | sender1| sender2|
++-----------------------------------+
+|sender3 |sender4 |sender5 |sender6 |
++-----------------------------------+
+|sender7 |sender8 |sender9 |sender10|
++-----------------------------------+
+|sender11|sender12|sender13|sender14|
++-----------------------------------+
+|sender15|sender16|relinq. |  MAC1  | 
++-----------------------------------+
+|  MAC2  |  MAC3  |  MAC4  |  MAC5  |
++-----------------------------------+
+|  MAC6  | #addr  |addr1_1 |addr1_2 |
++-----------------------------------+
+|addr1_3 |addr1_4 |addr1_5 |addr1_6 |
++-----------------------------------+
+|addr1_7 |addr1_8 |addr1_9 |addr1_10|
++-----------------------------------+
+|addr1_11|addr1_12|addr1_13|addr1_14|
++-----------------------------------+
+|addr1_15|addr1_16|addr2_1 |addr2_2 |
++-----------------------------------+
+|addr2_3 |addr2_4 |addr2_5 |addr2_6 |
++-----------------------------------+
+|addr2_7 |addr2_8 |addr2_9 |addr2_10|
++-----------------------------------+
+|addr2_11|addr2_12|addr2_13|addr2_14|
++-----------------------------------+
+|addr2_15|addr2_16|addr#_1 |addr#_2 |
++-----------------------------------+
+|addr#_3 |addr#_4 |addr#_5 |addr#_6 |
++-----------------------------------+
+|addr#_7 |addr#_8 |addr#_9 |addr#_10|
++-----------------------------------+
+|addr#_11|addr#_12|addr#_13|addr#_14|
++-----------------------------------+
+|addr#_15|addr#_16|
++-----------------+
+
+MAC is the mac-address of the client
+#addr is the amount of client-6ipv6-addresses in the packet. There is a 
+compile-time flag having a default of 32
+addr1-addr# are 1-n ipv6 addresses.
