@@ -185,16 +185,20 @@ void intercom_init(intercom_ctx *ctx) {
 	intercom_update_interfaces(ctx);
 }
 
+void assemble_header(intercom_packet_hdr  *hdr, int ttl, uint8_t type) {
+	uint32_t nonce;
+	hdr->type = type;
+	hdr->ttl = ttl;
+	obtainrandom(&nonce, sizeof(uint32_t), 0);
+	hdr->nonce = htonl(nonce);
+	memcpy(&hdr->sender, &l3ctx.intercom_ctx.ip, 16);
+}
+
 void intercom_seek(intercom_ctx *ctx, const struct in6_addr *address) {
 	intercom_packet_seek packet;
 
-	packet.hdr = (intercom_packet_hdr) {
-		.type = INTERCOM_SEEK,
-		.ttl = 255,
-	};
+	assemble_header(&packet.hdr, 255, INTERCOM_SEEK);
 
-	obtainrandom(&(packet.hdr.nonce), sizeof(uint32_t), 0);
-	memcpy(&packet.hdr.sender, &ctx->ip, 16);
 	memcpy(&packet.address, address, 16);
 
 	intercom_recently_seen_add(ctx, &packet.hdr);
@@ -352,6 +356,8 @@ void intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet) {
 void intercom_handle_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len) {
 	intercom_packet_hdr *hdr = (intercom_packet_hdr*) packet;
 
+	hdr->nonce = ntohl(hdr->nonce);
+
 	if (intercom_recently_seen(ctx, hdr))
 		return;
 
@@ -419,13 +425,7 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 
 	char str_mac[18];
 
-	packet->hdr = (intercom_packet_hdr) {
-		.type = INTERCOM_INFO,
-		.ttl = 255,
-	};
-
-	obtainrandom(&(packet->hdr.nonce), sizeof(uint32_t), 0);
-	memcpy(&packet->hdr.sender, &ctx->ip, 16);
+	assemble_header(&packet->hdr, 255, INTERCOM_INFO);
 	memcpy(&packet->mac, client->mac, sizeof(uint8_t) * 6);
 
 	intercom_packet_info_entry *entry = (intercom_packet_info_entry*)((uint8_t*)(packet) + sizeof(intercom_packet_info));
@@ -544,17 +544,8 @@ bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct 
 	}
 
 	intercom_packet_claim packet;
-	uint32_t nonce;
 
-	obtainrandom(&nonce, sizeof(uint32_t), 0);
-
-	packet.hdr = (intercom_packet_hdr) {
-		.type = INTERCOM_CLAIM,
-		.nonce = nonce,
-		.ttl = 255,
-	};
-
-	memcpy(&packet.hdr.sender, &ctx->ip, 16);
+	assemble_header(&packet.hdr, 255, INTERCOM_CLAIM);
 
 	memcpy(&packet.mac, client->mac, 6);
 
@@ -574,7 +565,7 @@ bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct 
 		data.recipient = malloc(sizeof(struct in6_addr));
 		memcpy(data.recipient, recipient, sizeof(struct in6_addr));
 		packet.hdr.ttl = 1; // when sending unicast, do not continue to forward this packet at the destination
-	} 
+	}
 
 	schedule_claim_retry(&data, 0);
 	free(data.recipient);
