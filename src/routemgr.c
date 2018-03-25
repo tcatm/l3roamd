@@ -180,8 +180,6 @@ void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 }
 
 void handle_kernel_routes(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
-	int rc;
-
 	struct kernel_route route;
 
 	int len;
@@ -198,8 +196,7 @@ void handle_kernel_routes(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	if (rtm->rtm_flags & RTM_F_CLONED)
 		return;
 
-	rc = parse_kernel_route_rta(rtm, len, &route);
-	if (rc < 0)
+	if (parse_kernel_route_rta(rtm, len, &route) < 0)
 		return;
 
 	/* Ignore default unreachable routes; no idea where they come from. */
@@ -211,7 +208,7 @@ void handle_kernel_routes(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 		return;
 
 	if (clientmgr_valid_address(&l3ctx.clientmgr_ctx, &route.prefix)) {
-		if (nh->nlmsg_type == RTM_NEWROUTE)
+//		if (nh->nlmsg_type == RTM_NEWROUTE)
 			ipmgr_route_appeared(CTX(ipmgr), &route.prefix);
 /*		else if (nh->nlmsg_type == RTM_DELROUTE) {
 			printf("KERNEL ROUTE WAS REMOVED - SHOULD WE HANDLE THIS? ");
@@ -235,7 +232,7 @@ void rtnl_handle_msg(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 
 	switch (nh->nlmsg_type) {
 		case RTM_NEWROUTE:
-		case RTM_DELROUTE:
+//		case RTM_DELROUTE:
 			if (l3ctx.debug)
 				printf("handling netlink message for route change\n");
 			handle_kernel_routes(ctx, nh);
@@ -378,7 +375,7 @@ int parse_kernel_route_rta(struct rtmsg *rtm, int len, struct kernel_route *rout
 
 void routemgr_handle_in(routemgr_ctx *ctx, int fd) {
 	if (l3ctx.debug)
-		printf("handling routemgr_in event");
+		printf("handling routemgr_in event ");
 	ssize_t count;
 	uint8_t readbuffer[8192];
 
