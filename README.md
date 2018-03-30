@@ -3,7 +3,7 @@
 l3roamd, pronunced *ɛl θriː ɹoʊm diː*, is a core part of layer 3 mesh networks.
 At first it will be built to work with [babeld](https://github.com/jech/babeld).
 
-integrating tightly with mac80211 and netlink, l3roamd will be doing the following things:
+Integrating tightly with mac80211 and netlink, l3roamd will be doing the following things:
  - monitor the presence of clients
  - allow network-wide search for IP-addresses
  - manage distribution of prefixes across the mesh (for router advertisements) [RA]
@@ -39,8 +39,7 @@ clients, release all host routes and send an info packet to the
 requesting node.
 The node requesting this drop will parse the info-packet, extract the
 IP-addresses used by this client and immediately adjust the 
-corresponding
-routes.
+corresponding routes.
 
 ### Data stored about clients
 
@@ -74,20 +73,7 @@ As stated before, this will not break active connections.
 ## IPv4?
 IPv4-Clients are supported as well. Inside the mesh there is only 
 ipv6, so we need clat on the node and plat somewhere else on the net. We 
-support using a single exit at the moment and are working on 
-multi-exit-support for plat.
-
-## Improvements welcome!
-
-If you can improve this specifications (typos, better wording, restructering, ...) or even new important aspects, feel free to open
-a pull request. Please prefix your commits with "README: $my message" and try to summarize the changes in the commit
-message even if the commit message turns out to be longer than the change. Say, if you change a singel word, write a message like
-
-    README: corrected singel to single
-    
-    This corrects a typo in the "Improvements welcome!" section.
-
-This approach makes reviewing and reasoning about changes a lot easier.
+support using a single exit at the moment and are working on multi-exit-support for plat.
 
 # Intercom Packets
 
@@ -98,7 +84,7 @@ There are currently three packet types used by l3roamd:
 - INFO
 
 SEEK are usually sent as multicast while CLAIM and INFO are sent as 
-unicast.
+unicast.  
 This documents version 1.
 
 ## Header
@@ -119,14 +105,12 @@ Each packet consists of a common header structure:
 |sender13|sender14|sender15|sender16|
 +-----------------------------------+
 ```
-VERSION - this is the version of the protocol. Meant to allow 
-	 compatibility of multiple versions of l3roamd
-TTL     - this is decremented whenever a multicast-packet is forwarded.
-type    - this is the packet-type, one of INTERCOM_SEEK, INTERCOM_CLAIM, INTERCOM_INFO
-fields  - This is a bitmask that may be used to describe the content of 
-	  the body. At the moment this is only used for INFO
-nonce   - this is a random number that is used to identify duplicate packets and drop them
-sender  - ipv6-address of the sender of the packet
+VERSION - this is the version of the protocol. Meant to allow compatibility of multiple versions of l3roamd.  
+TTL     - this is decremented whenever a multicast-packet is forwarded.  
+type    - this is the packet-type, one of INTERCOM_SEEK, INTERCOM_CLAIM, INTERCOM_INFO.  
+fields  - This is a bitmask that may be used to describe the content of the body. At the moment this is only used for INFO.  
+nonce   - this is a random number that is used to identify duplicate packets and drop them.  
+sender  - ipv6-address of the sender of the packet.  
 
 ## SEEK
 The seek operation is sent to determine where a client having a specific 
@@ -192,14 +176,14 @@ will be sent in response to CLAIM via unicast.
 INFO-packets have the following structure:
 
 Values of fields:
-0x01 - the packet contains plat client info (mac, ip addresses)
-0x02 - unused
-0x04 - unused
-0x08 - unused
-0x10 - unused
-0x20 - unused
-0x30 - unused
-0x40 - the packet contains basic client info (plat address, leasetime)
+0x01 - the packet contains plat client info (mac, ip addresses)  
+0x02 - unused  
+0x04 - unused  
+0x08 - unused  
+0x10 - unused  
+0x20 - unused  
+0x30 - unused  
+0x40 - the packet contains basic client info (plat address, leasetime)  
 
 ```
 0        7        15       23       31
@@ -257,10 +241,25 @@ Values of fields:
 ```
 MAC is the mac-address of the client
 
-#addr is the amount of client-6ipv6-addresses in the packet. There is a compile-time flag having a default of 32
+#addr is the amount of client-6ipv6-addresses in the packet. There is a compile-time flag having a default of 32.
 
 addr1-addr# are 1-n ipv6 addresses.
 
 plat is the plat-prefix used by this client.
 
-lease is the remaining lease time of the clients ipv4 address in seconds
+lease is the remaining lease time of the clients ipv4 address in seconds.
+
+---
+  
+  
+## Improvements welcome!
+
+If you can improve this specifications (typos, better wording, restructering, ...) or even new important aspects, feel free to open
+a pull request. Please prefix your commits with "README: $my message" and try to summarize the changes in the commit
+message even if the commit message turns out to be longer than the change. Say, if you change a singel word, write a message like
+
+    README: corrected singel to single
+    
+    This corrects a typo in the "Improvements welcome!" section.
+
+This approach makes reviewing and reasoning about changes a lot easier.
