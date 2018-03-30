@@ -77,15 +77,30 @@ support using a single exit at the moment and are working on multi-exit-support 
 
 # Intercom Packets
 
-There are currently three packet types used by l3roamd:
+This documents version 1 of the packet format.
+
+Intercom packets are UDP-packets that can be interchanged using the node-client-IP or the multicast-address as destination.
+
+There are three packet types used by l3roamd:
 
 - SEEK,
 - CLAIM,
 - INFO
 
-SEEK are usually sent as multicast while CLAIM and INFO are sent as 
-unicast.  
-This documents version 1.
+SEEK are usually sent as multicast while CLAIM and INFO are sent as unicast.  
+
+
+## Addresses
+### Multicast-address
+ff02::5523 will be used as destination for multicast packets.
+
+### node-client-ip address
+The node-client-ip address is assigned to a node whenever a client
+connects to a node. It is calculated using the clients mac address and
+the node-client-prefix (parameter -P).
+
+## Port
+The packets are directed at port 5523.
 
 ## Header
 Each packet consists of a common header structure:
@@ -173,18 +188,8 @@ MAC - is the mac-address of the client being claimed.
 ## INFO
 This packet contains all IP-addresses being in active use by a given client. It 
 will be sent in response to CLAIM via unicast.
+
 INFO-packets have the following structure:
-
-Values of fields:
-0x01 - the packet contains plat client info (mac, ip addresses)  
-0x02 - unused  
-0x04 - unused  
-0x08 - unused  
-0x10 - unused  
-0x20 - unused  
-0x30 - unused  
-0x40 - the packet contains basic client info (plat address, leasetime)  
-
 ```
 0        7        15       23       31
 +-----------------------------------+
@@ -239,15 +244,22 @@ Values of fields:
 |addr#_13|addr#_14|addr#_15|addr#_16|
 +--------+--------+--------+--------+ --- basic client info ends here
 ```
-MAC is the mac-address of the client
+MAC is the mac-address of the client  
+#addr is the amount of client-6ipv6-addresses in the packet. There is a compile-time flag having a default of 32.  
+addr1-addr# are 1-n ipv6 addresses.  
+plat is the plat-prefix used by this client.  
+lease is the remaining lease time of the clients ipv4 address in seconds.  
 
-#addr is the amount of client-6ipv6-addresses in the packet. There is a compile-time flag having a default of 32.
+Values of fields:  
+0x01 - the packet contains plat client info (plat prefix, leasetime)  
+0x02 - unused  
+0x04 - unused  
+0x08 - unused  
+0x10 - unused  
+0x20 - unused  
+0x40 - unused  
+0x80 - the packet contains basic client info (mac, ip addresses)
 
-addr1-addr# are 1-n ipv6 addresses.
-
-plat is the plat-prefix used by this client.
-
-lease is the remaining lease time of the clients ipv4 address in seconds.
 
 ---
   
