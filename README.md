@@ -99,28 +99,34 @@ There are currently three packet types used by l3roamd:
 
 SEEK are usually sent as multicast while CLAIM and INFO are sent as 
 unicast.
+This documents version 1.
 
+## Header
 Each packet consists of a common header structure:
 ```
 0        7        15       23       31
++-----------------------------------+
+| VERSION|  TTL   |  type  | fields |
 +--------+--------+--------+--------+
-|  TTL   | nonce1 | nonce2 | nonce3 |
+| nonce1 | nonce2 | nonce3 | nonce4 |
++--------+--------+--------+--------+
+|sender1 |sender2 |sender3 |sender4 |
++--------+--------+--------+--------+
+|sender5 |sender6 |sender7 |sender8 |
++--------+--------+--------+--------+
+|sender9 |sender10|sender11|sender12|
++--------+--------+--------+--------+
+|sender13|sender14|sender15|sender16|
 +-----------------------------------+
-| nonce4 |  type  |sender1 |sender2 |
-+-----------------------------------+
-|sender3 |sender4 |sender5 |sender6 |
-+-----------------------------------+
-|sender7 |sender8 |sender9 |sender10|
-+-----------------------------------+
-|sender11|sender12|sender13|sender14|
-+-----------------------------------+
-|sender15|sender16|
-+-----------------+
 ```
-TTL    - this is decremented whenever a multicast-packet is forwarded.
-nonce  - this is a random number that is used to identify duplicate packets and drop them
-type   - this is the packet-type, one of INTERCOM_SEEK, INTERCOM_CLAIM, INTERCOM_INFO
-sender - ipv6-address of the sender of the packet
+VERSION - this is the version of the protocol. Meant to allow 
+	 compatibility of multiple versions of l3roamd
+TTL     - this is decremented whenever a multicast-packet is forwarded.
+type    - this is the packet-type, one of INTERCOM_SEEK, INTERCOM_CLAIM, INTERCOM_INFO
+fields  - This is a bitmask that may be used to describe the content of 
+	  the body. At the moment this is only used for INFO
+nonce   - this is a random number that is used to identify duplicate packets and drop them
+sender  - ipv6-address of the sender of the packet
 
 ## SEEK
 The seek operation is sent to determine where a client having a specific 
@@ -130,27 +136,27 @@ mechanisms. SEEK-packets have the following structure:
 addr contains the unknown ipv6-address.
 ```
 0        7        15       23       31
++-----------------------------------+
+| VERSION|  TTL   |  type  | fields |
 +--------+--------+--------+--------+
-|  TTL   | nonce1 | nonce2 | nonce3 |
+| nonce1 | nonce2 | nonce3 | nonce4 |
++--------+--------+--------+--------+
+|sender1 |sender2 |sender3 |sender4 |
++--------+--------+--------+--------+
+|sender5 |sender6 |sender7 |sender8 |
++--------+--------+--------+--------+
+|sender9 |sender10|sender11|sender12|
++--------+--------+--------+--------+
+|sender13|sender14|sender15|sender16|
++--------+--------+--------+--------+ --- header ends here.
+| addr1  | addr2  | addr3  | addr4  |
++--------+--------+--------+--------+
+| addr5  | addr6  | addr7  | addr8  |
++--------+--------+--------+--------+
+| addr9  | addr10 | addr11 | addr12 |
++--------+--------+--------+--------+
+| addr13 | addr14 | addr15 | addr16 |
 +-----------------------------------+
-| nonce4 |  type  | sender1| sender2|
-+-----------------------------------+
-|sender3 |sender4 |sender5 |sender6 |
-+-----------------------------------+
-|sender7 |sender8 |sender9 |sender10|
-+-----------------------------------+
-|sender11|sender12|sender13|sender14|
-+-----------------------------------+
-|sender15|sender16| addr1  | addr2  |
-+-----------------------------------+
-| addr3  | addr4  | addr5  | addr6  |
-+-----------------------------------+
-| addr7  | addr8  | addr9  | addr10 |
-+-----------------------------------+
-| addr11 | addr12 | addr13 | addr14 |
-+-----------------------------------+
-| addr15 | addr16 |
-+-----------------+
 ```
 ## CLAIM
 When a client connects to a node, this node sends a claim to the special 
@@ -160,21 +166,23 @@ this client, drop the node-client-IP and respond with an INFO-message
 CLAIM-packets have the following structure:
 ```
 0        7        15       23       31
++-----------------------------------+
+| VERSION|  TTL   |  type  | fields |
 +--------+--------+--------+--------+
-|  TTL   | nonce1 | nonce2 | nonce3 |
-+-----------------------------------+
-| nonce4 |  type  | sender1| sender2|
-+-----------------------------------+
-|sender3 |sender4 |sender5 |sender6 |
-+-----------------------------------+
-|sender7 |sender8 |sender9 |sender10|
-+-----------------------------------+
-|sender11|sender12|sender13|sender14|
-+-----------------------------------+
-|sender15|sender16|  MAC1  |  MAC2  |
-+-----------------------------------+
-|  MAC3  |  MAC4  |  MAC5  |  MAC6  |
-+-----------------------------------+
+| nonce1 | nonce2 | nonce3 | nonce4 |
++--------+--------+--------+--------+
+|sender1 |sender2 |sender3 |sender4 |
++--------+--------+--------+--------+
+|sender5 |sender6 |sender7 |sender8 |
++--------+--------+--------+--------+
+|sender9 |sender10|sender11|sender12|
++--------+--------+--------+--------+
+|sender13|sender14|sender15|sender16|
++--------+--------+--------+--------+ --- header ends here.
+|  MAC1  |  MAC2  |  MAC3  |  MAC4  |
++--------+--------+--------+--------+
+|  MAC5  |  MAC6  |
++-----------------+
 ```
 MAC - is the mac-address of the client being claimed.
 
@@ -182,51 +190,77 @@ MAC - is the mac-address of the client being claimed.
 This packet contains all IP-addresses being in active use by a given client. It 
 will be sent in response to CLAIM via unicast.
 INFO-packets have the following structure:
+
+Values of fields:
+0x01 - the packet contains plat client info (mac, ip addresses)
+0x02 - unused
+0x04 - unused
+0x08 - unused
+0x10 - unused
+0x20 - unused
+0x30 - unused
+0x40 - the packet contains basic client info (plat address, leasetime)
+
 ```
 0        7        15       23       31
++-----------------------------------+
+| VERSION|  TTL   |  type  | fields |
 +--------+--------+--------+--------+
-|  TTL   | nonce1 | nonce2 | nonce3 |
-+-----------------------------------+
-| nonce4 |  type  | sender1| sender2|
-+-----------------------------------+
-|sender3 |sender4 |sender5 |sender6 |
-+-----------------------------------+
-|sender7 |sender8 |sender9 |sender10|
-+-----------------------------------+
-|sender11|sender12|sender13|sender14|
-+-----------------------------------+
-|sender15|sender16|relinq. |  MAC1  | 
-+-----------------------------------+
-|  MAC2  |  MAC3  |  MAC4  |  MAC5  |
-+-----------------------------------+
-|  MAC6  | #addr  |addr1_1 |addr1_2 |
-+-----------------------------------+
-|addr1_3 |addr1_4 |addr1_5 |addr1_6 |
-+-----------------------------------+
-|addr1_7 |addr1_8 |addr1_9 |addr1_10|
-+-----------------------------------+
-|addr1_11|addr1_12|addr1_13|addr1_14|
-+-----------------------------------+
-|addr1_15|addr1_16|addr2_1 |addr2_2 |
-+-----------------------------------+
-|addr2_3 |addr2_4 |addr2_5 |addr2_6 |
-+-----------------------------------+
-|addr2_7 |addr2_8 |addr2_9 |addr2_10|
-+-----------------------------------+
-|addr2_11|addr2_12|addr2_13|addr2_14|
-+-----------------------------------+
-|addr2_15|addr2_16|addr#_1 |addr#_2 |
-+-----------------------------------+
-|addr#_3 |addr#_4 |addr#_5 |addr#_6 |
-+-----------------------------------+
-|addr#_7 |addr#_8 |addr#_9 |addr#_10|
-+-----------------------------------+
-|addr#_11|addr#_12|addr#_13|addr#_14|
-+-----------------------------------+
-|addr#_15|addr#_16|
-+-----------------+
+| nonce1 | nonce2 | nonce3 | nonce4 |
++--------+--------+--------+--------+
+|sender1 |sender2 |sender3 |sender4 |
++--------+--------+--------+--------+
+|sender5 |sender6 |sender7 |sender8 |
++--------+--------+--------+--------+
+|sender9 |sender10|sender11|sender12|
++--------+--------+--------+--------+
+|sender13|sender14|sender15|sender16|
++--------+--------+--------+--------+ --- header ends here.
+| plat1  | plat2  | plat3  | plat4  |
++--------+--------+--------+--------+
+| plat5  | plat6  | plat7  | plat8  |
++--------+--------+--------+--------+
+| plat9  | plat10 | plat11 | plat12 |
++--------+--------+--------+--------+
+| plat13 | plat14 | plat15 | plat16 |
++--------+--------+-----------------+
+| lease1 | lease2 | empty  | empty  |
++--------+--------+--------+--------+ --- plat client info ends here
+|  MAC1  |  MAC2  |  MAC3  |  MAC4  |
++--------+--------+--------+--------+
+|  MAC5  |  MAC6  | empty  | #addr  |
++--------+--------+--------+--------+
+|addr1_1 |addr1_2 |addr1_3 |addr1_4 |
++--------+--------+--------+--------+
+|addr1_5 |addr1_6 |addr1_7 |addr1_8 |
++--------+--------+--------+--------+
+|addr1_9 |addr1_10|addr1_11|addr1_12|
++--------+--------+--------+--------+
+|addr1_13|addr1_14|addr1_15|addr1_16|
++--------+--------+--------+--------+
+|addr2_1 |addr2_2 |addr2_3 |addr2_4 |
++--------+--------+--------+--------+
+|addr2_5 |addr2_6 |addr2_7 |addr2_8 |
++--------+--------+--------+--------+
+|addr2_9 |addr2_10|addr2_11|addr2_12|
++--------+--------+--------+--------+
+|addr2_13|addr2_14|addr2_15|addr2_16|
++--------+--------+--------+--------+
+|addr#_1 |addr#_2 |addr#_3 |addr#_4 |
++--------+--------+--------+--------+
+|addr#_5 |addr#_6 |addr#_7 |addr#_8 |
++--------+--------+--------+--------+
+|addr#_9 |addr#_10|addr#_11|addr#_12|
++--------+--------+--------+--------+
+|addr#_13|addr#_14|addr#_15|addr#_16|
++--------+--------+--------+--------+ --- basic client info ends here
 ```
 MAC is the mac-address of the client
-#addr is the amount of client-6ipv6-addresses in the packet. There is a 
-compile-time flag having a default of 32
+
+#addr is the amount of client-6ipv6-addresses in the packet. There is a compile-time flag having a default of 32
+
 addr1-addr# are 1-n ipv6 addresses.
+
+plat is the plat-prefix used by this client.
+
+lease is the remaining lease time of the clients ipv4 address in seconds
