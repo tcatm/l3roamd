@@ -107,7 +107,7 @@ Each packet consists of a common header structure:
 ```
 0        7        15       23       31
 +-----------------------------------+
-| VERSION|  TTL   |  type  | fields |
+| VERSION|  TTL   |  type  | empty  |
 +--------+--------+--------+--------+
 | nonce1 | nonce2 | nonce3 | nonce4 |
 +--------+--------+--------+--------+
@@ -123,7 +123,6 @@ Each packet consists of a common header structure:
 VERSION - this is the version of the protocol. Meant to allow compatibility of multiple versions of l3roamd.  
 TTL     - this is decremented whenever a multicast-packet is forwarded.  
 type    - this is the packet-type, one of INTERCOM_SEEK, INTERCOM_CLAIM, INTERCOM_INFO.  
-fields  - This is a bitmask that may be used to describe the content of the body. At the moment this is only used for INFO.  
 nonce   - this is a random number that is used to identify duplicate packets and drop them.  
 sender  - ipv6-address of the sender of the packet.  
 
@@ -136,7 +135,7 @@ addr contains the unknown ipv6-address.
 ```
 0        7        15       23       31
 +-----------------------------------+
-| VERSION|  TTL   |  type  | fields |
+| VERSION|  TTL   |  type  | empty  |
 +--------+--------+--------+--------+
 | nonce1 | nonce2 | nonce3 | nonce4 |
 +--------+--------+--------+--------+
@@ -166,7 +165,7 @@ CLAIM-packets have the following structure:
 ```
 0        7        15       23       31
 +-----------------------------------+
-| VERSION|  TTL   |  type  | fields |
+| VERSION|  TTL   |  type  | empty  |
 +--------+--------+--------+--------+
 | nonce1 | nonce2 | nonce3 | nonce4 |
 +--------+--------+--------+--------+
@@ -193,7 +192,7 @@ INFO-packets have the following structure:
 ```
 0        7        15       23       31
 +-----------------------------------+
-| VERSION|  TTL   |  type  | fields |
+| VERSION|  TTL   |  type  | empty  |
 +--------+--------+--------+--------+
 | nonce1 | nonce2 | nonce3 | nonce4 |
 +--------+--------+--------+--------+
@@ -205,6 +204,8 @@ INFO-packets have the following structure:
 +--------+--------+--------+--------+
 |sender13|sender14|sender15|sender16|
 +--------+--------+--------+--------+ --- header ends here.
+| type   | length | lease1 | lease2 | type for plat info: 0x01
++--------+--------+-----------------+
 | plat1  | plat2  | plat3  | plat4  |
 +--------+--------+--------+--------+
 | plat5  | plat6  | plat7  | plat8  |
@@ -212,12 +213,10 @@ INFO-packets have the following structure:
 | plat9  | plat10 | plat11 | plat12 |
 +--------+--------+--------+--------+
 | plat13 | plat14 | plat15 | plat16 |
-+--------+--------+-----------------+
-| lease1 | lease2 | empty  | empty  |
 +--------+--------+--------+--------+ --- plat client info ends here
-|  MAC1  |  MAC2  |  MAC3  |  MAC4  |
+| type   | length |  MAC1  |  MAC2  | type for basic info: 0x02
 +--------+--------+--------+--------+
-|  MAC5  |  MAC6  | empty  | #addr  |
+|  MAC3  |  MAC4  |  MAC5  |  MAC6  |
 +--------+--------+--------+--------+
 |addr1_1 |addr1_2 |addr1_3 |addr1_4 |
 +--------+--------+--------+--------+
@@ -249,17 +248,6 @@ MAC is the mac-address of the client
 addr1-addr# are 1-n ipv6 addresses.  
 plat is the plat-prefix used by this client.  
 lease is the remaining lease time of the clients ipv4 address in seconds.  
-
-Values of fields:  
-0x01 - the packet contains plat client info (plat prefix, leasetime)  
-0x02 - unused  
-0x04 - unused  
-0x08 - unused  
-0x10 - unused  
-0x20 - unused  
-0x40 - unused  
-0x80 - the packet contains basic client info (mac, ip addresses)
-
 
 ---
   
