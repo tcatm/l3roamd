@@ -147,6 +147,8 @@ addr contains the unknown ipv6-address.
 +--------+--------+--------+--------+
 |sender13|sender14|sender15|sender16|
 +--------+--------+--------+--------+ --- header ends here.
+|  type  | length | empty  | empty  | type for addr: 0x00
++--------+--------+--------+--------+
 | addr1  | addr2  | addr3  | addr4  |
 +--------+--------+--------+--------+
 | addr5  | addr6  | addr7  | addr8  |
@@ -177,10 +179,10 @@ CLAIM-packets have the following structure:
 +--------+--------+--------+--------+
 |sender13|sender14|sender15|sender16|
 +--------+--------+--------+--------+ --- header ends here.
-|  MAC1  |  MAC2  |  MAC3  |  MAC4  |
+|  type  | length |  MAC1  |  MAC2  | type for MAC: 0x00
 +--------+--------+--------+--------+
-|  MAC5  |  MAC6  |
-+-----------------+
+|  MAC3  |  MAC4  |  MAC5  |  MAC6  |
++-----------------------------------+
 ```
 MAC - is the mac-address of the client being claimed.
 
@@ -204,7 +206,7 @@ INFO-packets have the following structure:
 +--------+--------+--------+--------+
 |sender13|sender14|sender15|sender16|
 +--------+--------+--------+--------+ --- header ends here.
-| type   | length | lease1 | lease2 | type for plat info: 0x01
+| type   | length | lease1 | lease2 | type for plat info: 0x00
 +--------+--------+-----------------+
 | plat1  | plat2  | plat3  | plat4  |
 +--------+--------+--------+--------+
@@ -214,7 +216,7 @@ INFO-packets have the following structure:
 +--------+--------+--------+--------+
 | plat13 | plat14 | plat15 | plat16 |
 +--------+--------+--------+--------+ --- plat client info ends here
-| type   | length |  MAC1  |  MAC2  | type for basic info: 0x02
+| type   | length |  MAC1  |  MAC2  | type for basic info: 0x01
 +--------+--------+--------+--------+
 |  MAC3  |  MAC4  |  MAC5  |  MAC6  |
 +--------+--------+--------+--------+
@@ -244,7 +246,7 @@ INFO-packets have the following structure:
 +--------+--------+--------+--------+ --- basic client info ends here
 ```
 MAC is the mac-address of the client  
-#addr is the amount of client-6ipv6-addresses in the packet. There is a compile-time flag having a default of 32.  
+#addr is the amount of client-6ipv6-addresses (max 15) in the segment. 
 addr1-addr# are 1-n ipv6 addresses.  
 plat is the plat-prefix used by this client.  
 lease is the remaining lease time of the clients ipv4 address in seconds.  

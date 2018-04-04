@@ -202,13 +202,6 @@ void loop() {
 			if (l3ctx.debug) {
 				printf("handling event on fd %i. taskqueue.fd: %i routemgr: %i ipmgr: %i icmp6: %i icmp6.ns: %i arp: %i socket: %i, wifistations: %i, intercom_unicast_nodeip_fd: %i - ", events[i].data.fd, l3ctx.taskqueue_ctx.fd, l3ctx.routemgr_ctx.fd, l3ctx.ipmgr_ctx.fd, l3ctx.icmp6_ctx.fd, l3ctx.icmp6_ctx.nsfd, l3ctx.arp_ctx.fd, l3ctx.socket_ctx.fd, l3ctx.wifistations_ctx.fd, l3ctx.intercom_ctx.unicast_nodeip_fd);
 			}
-// TODO: what should we do with EAGAIN and why are we even receiving it ie on
-// routemgr
-// Mon Mar 12 01:02:24 2018 daemon.info l3roamd[6323]: Got packet from 2a06:8187:fbab:1:c66e:1fff:feb6:27da destined to 2a06:8187:fbab:2::2001
-// Mon Mar 12 01:02:24 2018 daemon.info l3roamd[6323]: handling event on fd 8. taskqueue.fd: 10 routemgr: 8 ipmgr: 6 icmp6: 11 icmp6.ns: 13 arp: 14 socket: 5, wifistations: 9, intercom_unicast_nodeip_fd: 4 - epoll error received on fd 8, continuing. taskqueue.fd: 10 routemgr: 8 ipmgr: 6 icmp6: 11 icmp6.ns: 13 arp: 14 socket: 5, wifistations: 9
-//Mon Mar 12 01:02:24 2018 daemon.err l3roamd[6323]: epoll error. Exiting now.: Resource temporarily unavailable
-// Mon Mar 12 01:02:24 2018 daemon.err l3roamd[6323]: Exiting. Removing routes for prefixes and clients.
-
 			if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) ||  (!(events[i].events & EPOLLIN || events[i].events & EPOLLET))) {
 				printf("epoll error received on fd %i, continuing. taskqueue.fd: %i routemgr: %i ipmgr: %i icmp6: %i icmp6.ns: %i arp: %i socket: %i, wifistations: %i\n", events[i].data.fd, l3ctx.taskqueue_ctx.fd, l3ctx.routemgr_ctx.fd, l3ctx.ipmgr_ctx.fd, l3ctx.icmp6_ctx.fd, l3ctx.icmp6_ctx.nsfd, l3ctx.arp_ctx.fd, l3ctx.socket_ctx.fd, l3ctx.wifistations_ctx.fd);
 				if (reconnect_fd(events[i].data.fd))
@@ -266,7 +259,7 @@ void usage() {
 	puts("  -d                 use debug logging");
 	puts("  -c <file>          configuration file"); // TODO: do we really need this?
 	puts("  -p <prefix>        Accept queries for this prefix. May be provided multiple times.");
-	puts("  -P <prefix>        Defines the node-client prefix. Default: fec0::/48.");
+	puts("  -P <prefix>        Defines the node-client prefix. Default: fec0::/64.");
 	puts("  -e <prefix>        Defines the plat-prefix if this node is to be a local exit. This must be a /96");
 	puts("  -s <socketpath>    provide statistics and allow control using this socket. See below for usage instructions.");
 	puts("  -i <clientif>      client interface");
@@ -350,8 +343,9 @@ int main(int argc, char *argv[]) {
 	l3ctx.l3device = strdup("l3roam0");
 
 	struct prefix _tprefix = {};
-	parse_prefix(&_tprefix, "fec0::/48");
+	parse_prefix(&_tprefix, "fec0::/64");
 	l3ctx.clientmgr_ctx.node_client_prefix = _tprefix;
+	l3ctx.clientmgr_ctx.platprefix_set = false;
 
 	int option_index = 0;
 	struct option long_options[] = {
@@ -363,7 +357,7 @@ int main(int argc, char *argv[]) {
 	};
 
 	int c;
-	while ((c = getopt_long(argc, argv, "dha:b:p:i:m:t:c:4:n:s:d:VD:P:", long_options, &option_index)) != -1)
+	while ((c = getopt_long(argc, argv, "dha:b:e:p:i:m:t:c:4:n:s:d:VD:P:", long_options, &option_index)) != -1)
 		switch (c) {
 			case 'V':
 				printf("l3roamd %s\n", SOURCE_VERSION);
@@ -396,15 +390,27 @@ int main(int argc, char *argv[]) {
 				l3ctx.clientmgr_ctx.node_client_prefix = _ncprefix;
 				break;
 			case 'p':
-				p_initialized=true;
+				{
+					struct prefix _prefix = {};
+					if (!parse_prefix(&_prefix, optarg))
+						exit_error("Can not parse prefix");
+					if (_prefix.plen != 64)
+						exit_error("IPv6 prefix must be /64");
+					add_prefix(&l3ctx.clientmgr_ctx.prefixes, _prefix);
+					p_initialized=true;
+				}
+				break;
+			case 'e':
+				{
+					struct prefix _prefix = {};
+					if (!parse_prefix(&_prefix, optarg))
+						exit_error("Can not parse PLAT-prefix");
+					if (_prefix.plen != 96)
+						exit_error("PLAT-prefix must be /96");
 
-				struct prefix _prefix = {};
-				if (!parse_prefix(&_prefix, optarg))
-					exit_error("Can not parse prefix");
-				if (_prefix.plen != 64)
-					exit_error("IPv6 prefix must be /64");
-
-				add_prefix(&l3ctx.clientmgr_ctx.prefixes, _prefix);
+					l3ctx.clientmgr_ctx.platprefix = _prefix.prefix;
+					l3ctx.clientmgr_ctx.platprefix_set = true;
+				}
 				break;
 			case '4':
 				if (!parse_prefix(&l3ctx.clientmgr_ctx.v4prefix, optarg))

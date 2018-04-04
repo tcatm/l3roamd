@@ -30,7 +30,7 @@ typedef struct client {
 	uint8_t mac[6];
 	VECTOR(struct client_ip) addresses;
 	int fd;
-	int fd2;
+	struct in6_addr platprefix;
 	bool node_ip_initialized;
 } client_t;
 
@@ -43,6 +43,8 @@ typedef struct {
 	struct prefix node_client_prefix;
 	client_vector clients;
 	client_vector oldclients;
+	struct in6_addr platprefix;
+	bool platprefix_set;
 } clientmgr_ctx;
 
 struct client_task {
@@ -57,7 +59,7 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 void clientmgr_remove_address(clientmgr_ctx *ctx, struct client *client, struct in6_addr *address);
 void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex);
 void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[6]);
-void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bool relinquished);
+void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client);
 void clientmgr_purge_clients(clientmgr_ctx *ctx);
 void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[6]);
 void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip, enum ip_state state);

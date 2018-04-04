@@ -12,31 +12,55 @@
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 
+#define L3ROAMD_PACKET_FORMAT_VERSION 0 
+#define INFO_MAX 15 // this amount * sizeof(in6_addr) + 6 (mac-address) + 2 (type, lenght) must fit into uint8_t. If we have more than 15 IP addresses for a single client, we could implement sending multiple segments of type INFO_BASIC.
+
 enum {INTERCOM_SEEK, INTERCOM_CLAIM, INTERCOM_INFO};
+enum {INFO_PLAT, INFO_BASIC};
+enum {CLAIM_MAC};
+enum {SEEK_ADDRESS};
 
 typedef struct __attribute__((__packed__)) {
+	uint8_t version;
 	uint8_t ttl;
-	uint32_t nonce;
 	uint8_t type;
+	uint8_t empty;
+	uint32_t nonce;
 	uint8_t sender[16];
 } intercom_packet_hdr;
 
 typedef struct __attribute__((__packed__)) {
 	intercom_packet_hdr hdr;
-	uint8_t address[16];
+	// after this a dynamic buffer is appended to hold TLV - currently just an ipv6 address is allowed
 } intercom_packet_seek;
 
 typedef struct __attribute__((__packed__)) {
 	intercom_packet_hdr hdr;
-	uint8_t mac[6];
+	// after this a dynamic buffer is appended to hold TLV. currently just mac address is allowed
 } intercom_packet_claim;
 
 typedef struct __attribute__((__packed__)) {
 	intercom_packet_hdr hdr;
-	uint8_t relinquished;
-	uint8_t mac[6];
-	uint8_t num_addresses;
+	// after this a dynamic buffer is appended for plat info and basic client info
 } intercom_packet_info;
+
+typedef struct __attribute__((__packed__)) {
+	uint8_t type;
+	uint8_t length;
+	uint16_t lease;
+	uint8_t platprefix[16];
+} intercom_packet_info_plat;
+
+typedef struct {
+	uint8_t mac[6];
+} claim;
+
+typedef struct __attribute__((__packed__)) {
+	uint8_t type;
+	uint8_t length;
+	uint8_t mac[6];
+	// afterwards an array of elements of type intercom_packet_info_entry is expected
+} intercom_packet_info_basic;
 
 typedef struct __attribute__((__packed__)) {
 	uint8_t address[16];
@@ -51,14 +75,13 @@ typedef struct {
 
 struct claim_task {
 	struct client *client;
-	uint8_t retries_left;
+	int packet_len;
+	intercom_packet_claim *packet;
 	struct in6_addr *recipient;
-	intercom_packet_claim packet;
+	uint8_t retries_left;
 	taskqueue_t *check_task;
 };
 
-typedef struct {
-} claim_t;
 
 typedef struct {
 	struct l3ctx *l3ctx;

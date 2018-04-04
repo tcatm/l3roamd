@@ -355,6 +355,7 @@ struct client *create_client(client_vector *vector, const uint8_t mac[6],const u
 	struct client *client = &VECTOR_INDEX(*vector, VECTOR_LEN(*vector) - 1);
 	client->ifindex = ifindex;
 	client->node_ip_initialized = false;
+	client->platprefix = l3ctx.clientmgr_ctx.platprefix;
 	return client;
 }
 
@@ -390,6 +391,7 @@ void client_copy_to_old(struct client *client) {
 	
 	struct client *_client = create_client(&l3ctx.clientmgr_ctx.oldclients,  client->mac, client->ifindex);
 	_client->timeout = then;
+	_client->platprefix = client->platprefix;
 
 	for (int i=VECTOR_LEN(client->addresses)-1;i>=0;i--) {
 		VECTOR_ADD(_client->addresses, VECTOR_INDEX(client->addresses, i));
@@ -532,6 +534,14 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 
 	ip->state = state;
 }
+
+
+void ipset_remove() {
+}
+
+void ipset_add() {
+}
+
 
 /** Check whether an IP address is contained in a client prefix.
   */
@@ -736,7 +746,7 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 
 /** Handle incoming client info.
   */
-void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bool relinquished) {
+void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
 	struct client *client = get_client(foreign_client->mac);
 	if (l3ctx.debug) {
 		printf("handling info message in clientmgr_handle_info() for foreign_client ");
@@ -764,8 +774,7 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bo
 		clientmgr_add_address(ctx, &foreign_ip->addr, foreign_client->mac, l3ctx.icmp6_ctx.ifindex);
 	}
 
-	if (relinquished)
-		add_special_ip(ctx, client);
+	add_special_ip(ctx, client);
 
 	printf("Client information merged into local client ");
 	print_client(client);
