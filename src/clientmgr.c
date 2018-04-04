@@ -414,6 +414,7 @@ void client_deactivate(struct client *client) {
 		if (ip)
 			client_ip_set_state(&l3ctx.clientmgr_ctx, _client, ip, IP_INACTIVE);
 	}
+	VECTOR_FREE(_client->addresses);
 	remove_special_ip(&l3ctx.clientmgr_ctx, _client);
 }
 
@@ -447,6 +448,7 @@ void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[6]) {
 			delete_client_ip(client, &e->addr, true);
 		}
 	}
+	VECTOR_FREE(client->addresses);
 
 	for (int i=VECTOR_LEN(ctx->clients)-1;i>=0;i--) {
 		if (memcmp(&(VECTOR_INDEX(ctx->clients, i).mac), mac, sizeof(uint8_t)*6) == 0) {
