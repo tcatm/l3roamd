@@ -135,7 +135,8 @@ void client_bridge_changed(const struct nlmsghdr *nh, const struct ifinfomsg *ms
 	memset(tb, 0, sizeof(struct rtattr *) * (IFLA_MAX + 1));
 	char ifname[IFNAMSIZ];
 	char str_mac[6*3];
-	if_indextoname(msg->ifi_index,ifname);
+	if (if_indextoname(msg->ifi_index,ifname) == 0)
+		return;
 
 	if (!strncmp(ifname,l3ctx.routemgr_ctx.client_bridge,strlen(ifname))) {
 

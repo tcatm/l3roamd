@@ -23,8 +23,6 @@
 
 #define CLAIM_RETRY_MAX 5
 
-// Announce at most 32 addresses per client
-#define INFO_MAX 32
 
 void schedule_claim_retry(struct claim_task*, int timeout);
 
@@ -93,7 +91,7 @@ void obtainll(const char *ifname, struct in6_addr *ret) {
 	struct ifaddrs *ifap, *ifa;
 	struct sockaddr_in6 *sa;
 	struct in6_addr ll = {};
-	
+
 	inet_pton(AF_INET6, "fe80::", &ll);
 
 	getifaddrs (&ifap);
@@ -101,7 +99,7 @@ void obtainll(const char *ifname, struct in6_addr *ret) {
 		if (ifa->ifa_addr && ifa->ifa_addr->sa_family==AF_INET6) {
 			if (!memcmp(ifname, ifa->ifa_name, strlen(ifname))) {
 				sa = (struct sockaddr_in6 *) ifa->ifa_addr;
-				struct prefix p = { 
+				struct prefix p = {
 					.plen = 64,
 					.prefix = ll
 				};
@@ -128,7 +126,6 @@ void intercom_init(intercom_ctx *ctx) {
 		.sin6_port = htons(INTERCOM_PORT),
 	};
 
-	
 	// bind sockets to receive multicast
 	for (int i=VECTOR_LEN(ctx->interfaces)-1;i>=0;i--) {
 		int fd = socket(PF_INET6, SOCK_DGRAM | SOCK_NONBLOCK, 0);
@@ -143,26 +140,6 @@ void intercom_init(intercom_ctx *ctx) {
 
 		VECTOR_INDEX(ctx->interfaces, i).mcast_recv_fd = fd;
 		printf("ASSIGNING fd: %i to mcast_recv_fd on interface %s\n", fd, VECTOR_INDEX(ctx->interfaces, i).ifname);
-
-	 /*
-	   // this will bind sockets meant to write data on ll-address of an interface
-		if (l3ctx.debug)
-			printf("binding to address on interface %s\n", VECTOR_INDEX(ctx->interfaces, i).ifname);
-
-		int fd = socket(PF_INET6, SOCK_DGRAM | SOCK_NONBLOCK, 0);
-		if (fd < 0)
-			exit_error("creating socket");
-
-		server_addr.sin6_scope_id = VECTOR_INDEX(ctx->interfaces, i).ifindex;
-		obtainll(VECTOR_INDEX(ctx->interfaces, i).ifname, &server_addr.sin6_addr);
-
-		if (bind(fd, (struct sockaddr *)&server_addr, sizeof(struct sockaddr_in6)) < 0) {
-			perror("bind to ll-address failed");
-			exit(EXIT_FAILURE);
-		}
-
-		VECTOR_ADD(ctx->send_fd, fd);
-		*/
 	}
 
 	struct sockaddr_in6 server_addr = {
@@ -185,25 +162,87 @@ void intercom_init(intercom_ctx *ctx) {
 	intercom_update_interfaces(ctx);
 }
 
-void assemble_header(intercom_packet_hdr  *hdr, int ttl, uint8_t type) {
+int assemble_header(intercom_packet_hdr  *hdr, uint8_t ttl, uint8_t type) {
 	uint32_t nonce;
 	hdr->type = type;
+	hdr->version = L3ROAMD_PACKET_FORMAT_VERSION;
 	hdr->ttl = ttl;
+	hdr->empty = 0;
 	obtainrandom(&nonce, sizeof(uint32_t), 0);
 	hdr->nonce = htonl(nonce);
 	memcpy(&hdr->sender, &l3ctx.intercom_ctx.ip, 16);
+
+	return sizeof(intercom_packet_hdr);
 }
 
+
+int assemble_seek_address(uint8_t *packet, const struct in6_addr *address) {
+	packet[0] = SEEK_ADDRESS;
+	packet[1] = 20;
+	packet[2] = packet[3] = 0;
+	memcpy(&packet[4], address, 16);
+
+	return packet[1];
+}
+
+int assemble_macinfo(uint8_t *packet, uint8_t *mac, uint8_t type) {
+	packet[0] = type;
+	packet[1] = 8;
+	memcpy(&packet[2], mac, 6);
+	return packet[1];
+}
+
+uint8_t assemble_platinfo(void *packet) {
+	uint8_t length = 20;
+	uint8_t type = INFO_PLAT;
+	uint16_t lease=htons(0);
+	printf("type %i, packet: %p\n", type, packet);
+	memcpy(packet, &type, 1);
+	memcpy(packet + 1, &length, 1);
+	memcpy(packet + 2, &lease , 2);
+	memcpy(packet + 4, &l3ctx.clientmgr_ctx.platprefix, 16);
+	return length;
+}
+
+uint8_t assemble_basicinfo(void *packet, struct client *client) {
+	uint8_t num_addresses = 0;
+	int type = INFO_BASIC;
+	memcpy(packet, &type, 1);
+	memcpy(packet+2, client->mac, 6);
+
+	intercom_packet_info_entry *entry = (intercom_packet_info_entry*)((uint8_t*)(packet) + sizeof(client->mac) + 1 + 1 );
+
+	for (int i = 0; i < VECTOR_LEN(client->addresses) && num_addresses < INFO_MAX; i++) {
+		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
+		if (ip_is_active(ip)) {
+			memcpy(&entry->address, ip->addr.s6_addr, sizeof(uint8_t) * 16);
+			entry++;
+			num_addresses++;
+		}
+	}
+
+	if (l3ctx.debug) {
+		printf("added %i addresses to info packet for client ", num_addresses);
+		print_client(client);
+	}
+
+	// fill length field
+	uint8_t length = num_addresses * sizeof(intercom_packet_info_entry) + sizeof(client->mac) + 2;
+	memcpy(packet+1, &length, 1);
+	return length;
+}
+
+
 void intercom_seek(intercom_ctx *ctx, const struct in6_addr *address) {
-	intercom_packet_seek packet;
+	intercom_packet_seek *packet = malloc(sizeof(intercom_packet_seek) + 20);
 
-	assemble_header(&packet.hdr, 255, INTERCOM_SEEK);
+	int offset = assemble_header(&packet->hdr, 255, INTERCOM_SEEK);
+	offset += assemble_seek_address((void*)packet + offset, address);
 
-	memcpy(&packet.address, address, 16);
+	intercom_recently_seen_add(ctx, &packet->hdr);
 
-	intercom_recently_seen_add(ctx, &packet.hdr);
-
-	intercom_send_packet(ctx, (uint8_t*)&packet, sizeof(packet));
+	intercom_send_packet(ctx, (uint8_t*)packet, offset);
+	free(packet);
 }
 
 bool intercom_send_packet_unicast(intercom_ctx *ctx, const struct in6_addr *recipient, uint8_t *packet, ssize_t packet_len) {
@@ -213,6 +252,7 @@ bool intercom_send_packet_unicast(intercom_ctx *ctx, const struct in6_addr *reci
 		.sin6_addr = *recipient
 	};
 
+	// printf("fd: %i, packet %p, length: %zi\n", ctx->unicast_nodeip_fd, packet, packet_len);
 	ssize_t rc = sendto(ctx->unicast_nodeip_fd, packet, packet_len, 0, (struct sockaddr*)&addr, sizeof(addr));
 	if (l3ctx.debug) {
 		printf("sent intercom packet rc: %zi to ", rc);
@@ -266,26 +306,111 @@ void intercom_recently_seen_add(intercom_ctx *ctx, intercom_packet_hdr *hdr) {
 	VECTOR_ADD(ctx->recent_packets, *hdr);
 }
 
-void intercom_handle_seek(intercom_ctx *ctx, intercom_packet_seek *packet) {
-	struct in6_addr *address = (struct in6_addr *)packet->address;
-
-	printf("\x1b[36mSEEK: Looking for ");
-	print_ip(address, "\x1b[0m\n");
-
-	if (clientmgr_is_ipv4(CTX(clientmgr), address))
-		arp_send_request(CTX(arp), address);
-	else
-		icmp6_send_solicitation(CTX(icmp6), address);
+int parse_address(const uint8_t *packet, struct in6_addr *address){
+	printf("parsing seek packet segment: address\n");
+	memcpy(address, &packet[4],16);
+	return packet[1];
 }
 
-void intercom_handle_claim(intercom_ctx *ctx, intercom_packet_claim *packet) {
-	struct in6_addr sender;
+int parse_mac(const uint8_t *packet, claim *claim){
+	printf("parsing claim packet segment: mac\n");
+	memcpy(claim, &packet[2],6);
+	return packet[1];
+}
 
+int parse_plat(const uint8_t *packet, struct client *client){
+	// TODO: implement me
+	printf("parsing info packet plat\n");
+	return packet[1];
+}
+
+int parse_basic(const uint8_t *packet,  struct client *client){
+	memcpy(client->mac, &packet[2], sizeof(uint8_t) * 6);
+	uint8_t length = packet[1];
+	int num_addresses = (length - 2 - 6) / 16;
+
+	if (l3ctx.debug) {
+		printf("handling info segment with %i addresses for client ", num_addresses);
+		print_client(client);
+	}
+
+	struct client_ip ip = { 0 };
+	ip.state = IP_INACTIVE;
+
+	intercom_packet_info_entry *entry = (intercom_packet_info_entry*)(packet + 8);
+
+	for (int i = 0; i < num_addresses; i++) {
+		memcpy(&ip.addr.s6_addr, &entry->address, sizeof(uint8_t) * 16);
+		VECTOR_ADD(client->addresses, ip);
+		if (l3ctx.debug)
+			print_ip(&ip.addr, " learnt from info packet\n");
+		entry++;
+	}
+
+	return length;
+}
+
+// handler returns true if packet should be forwarded
+bool intercom_handle_seek(intercom_ctx *ctx, intercom_packet_seek *packet, int packet_len) {
+	struct in6_addr address= {};
+	int currentoffset = sizeof(intercom_packet_info);
+	uint8_t *packetpointer;
+	uint8_t type;
+
+	while (currentoffset < packet_len) {
+		packetpointer = &((uint8_t*)packet)[currentoffset];
+		type = *packetpointer;
+		if (l3ctx.debug)
+			printf("offset: %i %p %p\n", currentoffset, packet ,packetpointer);
+		switch (type) {
+			case SEEK_ADDRESS:
+				currentoffset += parse_address(packetpointer, &address);
+
+				printf("\x1b[36mSEEK: Looking for ");
+				print_ip(&address, "\x1b[0m\n");
+
+				if (clientmgr_is_ipv4(CTX(clientmgr), &address))
+					arp_send_request(CTX(arp), &address);
+				else
+					icmp6_send_solicitation(CTX(icmp6), &address);
+				break;
+			default:
+				printf("unknown segment of type %i found in info packet. ignoring this piece\n", type);
+				break;
+
+		}
+	}
+	return true;
+}
+
+bool intercom_handle_claim(intercom_ctx *ctx, intercom_packet_claim *packet, int packet_len) {
+	struct in6_addr sender;
+	int currentoffset = sizeof(intercom_packet_info);
+	uint8_t *packetpointer;
+	uint8_t type;
+
+	claim claim = { };
 	memcpy(&sender.s6_addr, &packet->hdr.sender, sizeof(uint8_t) * 16);
 	printf("handling claim from: ");
 	print_ip(&sender, "\n");
 
-	clientmgr_handle_claim(CTX(clientmgr), &sender, packet->mac);
+	while (currentoffset < packet_len) {
+		packetpointer = &((uint8_t*)packet)[currentoffset];
+		type = *packetpointer;
+		if (l3ctx.debug)
+			printf("offset: %i %p %p\n", currentoffset, packet ,packetpointer);
+		switch (type) {
+			case CLAIM_MAC:
+				currentoffset += parse_mac(packetpointer, &claim);
+				break;
+			default:
+				printf("unknown segment of type %i found in info packet. ignoring this piece\n", type);
+				break;
+
+		}
+	}
+
+	return !clientmgr_handle_claim(CTX(clientmgr), &sender, claim.mac);
 }
 
 
@@ -318,66 +443,76 @@ bool find_repeatable_claim(uint8_t mac[6], int *index) {
 	return false;
 }
 
-
-void intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet) {
-	struct timespec now;
-	clock_gettime(CLOCK_MONOTONIC, &now);
+bool intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet, int packet_len) {
+	uint8_t type, *packetpointer;
 	struct client client = { 0 };
-
-	memcpy(client.mac, &packet->mac, sizeof(uint8_t) * 6);
-
-	printf("handling info with %i addresses for client ", packet->num_addresses);
-	print_client(&client);
-
+	int currentoffset = sizeof(intercom_packet_info);
 	struct in6_addr sender;
+
 	memcpy(&sender.s6_addr, &packet->hdr.sender, sizeof(uint8_t) * 16);
-	print_ip(&sender, "\n");
 
-	int i = 0;
-	if (find_repeatable_claim(packet->mac, &i))
-		VECTOR_DELETE(ctx->repeatable_claims, i);
-
-	struct client_ip ip = { 0 };
-	ip.state = IP_INACTIVE;
-
-	intercom_packet_info_entry *entry = (intercom_packet_info_entry*)((uint8_t*)(packet) + sizeof(intercom_packet_info));
-
-	for (i = 0; i < packet->num_addresses; i++) {
-		memcpy(&ip.addr.s6_addr, &entry->address, sizeof(uint8_t) * 16);
-		VECTOR_ADD(client.addresses, ip);
-		if (l3ctx.debug)
-			print_ip(&ip.addr, " learnt from info packet\n");
-		entry++;
+	if (l3ctx.debug) {
+		printf("parsing info packet with length %i from: ", packet_len);
+		print_ip(&sender, "\n");
 	}
 
-	clientmgr_handle_info(CTX(clientmgr), &client, packet->relinquished);
+	while (currentoffset < packet_len) {
+		packetpointer = &((uint8_t*)packet)[currentoffset];
+		type = *packetpointer;
+		if (l3ctx.debug)
+			printf("offset: %i %p %p\n", currentoffset, packet ,packetpointer);
+		switch (type) {
+			case INFO_PLAT:
+				currentoffset += parse_plat(packetpointer, &client);
+				break;
+			case INFO_BASIC:
+				currentoffset += parse_basic( packetpointer, &client);
+				break;
+			default:
+				printf("unknown segment of type %i found in info packet. ignoring this piece\n", type);
+				break;
+
+		}
+	}
+
+	int i = 0;
+	if (find_repeatable_claim(client.mac, &i))
+		VECTOR_DELETE(ctx->repeatable_claims, i);
+
+	bool acted_on_local_client = clientmgr_handle_info(CTX(clientmgr), &client);
+
+	VECTOR_FREE(client.addresses);
+	return !acted_on_local_client;
 }
 
 void intercom_handle_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len) {
 	intercom_packet_hdr *hdr = (intercom_packet_hdr*) packet;
+	bool forward = true;
 
-	hdr->nonce = ntohl(hdr->nonce);
+	if (hdr->version == L3ROAMD_PACKET_FORMAT_VERSION) {
 
-	if (intercom_recently_seen(ctx, hdr))
-		return;
+		if (intercom_recently_seen(ctx, hdr))
+			return;
 
-	intercom_recently_seen_add(ctx, hdr);
-// TODO: if the claim was for a local client, there is no need to forward the claim further.
-// TODO: if the seek was for a local client, there is no need to forward the seek further.
-	if (hdr->type == INTERCOM_SEEK)
-		intercom_handle_seek(ctx, (intercom_packet_seek*)packet);
+		intercom_recently_seen_add(ctx, hdr);
+		if (hdr->type == INTERCOM_SEEK)
+			forward = intercom_handle_seek(ctx, (intercom_packet_seek*)packet, packet_len);
 
-	if (hdr->type == INTERCOM_CLAIM)
-		intercom_handle_claim(ctx, (intercom_packet_claim*)packet);
+		if (hdr->type == INTERCOM_CLAIM)
+			forward = intercom_handle_claim(ctx, (intercom_packet_claim*)packet, packet_len);
 
-	if (hdr->type == INTERCOM_INFO)
-		intercom_handle_info(ctx, (intercom_packet_info*)packet);
+		if (hdr->type == INTERCOM_INFO)
+			forward = intercom_handle_info(ctx, (intercom_packet_info*)packet, packet_len);
 
-	hdr->ttl--;
-
-
-	if (hdr->ttl > 0)
-		intercom_send_packet(ctx, packet, packet_len);
+		hdr->ttl--;
+		if (hdr->ttl > 0 && forward)
+			intercom_send_packet(ctx, packet, packet_len);
+	}
+	else {
+		// if the packet version is unknown we cannot decrement ttl because we do not know where it is in the packet. Also the check whether we have already seen it fails.
+		// all we can do is self-preservation and not crash and forward. However if we forward while having no already_seen_checks we will break the network. => dropping the packet.
+		printf("unknown packet with version %i received on intercom. Ignoring content and dropping the packet\n", hdr->version);
+	}
 }
 
 void intercom_handle_in(intercom_ctx *ctx, int fd) {
@@ -396,6 +531,7 @@ void intercom_handle_in(intercom_ctx *ctx, int fd) {
 			   if the last intercom packet was a claim for a local client, then we have just dropped the local client and will receive EBADF on the fd for the node-client-IP. This is not an error.*/
 			if (errno == EBADF) {
 				perror("read error - if we just dropped a local client due to this intercom packet being a claim then this is all right. otherwise there is something crazy going on. - returning to the main loop");
+				printf("fd: %i\n", fd);
 			}
 			else if (errno != EAGAIN) {
 				perror("read error - this should not happen - going back to main loop");
@@ -412,48 +548,34 @@ void intercom_handle_in(intercom_ctx *ctx, int fd) {
 	}
 }
 
-
 /* recipient = NULL -> send to neighbours */
 void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client, bool relinquished) {
-	intercom_packet_info *packet = malloc(sizeof(intercom_packet_info) + INFO_MAX * sizeof(intercom_packet_info_entry));
+	char str_mac[18];
+
+	intercom_packet_info *packet = malloc(sizeof(intercom_packet_info) + sizeof(intercom_packet_info_plat) +  (8 + INFO_MAX * sizeof(intercom_packet_info_entry)));
 	if (packet == NULL) {
 		exit_error("could not allocate memory when generating info packet");
 	}
+	printf("allocated packet at %p\n", packet);
 
-	packet->relinquished = relinquished;
-	packet->num_addresses = 0;
+	mac_addr_n2a(str_mac, client->mac);
 
-	char str_mac[18];
+	printf("packet %p\n", packet);
 
-	assemble_header(&packet->hdr, 255, INTERCOM_INFO);
-	memcpy(&packet->mac, client->mac, sizeof(uint8_t) * 6);
+	int currentoffset = assemble_header(&packet->hdr, 255, INTERCOM_INFO);
+	printf("currentoffset: %i\n", currentoffset);
 
-	intercom_packet_info_entry *entry = (intercom_packet_info_entry*)((uint8_t*)(packet) + sizeof(intercom_packet_info));
+	currentoffset += assemble_platinfo((void*)packet + currentoffset );
+	currentoffset += assemble_basicinfo((void*)packet + currentoffset, client);
 
-	for (int i = 0; i < VECTOR_LEN(client->addresses) && packet->num_addresses < INFO_MAX; i++) {
-		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
-		if (ip_is_active(ip)) {
-			memcpy(&entry->address, ip->addr.s6_addr, sizeof(uint8_t) * 16);
-			entry++;
-			packet->num_addresses++;
-		}
-	}
-
-	if (l3ctx.debug) {
-		mac_addr_n2a(str_mac, client->mac);
-		printf("sending info with %i addresses for client ", packet->num_addresses);
-		print_client(client);
-	}
-
-	ssize_t packet_len = sizeof(intercom_packet_info) + packet->num_addresses * sizeof(intercom_packet_info_entry);
 
 	if (recipient != NULL) {
 		packet->hdr.ttl = 1;
 		if (l3ctx.debug) {
-			printf("sending unicast info for client %s to ",  str_mac);
+			printf("sending unicast info with length %i for client %s to ",  currentoffset, str_mac);
 			print_ip(recipient, "\n");
 		}
-		intercom_send_packet_unicast(ctx, recipient, (uint8_t*)packet, packet_len);
+		intercom_send_packet_unicast(ctx, recipient, (uint8_t*)packet, currentoffset);
 	}
 	else {
 		// forward packet to other l3roamd instances
@@ -461,7 +583,7 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 			printf("sending info for client %s to l3roamd neighbours\n", str_mac);
 
 		intercom_recently_seen_add(ctx, &packet->hdr);
-		intercom_send_packet(ctx, (uint8_t*)packet, packet_len);
+		intercom_send_packet(ctx, (uint8_t*)packet, currentoffset);
 	}
 	free(packet);
 }
@@ -472,22 +594,23 @@ void claim_retry_task(void *d) {
 	int repeatable_claim_index;
 	if (!find_repeatable_claim(data->client->mac, &repeatable_claim_index))
 		return;
+	printf("claim_retry_taks for packet: %p\n", data->packet);
 
 	if (data->recipient != NULL) {
 		if (l3ctx.debug) {
 			printf("sending unicast claim for client %02x:%02x:%02x:%02x:%02x:%02x to ",  data->client->mac[0], data->client->mac[1], data->client->mac[2], data->client->mac[3], data->client->mac[4], data->client->mac[5]);
 			print_ip(data->recipient, "\n");
 		}
-		if (!intercom_send_packet_unicast(&l3ctx.intercom_ctx, data->recipient, (uint8_t*)&data->packet, sizeof(data->packet)) ) {
-			intercom_recently_seen_add(&l3ctx.intercom_ctx, &data->packet.hdr);
-			intercom_send_packet(&l3ctx.intercom_ctx, (uint8_t*)&data->packet, sizeof(data->packet)); // sending unicast did not work (node too new in the network?), fall back to multicast
+		if (!intercom_send_packet_unicast(&l3ctx.intercom_ctx, data->recipient, (uint8_t*)data->packet, data->packet_len) ) {
+			intercom_recently_seen_add(&l3ctx.intercom_ctx, &data->packet->hdr);
+			intercom_send_packet(&l3ctx.intercom_ctx, (uint8_t*)data->packet, data->packet_len); // sending unicast did not work (node too new in the network OR client new to the network), fall back to multicast for now. Althogh this puts unnecessary load on the intercom network whenever a truly new client appears.
 		}
 	} else {
 		if (l3ctx.debug) {
 			printf("sending multicast claim for client %02x:%02x:%02x:%02x:%02x:%02x\n",  data->client->mac[0], data->client->mac[1], data->client->mac[2], data->client->mac[3], data->client->mac[4], data->client->mac[5]);
 		}
-		intercom_recently_seen_add(&l3ctx.intercom_ctx, &data->packet.hdr);
-		intercom_send_packet(&l3ctx.intercom_ctx, (uint8_t*)&data->packet, sizeof(data->packet));
+		intercom_recently_seen_add(&l3ctx.intercom_ctx, &data->packet->hdr);
+		intercom_send_packet(&l3ctx.intercom_ctx, (uint8_t*)&data->packet, data->packet_len);
 	}
 
 	if (data->retries_left > 0)
@@ -503,6 +626,7 @@ void claim_retry_task(void *d) {
 
 void free_claim_task(void *d) {
 	struct claim_task *data = d;
+	free(data->packet);
 	free(data->client);
 	free(data->recipient);
 	free(data);
@@ -510,19 +634,33 @@ void free_claim_task(void *d) {
 
 void schedule_claim_retry(struct claim_task *data, int timeout) {
 	struct claim_task *ndata = calloc(1, sizeof(struct claim_task));
+
 	ndata->client = malloc(sizeof(struct client));
+	if (! ndata->client) {
+		perror("malloc");
+		exit_error("could not allocate memory for claim - client");
+	}
 	memcpy(ndata->client, data->client,sizeof(struct client));
-	ndata->retries_left = data->retries_left -1;
-	ndata->packet = data->packet;
+
+
+	ndata->packet_len = data->packet_len;
+	ndata->packet = malloc(data->packet_len);
+	if (! ndata->packet) {
+		perror("malloc");
+		exit_error("could not allocate memory for claim packet");
+	}
+	memcpy(ndata->packet, data->packet, ndata->packet_len);
+	printf("old location of packet: %p new location: %p\n", data->packet, ndata->packet);
+
 	ndata->recipient = NULL;
 	if (data->recipient) {
 		ndata->recipient = calloc(1, sizeof(struct in6_addr));
 		memcpy(ndata->recipient, data->recipient, sizeof(struct in6_addr));
 	}
-	ndata->check_task = data->check_task;
 
-	if (data->check_task == NULL && data->retries_left > 0)
-		data->check_task = post_task(&l3ctx.taskqueue_ctx, timeout, 0, claim_retry_task, free_claim_task, ndata);
+	ndata->retries_left = data->retries_left -1;
+	if (data->retries_left > 0)
+		ndata->check_task = post_task(&l3ctx.taskqueue_ctx, timeout, 0, claim_retry_task, free_claim_task, ndata);
 }
 
 bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client) {
@@ -543,32 +681,38 @@ bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct 
 			printf("CLAIMING client [%s]\n", mac_str);
 	}
 
-	intercom_packet_claim packet;
+	struct claim_task *data = malloc(sizeof(struct claim_task)) ;
 
-	assemble_header(&packet.hdr, 255, INTERCOM_CLAIM);
+	data->packet = malloc(sizeof(intercom_packet_claim) + 8);
+	if (!data->packet) {
+		perror("malloc");
+		exit_error("could not allocate packet for claim");
+	}
+	printf("allocated: %zi Bytes at %p\n", sizeof(intercom_packet_claim) + 8, data->packet);
 
-	memcpy(&packet.mac, client->mac, 6);
+	int offset = assemble_header(&data->packet->hdr, 255, INTERCOM_CLAIM);
 
-	intercom_recently_seen_add(ctx, &packet.hdr);
+	printf("offset: %i\n", offset);
+	offset += assemble_macinfo((void*)(data->packet) + offset, client->mac, CLAIM_MAC);
+	data->packet_len = offset;
+	printf("offset: %i\n", offset);
+
+	intercom_recently_seen_add(ctx, &data->packet->hdr);
 
 	VECTOR_ADD(ctx->repeatable_claims, *client);
 
-	struct claim_task data ;
-	data.client = malloc(sizeof(struct client));
-	memcpy(data.client, client,sizeof(struct client));
-	data.retries_left = CLAIM_RETRY_MAX;
-	data.packet = packet;
-	data.check_task = NULL;
-	data.recipient = NULL;
+	data->client = malloc(sizeof(struct client));
+	memcpy(data->client, client,sizeof(struct client));
+	data->retries_left = CLAIM_RETRY_MAX;
+	data->check_task = NULL;
+	data->recipient = NULL;
 
 	if (recipient) {
-		data.recipient = malloc(sizeof(struct in6_addr));
-		memcpy(data.recipient, recipient, sizeof(struct in6_addr));
-		packet.hdr.ttl = 1; // when sending unicast, do not continue to forward this packet at the destination
+		data->recipient = malloc(sizeof(struct in6_addr));
+		memcpy(data->recipient, recipient, sizeof(struct in6_addr));
+		data->packet->hdr.ttl = 1; // when sending unicast, do not continue to forward this packet at the destination
 	}
 
-	schedule_claim_retry(&data, 0);
-	free(data.recipient);
-	free(data.client);
+	data->check_task = post_task(&l3ctx.taskqueue_ctx, 0, 0, claim_retry_task, free_claim_task, data);
 	return true;
 }

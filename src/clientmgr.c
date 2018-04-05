@@ -355,6 +355,7 @@ struct client *create_client(client_vector *vector, const uint8_t mac[6],const u
 	struct client *client = &VECTOR_INDEX(*vector, VECTOR_LEN(*vector) - 1);
 	client->ifindex = ifindex;
 	client->node_ip_initialized = false;
+	client->platprefix = l3ctx.clientmgr_ctx.platprefix;
 	return client;
 }
 
@@ -390,6 +391,7 @@ void client_copy_to_old(struct client *client) {
 	
 	struct client *_client = create_client(&l3ctx.clientmgr_ctx.oldclients,  client->mac, client->ifindex);
 	_client->timeout = then;
+	_client->platprefix = client->platprefix;
 
 	for (int i=VECTOR_LEN(client->addresses)-1;i>=0;i--) {
 		VECTOR_ADD(_client->addresses, VECTOR_INDEX(client->addresses, i));
@@ -412,6 +414,7 @@ void client_deactivate(struct client *client) {
 		if (ip)
 			client_ip_set_state(&l3ctx.clientmgr_ctx, _client, ip, IP_INACTIVE);
 	}
+	VECTOR_FREE(_client->addresses);
 	remove_special_ip(&l3ctx.clientmgr_ctx, _client);
 }
 
@@ -445,6 +448,7 @@ void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[6]) {
 			delete_client_ip(client, &e->addr, true);
 		}
 	}
+	VECTOR_FREE(client->addresses);
 
 	for (int i=VECTOR_LEN(ctx->clients)-1;i>=0;i--) {
 		if (memcmp(&(VECTOR_INDEX(ctx->clients, i).mac), mac, sizeof(uint8_t)*6) == 0) {
@@ -532,6 +536,14 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 
 	ip->state = state;
 }
+
+
+void ipset_remove() {
+}
+
+void ipset_add() {
+}
+
 
 /** Check whether an IP address is contained in a client prefix.
   */
@@ -701,9 +713,9 @@ void purge_oldclients_task() {
 	post_task(&l3ctx.taskqueue_ctx, OLDCLIENTS_KEEP_SECONDS, 0, purge_oldclients_task, NULL, NULL);
 }
 
-/** Handle claim (info request).
+/** Handle claim (info request). return true if we acted on a local client, false otherwise
   */
-void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[6]) {
+bool clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[6]) {
 	bool old = false;
 	struct client *client = get_client(mac);
 	if (client == NULL) {
@@ -720,7 +732,7 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 	}
 
 	if (client == NULL)
-		return;
+		return false;
 
 //	bool active = client_is_active(client);
 
@@ -732,11 +744,12 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 		print_ip(sender, "\n");
 		clientmgr_delete_client(ctx, client->mac);
 	}
+	return true;
 }
 
-/** Handle incoming client info.
+/** Handle incoming client info. return true if we acted on local client, false otherwise
   */
-void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bool relinquished) {
+bool clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
 	struct client *client = get_client(foreign_client->mac);
 	if (l3ctx.debug) {
 		printf("handling info message in clientmgr_handle_info() for foreign_client ");
@@ -746,7 +759,7 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bo
 	if (client == NULL) {
 		if (l3ctx.debug)
 			printf("received info message for client but client is either not locally connected - discarding message\n");
-		return;
+		return false;
 	}
 
 	for (int i = VECTOR_LEN(foreign_client->addresses) - 1; i >= 0; i--) {
@@ -764,12 +777,12 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client, bo
 		clientmgr_add_address(ctx, &foreign_ip->addr, foreign_client->mac, l3ctx.icmp6_ctx.ifindex);
 	}
 
-	if (relinquished)
-		add_special_ip(ctx, client);
+	add_special_ip(ctx, client);
 
 	printf("Client information merged into local client ");
 	print_client(client);
 	printf("\n");
+	return true;
 }
 
 void clientmgr_init() {
