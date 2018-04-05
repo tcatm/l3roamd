@@ -279,69 +279,61 @@ void intercom_recently_seen_add(intercom_ctx *ctx, intercom_packet_hdr *hdr) {
 	VECTOR_ADD(ctx->recent_packets, *hdr);
 }
 
-int parse_address(uint8_t *packet, struct in6_addr *address){
+int parse_address(const uint8_t *packet, struct in6_addr *address){
 	printf("parsing seek packet segment: address\n");
 	memcpy(address, &packet[4],16);
 	return packet[1];
 }
 
-void intercom_handle_seek(intercom_ctx *ctx, intercom_packet_seek *packet, int packet_len) {
-	if (packet->hdr.version == 0) {
-		struct in6_addr address= {};
-		int currentoffset = sizeof(intercom_packet_info);
-		uint8_t *packetpointer;
-		uint8_t type;
+// handler returns true if packet should be forwarded
+bool intercom_handle_seek(intercom_ctx *ctx, intercom_packet_seek *packet, int packet_len) {
+	struct in6_addr address= {};
+	int currentoffset = sizeof(intercom_packet_info);
+	uint8_t *packetpointer;
+	uint8_t type;
 
-		while (currentoffset < packet_len) {
-			packetpointer = &((uint8_t*)packet)[currentoffset];
-			type = *packetpointer;
-			if (l3ctx.debug)
-				printf("offset: %i %p %p\n", currentoffset, packet ,packetpointer);
-			switch (type) {
-				case SEEK_ADDRESS:
-					currentoffset += parse_address(packetpointer, &address);
+	while (currentoffset < packet_len) {
+		packetpointer = &((uint8_t*)packet)[currentoffset];
+		type = *packetpointer;
+		if (l3ctx.debug)
+			printf("offset: %i %p %p\n", currentoffset, packet ,packetpointer);
+		switch (type) {
+			case SEEK_ADDRESS:
+				currentoffset += parse_address(packetpointer, &address);
 
-					printf("\x1b[36mSEEK: Looking for ");
-					print_ip(&address, "\x1b[0m\n");
+				printf("\x1b[36mSEEK: Looking for ");
+				print_ip(&address, "\x1b[0m\n");
 
-					if (clientmgr_is_ipv4(CTX(clientmgr), &address))
-						arp_send_request(CTX(arp), &address);
-					else
-						icmp6_send_solicitation(CTX(icmp6), &address);
-					break;
-				default:
-					printf("unknown segment of type %i found in info packet. ignoring this piece\n", type);
-					break;
+				if (clientmgr_is_ipv4(CTX(clientmgr), &address))
+					arp_send_request(CTX(arp), &address);
+				else
+					icmp6_send_solicitation(CTX(icmp6), &address);
+				break;
+			default:
+				printf("unknown segment of type %i found in info packet. ignoring this piece\n", type);
+				break;
 
-			}
 		}
-	} else {
-		printf("received packet with unknown version field, ignoring packet.\n");
-		return;
 	}
+	return true;
 }
 
-int parse_mac(uint8_t *packet, claim *claim){
+int parse_mac(const uint8_t *packet, claim *claim){
 	printf("parsing claim packet segment: mac\n");
 	memcpy(claim, &packet[2],6);
 	return packet[1];
 }
 
-void intercom_handle_claim(intercom_ctx *ctx, intercom_packet_claim *packet, int packet_len) {
+bool intercom_handle_claim(intercom_ctx *ctx, intercom_packet_claim *packet, int packet_len) {
 	struct in6_addr sender;
 	int currentoffset = sizeof(intercom_packet_info);
 	uint8_t *packetpointer;
 	uint8_t type;
 
 	claim claim = { };
-	if (packet->hdr.version == 0) {
-		memcpy(&sender.s6_addr, &packet->hdr.sender, sizeof(uint8_t) * 16);
-		printf("handling claim from: ");
-		print_ip(&sender, "\n");
-	} else {
-		printf("received packet with unknown version field, ignoring packet.\n");
-		return;
-	}
+	memcpy(&sender.s6_addr, &packet->hdr.sender, sizeof(uint8_t) * 16);
+	printf("handling claim from: ");
+	print_ip(&sender, "\n");
 
 	while (currentoffset < packet_len) {
 		packetpointer = &((uint8_t*)packet)[currentoffset];
@@ -359,7 +351,7 @@ void intercom_handle_claim(intercom_ctx *ctx, intercom_packet_claim *packet, int
 		}
 	}
 
-	clientmgr_handle_claim(CTX(clientmgr), &sender, claim.mac);
+	return !clientmgr_handle_claim(CTX(clientmgr), &sender, claim.mac);
 }
 
 
@@ -392,13 +384,13 @@ bool find_repeatable_claim(uint8_t mac[6], int *index) {
 	return false;
 }
 
-int parse_plat(uint8_t *packet, struct client *client){
+int parse_plat(const uint8_t *packet, struct client *client){
 	// TODO: implement me
 	printf("parsing info packet plat\n");
 	return packet[1];
 }
 
-int parse_basic(uint8_t *packet,  struct client *client){
+int parse_basic(const uint8_t *packet,  struct client *client){
 	memcpy(client->mac, &packet[2], sizeof(uint8_t) * 6);
 	uint8_t length = packet[1];
 	int num_addresses = (length - 2 - 6) / 16;
@@ -424,7 +416,7 @@ int parse_basic(uint8_t *packet,  struct client *client){
 	return length;
 }
 
-void intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet, int packet_len) {
+bool intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet, int packet_len) {
 	uint8_t type, *packetpointer;
 	struct client client = { 0 };
 	int currentoffset = sizeof(intercom_packet_info);
@@ -460,40 +452,39 @@ void intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet, int p
 	if (find_repeatable_claim(client.mac, &i))
 		VECTOR_DELETE(ctx->repeatable_claims, i);
 
-	clientmgr_handle_info(CTX(clientmgr), &client);
+	bool acted_on_local_client = clientmgr_handle_info(CTX(clientmgr), &client);
 
 	VECTOR_FREE(client.addresses);
+	return !acted_on_local_client;
 }
 
 void intercom_handle_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_len) {
 	intercom_packet_hdr *hdr = (intercom_packet_hdr*) packet;
 	bool forward = true;
 
-	if (hdr->version == 0) {
+	if (hdr->version == L3ROAMD_PACKET_FORMAT_VERSION) {
 
 		if (intercom_recently_seen(ctx, hdr))
 			return;
 
 		intercom_recently_seen_add(ctx, hdr);
-		// TODO: if the claim was for a local client, there is no need to forward the claim further.
-		// TODO: if the seek was for a local client, there is no need to forward the seek further.
 		if (hdr->type == INTERCOM_SEEK)
-			intercom_handle_seek(ctx, (intercom_packet_seek*)packet, packet_len);
+			forward = intercom_handle_seek(ctx, (intercom_packet_seek*)packet, packet_len);
 
 		if (hdr->type == INTERCOM_CLAIM)
-			intercom_handle_claim(ctx, (intercom_packet_claim*)packet, packet_len);
+			forward = intercom_handle_claim(ctx, (intercom_packet_claim*)packet, packet_len);
 
 		if (hdr->type == INTERCOM_INFO)
-			intercom_handle_info(ctx, (intercom_packet_info*)packet, packet_len);
+			forward = intercom_handle_info(ctx, (intercom_packet_info*)packet, packet_len);
 
 		hdr->ttl--;
-
-
 		if (hdr->ttl > 0 && forward)
 			intercom_send_packet(ctx, packet, packet_len);
 	}
 	else {
-		printf("unknown packet with version %i received on intercom. Ignoring\n", hdr->version);
+		// if the packet version is unknown we cannot decrement ttl because we do not know where it is in the packet. Also the check whether we have already seen it fails.
+		// all we can do is self-preservation and not crash and forward. However if we forward while having no already_seen_checks we will break the network. => dropping the packet.
+		printf("unknown packet with version %i received on intercom. Ignoring content and dropping the packet\n", hdr->version);
 	}
 }
 

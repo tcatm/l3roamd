@@ -713,9 +713,9 @@ void purge_oldclients_task() {
 	post_task(&l3ctx.taskqueue_ctx, OLDCLIENTS_KEEP_SECONDS, 0, purge_oldclients_task, NULL, NULL);
 }
 
-/** Handle claim (info request).
+/** Handle claim (info request). return true if we acted on a local client, false otherwise
   */
-void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[6]) {
+bool clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[6]) {
 	bool old = false;
 	struct client *client = get_client(mac);
 	if (client == NULL) {
@@ -732,7 +732,7 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 	}
 
 	if (client == NULL)
-		return;
+		return false;
 
 //	bool active = client_is_active(client);
 
@@ -744,11 +744,12 @@ void clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 		print_ip(sender, "\n");
 		clientmgr_delete_client(ctx, client->mac);
 	}
+	return true;
 }
 
-/** Handle incoming client info.
+/** Handle incoming client info. return true if we acted on local client, false otherwise
   */
-void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
+bool clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
 	struct client *client = get_client(foreign_client->mac);
 	if (l3ctx.debug) {
 		printf("handling info message in clientmgr_handle_info() for foreign_client ");
@@ -758,7 +759,7 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
 	if (client == NULL) {
 		if (l3ctx.debug)
 			printf("received info message for client but client is either not locally connected - discarding message\n");
-		return;
+		return false;
 	}
 
 	for (int i = VECTOR_LEN(foreign_client->addresses) - 1; i >= 0; i--) {
@@ -781,6 +782,7 @@ void clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
 	printf("Client information merged into local client ");
 	print_client(client);
 	printf("\n");
+	return true;
 }
 
 void clientmgr_init() {
