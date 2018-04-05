@@ -91,7 +91,7 @@ void obtainll(const char *ifname, struct in6_addr *ret) {
 	struct ifaddrs *ifap, *ifa;
 	struct sockaddr_in6 *sa;
 	struct in6_addr ll = {};
-	
+
 	inet_pton(AF_INET6, "fe80::", &ll);
 
 	getifaddrs (&ifap);
@@ -99,7 +99,7 @@ void obtainll(const char *ifname, struct in6_addr *ret) {
 		if (ifa->ifa_addr && ifa->ifa_addr->sa_family==AF_INET6) {
 			if (!memcmp(ifname, ifa->ifa_name, strlen(ifname))) {
 				sa = (struct sockaddr_in6 *) ifa->ifa_addr;
-				struct prefix p = { 
+				struct prefix p = {
 					.plen = 64,
 					.prefix = ll
 				};
@@ -126,7 +126,6 @@ void intercom_init(intercom_ctx *ctx) {
 		.sin6_port = htons(INTERCOM_PORT),
 	};
 
-	
 	// bind sockets to receive multicast
 	for (int i=VECTOR_LEN(ctx->interfaces)-1;i>=0;i--) {
 		int fd = socket(PF_INET6, SOCK_DGRAM | SOCK_NONBLOCK, 0);
@@ -141,26 +140,6 @@ void intercom_init(intercom_ctx *ctx) {
 
 		VECTOR_INDEX(ctx->interfaces, i).mcast_recv_fd = fd;
 		printf("ASSIGNING fd: %i to mcast_recv_fd on interface %s\n", fd, VECTOR_INDEX(ctx->interfaces, i).ifname);
-
-	 /*
-	   // this will bind sockets meant to write data on ll-address of an interface
-		if (l3ctx.debug)
-			printf("binding to address on interface %s\n", VECTOR_INDEX(ctx->interfaces, i).ifname);
-
-		int fd = socket(PF_INET6, SOCK_DGRAM | SOCK_NONBLOCK, 0);
-		if (fd < 0)
-			exit_error("creating socket");
-
-		server_addr.sin6_scope_id = VECTOR_INDEX(ctx->interfaces, i).ifindex;
-		obtainll(VECTOR_INDEX(ctx->interfaces, i).ifname, &server_addr.sin6_addr);
-
-		if (bind(fd, (struct sockaddr *)&server_addr, sizeof(struct sockaddr_in6)) < 0) {
-			perror("bind to ll-address failed");
-			exit(EXIT_FAILURE);
-		}
-
-		VECTOR_ADD(ctx->send_fd, fd);
-		*/
 	}
 
 	struct sockaddr_in6 server_addr = {
@@ -205,6 +184,54 @@ int assemble_seek_address(uint8_t *packet, const struct in6_addr *address) {
 
 	return packet[1];
 }
+
+int assemble_macinfo(uint8_t *packet, uint8_t *mac, uint8_t type) {
+	packet[0] = type;
+	packet[1] = 8;
+	memcpy(&packet[2], mac, 6);
+	return packet[1];
+}
+
+uint8_t assemble_platinfo(void *packet) {
+	uint8_t length = 20;
+	uint8_t type = INFO_PLAT;
+	uint16_t lease=htons(0);
+	printf("type %i, packet: %p\n", type, packet);
+	memcpy(packet, &type, 1);
+	memcpy(packet + 1, &length, 1);
+	memcpy(packet + 2, &lease , 2);
+	memcpy(packet + 4, &l3ctx.clientmgr_ctx.platprefix, 16);
+	return length;
+}
+
+uint8_t assemble_basicinfo(void *packet, struct client *client) {
+	uint8_t num_addresses = 0;
+	int type = INFO_BASIC;
+	memcpy(packet, &type, 1);
+	memcpy(packet+2, client->mac, 6);
+
+	intercom_packet_info_entry *entry = (intercom_packet_info_entry*)((uint8_t*)(packet) + sizeof(client->mac) + 1 + 1 );
+
+	for (int i = 0; i < VECTOR_LEN(client->addresses) && num_addresses < INFO_MAX; i++) {
+		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
+		if (ip_is_active(ip)) {
+			memcpy(&entry->address, ip->addr.s6_addr, sizeof(uint8_t) * 16);
+			entry++;
+			num_addresses++;
+		}
+	}
+
+	if (l3ctx.debug) {
+		printf("added %i addresses to info packet for client ", num_addresses);
+		print_client(client);
+	}
+
+	// fill length field
+	uint8_t length = num_addresses * sizeof(intercom_packet_info_entry) + sizeof(client->mac) + 2;
+	memcpy(packet+1, &length, 1);
+	return length;
+}
+
 
 void intercom_seek(intercom_ctx *ctx, const struct in6_addr *address) {
 	intercom_packet_seek *packet = malloc(sizeof(intercom_packet_seek) + 20);
@@ -285,6 +312,44 @@ int parse_address(const uint8_t *packet, struct in6_addr *address){
 	return packet[1];
 }
 
+int parse_mac(const uint8_t *packet, claim *claim){
+	printf("parsing claim packet segment: mac\n");
+	memcpy(claim, &packet[2],6);
+	return packet[1];
+}
+
+int parse_plat(const uint8_t *packet, struct client *client){
+	// TODO: implement me
+	printf("parsing info packet plat\n");
+	return packet[1];
+}
+
+int parse_basic(const uint8_t *packet,  struct client *client){
+	memcpy(client->mac, &packet[2], sizeof(uint8_t) * 6);
+	uint8_t length = packet[1];
+	int num_addresses = (length - 2 - 6) / 16;
+
+	if (l3ctx.debug) {
+		printf("handling info segment with %i addresses for client ", num_addresses);
+		print_client(client);
+	}
+
+	struct client_ip ip = { 0 };
+	ip.state = IP_INACTIVE;
+
+	intercom_packet_info_entry *entry = (intercom_packet_info_entry*)(packet + 8);
+
+	for (int i = 0; i < num_addresses; i++) {
+		memcpy(&ip.addr.s6_addr, &entry->address, sizeof(uint8_t) * 16);
+		VECTOR_ADD(client->addresses, ip);
+		if (l3ctx.debug)
+			print_ip(&ip.addr, " learnt from info packet\n");
+		entry++;
+	}
+
+	return length;
+}
+
 // handler returns true if packet should be forwarded
 bool intercom_handle_seek(intercom_ctx *ctx, intercom_packet_seek *packet, int packet_len) {
 	struct in6_addr address= {};
@@ -316,12 +381,6 @@ bool intercom_handle_seek(intercom_ctx *ctx, intercom_packet_seek *packet, int p
 		}
 	}
 	return true;
-}
-
-int parse_mac(const uint8_t *packet, claim *claim){
-	printf("parsing claim packet segment: mac\n");
-	memcpy(claim, &packet[2],6);
-	return packet[1];
 }
 
 bool intercom_handle_claim(intercom_ctx *ctx, intercom_packet_claim *packet, int packet_len) {
@@ -382,38 +441,6 @@ bool find_repeatable_claim(uint8_t mac[6], int *index) {
 			return true;
 	}
 	return false;
-}
-
-int parse_plat(const uint8_t *packet, struct client *client){
-	// TODO: implement me
-	printf("parsing info packet plat\n");
-	return packet[1];
-}
-
-int parse_basic(const uint8_t *packet,  struct client *client){
-	memcpy(client->mac, &packet[2], sizeof(uint8_t) * 6);
-	uint8_t length = packet[1];
-	int num_addresses = (length - 2 - 6) / 16;
-
-	if (l3ctx.debug) {
-		printf("handling info segment with %i addresses for client ", num_addresses);
-		print_client(client);
-	}
-
-	struct client_ip ip = { 0 };
-	ip.state = IP_INACTIVE;
-
-	intercom_packet_info_entry *entry = (intercom_packet_info_entry*)(packet + 8);
-
-	for (int i = 0; i < num_addresses; i++) {
-		memcpy(&ip.addr.s6_addr, &entry->address, sizeof(uint8_t) * 16);
-		VECTOR_ADD(client->addresses, ip);
-		if (l3ctx.debug)
-			print_ip(&ip.addr, " learnt from info packet\n");
-		entry++;
-	}
-
-	return length;
 }
 
 bool intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet, int packet_len) {
@@ -519,46 +546,6 @@ void intercom_handle_in(intercom_ctx *ctx, int fd) {
 	// TODO if this is a claim for a local client, we should just stop iterating and get rid of the EBADF check above
 		intercom_handle_packet(ctx, buf, count);
 	}
-}
-
-uint8_t assemble_platinfo(void *packet) {
-	uint8_t length = 20;
-	uint8_t type = INFO_PLAT;
-	uint16_t lease=htons(0);
-	printf("type %i, packet: %p\n", type, packet);
-	memcpy(packet, &type, 1);
-	memcpy(packet + 1, &length, 1);
-	memcpy(packet + 2, &lease , 2);
-	memcpy(packet + 4, &l3ctx.clientmgr_ctx.platprefix, 16);
-	return length;
-}
-
-uint8_t assemble_basicinfo(void *packet, struct client *client) {
-	uint8_t num_addresses = 0;
-	int type = INFO_BASIC;
-	memcpy(packet, &type, 1);
-	memcpy(packet+2, client->mac, 6);
-
-	intercom_packet_info_entry *entry = (intercom_packet_info_entry*)((uint8_t*)(packet) + sizeof(client->mac) + 1 + 1 );
-
-	for (int i = 0; i < VECTOR_LEN(client->addresses) && num_addresses < INFO_MAX; i++) {
-		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
-		if (ip_is_active(ip)) {
-			memcpy(&entry->address, ip->addr.s6_addr, sizeof(uint8_t) * 16);
-			entry++;
-			num_addresses++;
-		}
-	}
-
-	if (l3ctx.debug) {
-		printf("added %i addresses to info packet for client ", num_addresses);
-		print_client(client);
-	}
-
-	// fill length field
-	uint8_t length = num_addresses * sizeof(intercom_packet_info_entry) + sizeof(client->mac) + 2;
-	memcpy(packet+1, &length, 1);
-	return length;
 }
 
 /* recipient = NULL -> send to neighbours */
@@ -674,13 +661,6 @@ void schedule_claim_retry(struct claim_task *data, int timeout) {
 	ndata->retries_left = data->retries_left -1;
 	if (data->retries_left > 0)
 		ndata->check_task = post_task(&l3ctx.taskqueue_ctx, timeout, 0, claim_retry_task, free_claim_task, ndata);
-}
-
-int assemble_macinfo(uint8_t *packet, uint8_t *mac, uint8_t type) {
-	packet[0] = type;
-	packet[1] = 8;
-	memcpy(&packet[2], mac, 6);
-	return packet[1];
 }
 
 bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client) {
