@@ -303,20 +303,23 @@ void intercom_recently_seen_add(intercom_ctx *ctx, intercom_packet_hdr *hdr) {
 }
 
 int parse_address(const uint8_t *packet, struct in6_addr *address){
-	printf("parsing seek packet segment: address\n");
-	memcpy(address, &packet[4],16);
+	if (l3ctx.debug)
+		printf("parsing seek packet segment: address\n");
+	memcpy(address, &packet[4], 16);
 	return packet[1];
 }
 
 int parse_mac(const uint8_t *packet, claim *claim){
-	printf("parsing claim packet segment: mac\n");
+	if (l3ctx.debug)
+		printf("parsing claim packet segment: mac\n");
 	memcpy(claim, &packet[2],6);
 	return packet[1];
 }
 
 int parse_plat(const uint8_t *packet, struct client *client){
-	// TODO: implement me
-	printf("parsing info packet plat\n");
+	if (l3ctx.debug)
+		printf("parsing info packet plat\n");
+	memcpy(&l3ctx.clientmgr_ctx.platprefix, &packet[4], 16);
 	return packet[1];
 }
 
