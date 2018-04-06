@@ -57,7 +57,7 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 
 	struct ndmsg *msg = NLMSG_DATA(nh);
 	parse_rtattr(tb, NDA_MAX, NDA_RTA(msg), nh->nlmsg_len - NLMSG_LENGTH(sizeof(*msg)));
-	
+
 	unsigned int br_index = if_nametoindex(ctx->client_bridge); // TODO: remember the br_index in context
 
 	if (! ( ctx->clientif_index == msg->ndm_ifindex || br_index == msg->ndm_ifindex ) )
@@ -384,9 +384,8 @@ void routemgr_handle_in(routemgr_ctx *ctx, int fd) {
 	struct nlmsgerr *ne;
 	while (1) {
 		count = recv(fd, readbuffer, sizeof readbuffer, 0);
-		if (count == -1) {
-			if (errno != EAGAIN)
-				perror("read error");
+		if ((count == -1) && (errno != EAGAIN)) {
+			perror("read error");
 			break;
 		} else if (count == 0)
 			break; // TODO: shouldn't we re-open the fd in this case?

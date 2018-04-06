@@ -192,25 +192,22 @@ int assemble_macinfo(uint8_t *packet, uint8_t *mac, uint8_t type) {
 	return packet[1];
 }
 
-uint8_t assemble_platinfo(void *packet) {
-	uint8_t length = 20;
-	uint8_t type = INFO_PLAT;
+uint8_t assemble_platinfo(uint8_t *packet) {
 	uint16_t lease=htons(0);
-	printf("type %i, packet: %p\n", type, packet);
-	memcpy(packet, &type, 1);
-	memcpy(packet + 1, &length, 1);
-	memcpy(packet + 2, &lease , 2);
-	memcpy(packet + 4, &l3ctx.clientmgr_ctx.platprefix, 16);
-	return length;
+	packet[0] = INFO_PLAT;
+	packet[1] = 20;
+	memcpy(&packet[2], &lease , 2);
+	memcpy(&packet[4], &l3ctx.clientmgr_ctx.platprefix, 16);
+	return packet[1];
 }
 
-uint8_t assemble_basicinfo(void *packet, struct client *client) {
+uint8_t assemble_basicinfo(uint8_t *packet, struct client *client) {
 	uint8_t num_addresses = 0;
-	int type = INFO_BASIC;
-	memcpy(packet, &type, 1);
-	memcpy(packet+2, client->mac, 6);
+	
+	packet[0] = INFO_BASIC;
+	memcpy(&packet[2], client->mac, 6);
 
-	intercom_packet_info_entry *entry = (intercom_packet_info_entry*)((uint8_t*)(packet) + sizeof(client->mac) + 1 + 1 );
+	intercom_packet_info_entry *entry = (intercom_packet_info_entry*)((uint8_t*)(packet) + sizeof(client->mac) + 2 );
 
 	for (int i = 0; i < VECTOR_LEN(client->addresses) && num_addresses < INFO_MAX; i++) {
 		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
@@ -227,9 +224,8 @@ uint8_t assemble_basicinfo(void *packet, struct client *client) {
 	}
 
 	// fill length field
-	uint8_t length = num_addresses * sizeof(intercom_packet_info_entry) + sizeof(client->mac) + 2;
-	memcpy(packet+1, &length, 1);
-	return length;
+	packet[1] = num_addresses * sizeof(intercom_packet_info_entry) + sizeof(client->mac) + 2;
+	return packet[1];
 }
 
 
