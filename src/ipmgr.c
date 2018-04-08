@@ -240,7 +240,7 @@ void remove_packet_from_vector(struct entry *entry, int element) {
 	struct packet *p = VECTOR_INDEX(entry->packets, element);
 
 	struct in6_addr src = packet_get_src(p->data);
-	icmp6_send_dest_unreachable(&src, p, (&l3ctx.ipmgr_ctx)->sockfd);
+	icmp6_send_dest_unreachable(&src, p);
 
 	free(p->data);
 	free(p);

@@ -74,7 +74,8 @@ void icmp6_init(icmp6_ctx *ctx) {
 
 	ctx->nsfd = icmp6_init_packet();
 
-	icmp6_setup_interface(ctx);
+	if (strlen(ctx->clientif))
+		icmp6_setup_interface(ctx);
 }
 
 void icmp6_setup_interface(icmp6_ctx *ctx) {
@@ -273,7 +274,7 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 	clientmgr_add_address(CTX(clientmgr), &packet.hdr.nd_na_target, packet.hw_addr, ctx->ifindex);
 }
 
-void icmp6_send_dest_unreachable(const struct in6_addr *addr, const struct packet *data, int fd) {
+void icmp6_send_dest_unreachable(const struct in6_addr *addr, const struct packet *data) {
 	struct dest_unreach_packet packet = {};
 	memset(&packet, 0, sizeof(packet));
 	memset(&packet.hdr, 0, sizeof(packet.hdr));

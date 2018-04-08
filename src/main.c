@@ -504,9 +504,9 @@ int main(int argc, char *argv[]) {
 	taskqueue_init(&l3ctx.taskqueue_ctx);
 	clientmgr_init();
 
+	printf("initializing icmp and arp\n");
+	icmp6_init(&l3ctx.icmp6_ctx);
 	if (strlen(l3ctx.routemgr_ctx.clientif)) {
-		printf("initializing icmp and arp\n");
-		icmp6_init(&l3ctx.icmp6_ctx);
 		arp_init(&l3ctx.arp_ctx);
 	}
 
