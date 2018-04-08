@@ -387,7 +387,9 @@ void routemgr_handle_in(routemgr_ctx *ctx, int fd) {
 		if ((count == -1) && (errno != EAGAIN)) {
 			perror("read error");
 			break;
-		} else if (count == 0)
+		} else if (count == -1) {
+			break; // errno must be EAGAIN - we have read all data.
+		} else if (count <= 0)
 			break; // TODO: shouldn't we re-open the fd in this case?
 
 		if (l3ctx.debug)
