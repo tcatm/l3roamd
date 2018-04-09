@@ -53,12 +53,12 @@ struct entry {
 };
 
 typedef struct {
-	int fd;
-	int sockfd;
-	char *ifname;
 	struct l3ctx *l3ctx;
+	char *ifname;
 	VECTOR(struct entry) addrs;
 	VECTOR(struct packet) output_queue;
+	int fd;
+	int sockfd;
 } ipmgr_ctx;
 
 struct ip_task {

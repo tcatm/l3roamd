@@ -22,17 +22,17 @@
 struct l3ctx {
 	taskqueue_ctx taskqueue_ctx;
 	intercom_ctx intercom_ctx;
-	wifistations_ctx wifistations_ctx;
 	clientmgr_ctx clientmgr_ctx;
 	icmp6_ctx icmp6_ctx;
 	ipmgr_ctx ipmgr_ctx;
-	char *l3device;
 	arp_ctx arp_ctx;
 	routemgr_ctx routemgr_ctx;
+	wifistations_ctx wifistations_ctx;
 	socket_ctx socket_ctx;
+	char *l3device;
 	int client_mtu;
-	bool debug;
 	int efd;
+	bool debug;
 };
 
 extern l3ctx_t l3ctx;

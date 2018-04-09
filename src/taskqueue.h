@@ -7,8 +7,8 @@ typedef struct taskqueue taskqueue_t;
 
 typedef struct {
 	struct l3ctx *l3ctx;
-	int fd;
 	taskqueue_t *queue;
+	int fd;
 } taskqueue_ctx;
 
 /** Element of a priority queue */

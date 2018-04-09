@@ -11,10 +11,10 @@ typedef struct {
 
 typedef struct {
 	struct l3ctx *l3ctx;
-	int fd;
 	struct nl_sock *nl_sock;
 	struct nl_cb *cb;
 	VECTOR(wifistations_if) interfaces;
+	int fd;
 	bool nl80211_disabled;
 } wifistations_ctx;
 

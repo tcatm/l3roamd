@@ -8,14 +8,14 @@
 
 typedef struct {
 	struct l3ctx *l3ctx;
+	char *clientif;
 	int fd; // used to learn addresses from NA and send solicitations
 	int unreachfd; // used to send ICMP destination unreachable
 	int nsfd; // used to read NS from clients to learn ip addresses
-	bool ok;
-	uint8_t mac[6];
-	char *clientif;
 	unsigned int ifindex;
+	bool ok;
 	bool ndp_disabled;
+	uint8_t mac[6];
 } icmp6_ctx;
 
 void icmp6_handle_in(icmp6_ctx *ctx, int fd);

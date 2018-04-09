@@ -530,8 +530,8 @@ void intercom_handle_in(intercom_ctx *ctx, int fd) {
 				 data. So go back to the main loop.
 			   if the last intercom packet was a claim for a local client, then we have just dropped the local client and will receive EBADF on the fd for the node-client-IP. This is not an error.*/
 			if (errno == EBADF) {
-				perror("read error - if we just dropped a local client due to this intercom packet being a claim then this is all right. otherwise there is something crazy going on. - returning to the main loop");
-				printf("fd: %i\n", fd);
+//				perror("read error - if we just dropped a local client due to this intercom packet being a claim then this is all right. otherwise there is something crazy going on. - returning to the main loop");
+//				printf("fd: %i\n", fd);
 			}
 			else if (errno != EAGAIN) {
 				perror("read error - this should not happen - going back to main loop");

@@ -67,31 +67,31 @@ typedef struct __attribute__((__packed__)) {
 } intercom_packet_info_entry;
 
 typedef struct {
-	bool ok;
-	unsigned int ifindex;
 	char *ifname;
+	unsigned int ifindex;
 	int mcast_recv_fd;
+	bool ok;
 } intercom_if;
 
 struct claim_task {
+	uint16_t packet_len;
 	struct client *client;
 	intercom_packet_claim *packet;
 	struct in6_addr *recipient;
 	taskqueue_t *check_task;
-	uint16_t packet_len;
 	uint8_t retries_left;
 };
 
 
 typedef struct {
-	struct l3ctx *l3ctx;
-	int unicast_nodeip_fd;
-	int mtu;
-	struct sockaddr_in6 groupaddr;
 	struct in6_addr ip;
+	struct sockaddr_in6 groupaddr;
+	struct l3ctx *l3ctx;
 	VECTOR(intercom_packet_hdr) recent_packets;
 	VECTOR(intercom_if) interfaces;
 	VECTOR(client_t) repeatable_claims;
+	int unicast_nodeip_fd;
+	int mtu;
 } intercom_ctx;
 
 

@@ -45,10 +45,10 @@ struct kernel_route {
 
 typedef struct {
 	struct l3ctx *l3ctx;
-	int fd;
-	int clientif_index;
 	char *clientif;
 	char *client_bridge;
+	int fd;
+	int clientif_index;
 	bool nl_disabled;
 	uint8_t bridge_mac[6];
 } routemgr_ctx;

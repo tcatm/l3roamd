@@ -18,32 +18,32 @@ enum ip_state {
 typedef VECTOR(struct client) client_vector;
 
 struct client_ip {
-	enum ip_state state;
-	int tentative_retries_left;
 	struct in6_addr addr;
 	struct timespec timestamp;
+	int tentative_retries_left;
+	enum ip_state state;
 };
 
 typedef struct client {
-	unsigned int ifindex;
+	struct in6_addr platprefix;
 	struct timespec timeout;
-	uint8_t mac[6];
 	VECTOR(struct client_ip) addresses;
 	int fd;
-	struct in6_addr platprefix;
+	unsigned int ifindex;
 	bool node_ip_initialized;
+	uint8_t mac[6];
 } client_t;
 
 typedef struct {
 	struct l3ctx *l3ctx;
-	VECTOR(struct prefix) prefixes;
-	struct prefix v4prefix;
-	unsigned int export_table;
-	int nat46ifindex;
 	struct prefix node_client_prefix;
+	struct prefix v4prefix;
+	struct in6_addr platprefix;
+	VECTOR(struct prefix) prefixes;
 	client_vector clients;
 	client_vector oldclients;
-	struct in6_addr platprefix;
+	unsigned int export_table;
+	int nat46ifindex;
 	bool platprefix_set;
 } clientmgr_ctx;
 
