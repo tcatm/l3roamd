@@ -553,14 +553,17 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 	char str_mac[18];
 
 	intercom_packet_info *packet = l3roamd_alloc(sizeof(intercom_packet_info) + sizeof(intercom_packet_info_plat) +  (8 + INFO_MAX * sizeof(intercom_packet_info_entry)));
-	printf("allocated packet at %p\n", packet);
+	if (l3ctx.debug)
+		printf("allocated packet at %p\n", packet);
 
 	mac_addr_n2a(str_mac, client->mac);
 
-	printf("packet %p\n", packet);
+	if (l3ctx.debug)
+		printf("packet %p\n", packet);
 
 	int currentoffset = assemble_header(&packet->hdr, 255, INTERCOM_INFO);
-	printf("currentoffset: %i\n", currentoffset);
+	if (l3ctx.debug)
+		printf("currentoffset: %i\n", currentoffset);
 
 	currentoffset += assemble_platinfo((void*)packet + currentoffset );
 	currentoffset += assemble_basicinfo((void*)packet + currentoffset, client);
