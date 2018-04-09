@@ -75,11 +75,11 @@ typedef struct {
 
 struct claim_task {
 	struct client *client;
-	int packet_len;
 	intercom_packet_claim *packet;
 	struct in6_addr *recipient;
-	uint8_t retries_left;
 	taskqueue_t *check_task;
+	uint16_t packet_len;
+	uint8_t retries_left;
 };
 
 

@@ -5,6 +5,7 @@
 #include "intercom.h"
 #include "l3roamd.h"
 #include "util.h"
+#include "alloc.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -112,28 +113,27 @@ void delete_entry(const struct in6_addr *k) {
 	}
 }
 
-void schedule_purge_task(struct in6_addr *destination) {
-	struct ip_task *purge_data = calloc(1, sizeof(struct ip_task));
+struct ip_task *create_task(struct in6_addr *dst) {
+	struct ip_task *task = l3roamd_alloc(sizeof(struct ip_task)); //should this be aligned?
 
-	purge_data->ctx = &l3ctx.ipmgr_ctx;
-	memcpy(&purge_data->address, destination, sizeof(struct in6_addr));
+	task->ctx = &l3ctx.ipmgr_ctx;
+	memcpy(&task->address, dst, sizeof(struct in6_addr));
+	return task;
+}
+
+void schedule_purge_task(struct in6_addr *destination) {
+	struct ip_task *purge_data = create_task(destination);
 	post_task(&l3ctx.taskqueue_ctx, PACKET_TIMEOUT, 0, ipmgr_purge_task, free, purge_data);
 }
 
 /** This will seek an address by checking locally and if needed querying the network by scheduling a task */
 void ipmgr_seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
-	struct ip_task *ns_data = calloc(1, sizeof(struct ip_task));
-
-	ns_data->ctx = ctx;
-	memcpy(&ns_data->address, addr, sizeof(struct in6_addr));
+	struct ip_task *ns_data = create_task(addr);
 	post_task(CTX(taskqueue), 0, 0, ipmgr_ns_task, free, ns_data);
 
 	// schedule an intercom-seek operation that in turn will only be executed if there is no local client known
-	struct ip_task *data = calloc(1, sizeof(struct ip_task));
-
-	data->ctx = ctx;
-	memcpy(&data->address, addr, sizeof(struct in6_addr));
-	data->check_task = post_task(CTX(taskqueue), 0, 300, seek_task, free, data);
+	struct ip_task *data = create_task(addr);
+	post_task(CTX(taskqueue), 0, 300, seek_task, free, data);
 }
 
 
@@ -194,11 +194,11 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 
 	}
 
-	struct packet *p = malloc(sizeof(struct packet));
+	struct packet *p = l3roamd_alloc(sizeof(struct packet));
 
 	p->timestamp = now;
 	p->len = packet_len;
-	p->data = malloc(packet_len);
+	p->data = l3roamd_alloc(packet_len);
 
 	memcpy(p->data, packet, packet_len);
 
@@ -297,10 +297,7 @@ void ipmgr_ns_task(void *d) {
 		else
 			icmp6_send_solicitation(&l3ctx.icmp6_ctx, &data->address);
 
-		struct ip_task *ns_data = calloc(1, sizeof(struct ip_task));
-
-		ns_data->ctx = data->ctx;
-		memcpy(&ns_data->address, &data->address, sizeof(struct in6_addr));
+		struct ip_task *ns_data = create_task(&data->address);
 		post_task(&l3ctx.taskqueue_ctx, SEEK_INTERVAL, 0, ipmgr_ns_task, free, ns_data);
 	}
 }
@@ -309,16 +306,12 @@ void seek_task(void *d) {
 	struct ip_task *data = d;
 
 	if (should_we_really_seek(&data->address)) {
-		if (l3ctx.debug) {
-			printf("\x1b[36mseeking on intercom for client with the address ");
-			print_ip(&data->address, "\x1b[0m\n");
-		}
+		printf("\x1b[36mseeking on intercom for client with the address ");
+		print_ip(&data->address, "\x1b[0m\n");
+
 		intercom_seek(&l3ctx.intercom_ctx, (const struct in6_addr*) &(data->address));
 
-		struct ip_task *_data = calloc(1, sizeof(struct ip_task));
-
-		_data->ctx = data->ctx;
-		memcpy(&_data->address, &data->address, sizeof(struct in6_addr));
+		struct ip_task *_data = create_task(&data->address);
 		post_task(&l3ctx.taskqueue_ctx, SEEK_INTERVAL, 0, seek_task, free, _data);
 	}
 }

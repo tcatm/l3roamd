@@ -31,7 +31,7 @@
 #include <stdint.h>
 #include <netinet/in.h>
 #define PACKET_TIMEOUT 5  // drop packet after it sat in the unknown destination-queue for this amount of time
-#define SEEK_INTERVAL 3    // retry a seek every n seconds
+#define SEEK_INTERVAL 3   // retry a seek every n seconds
 
 struct packet {
 	struct timespec timestamp;
@@ -62,9 +62,8 @@ typedef struct {
 } ipmgr_ctx;
 
 struct ip_task {
-	ipmgr_ctx *ctx;
 	struct in6_addr address;
-	taskqueue_t *check_task;
+	ipmgr_ctx *ctx;
 };
 
 bool ipmgr_init(ipmgr_ctx *ctx, char *tun_name, unsigned int mtu);

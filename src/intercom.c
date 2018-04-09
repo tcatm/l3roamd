@@ -6,6 +6,7 @@
 #include "syscallwrappers.h"
 #include "prefix.h"
 #include "util.h"
+#include "alloc.h"
 
 #include "clientmgr.h"
 
@@ -230,7 +231,7 @@ uint8_t assemble_basicinfo(uint8_t *packet, struct client *client) {
 
 
 void intercom_seek(intercom_ctx *ctx, const struct in6_addr *address) {
-	intercom_packet_seek *packet = malloc(sizeof(intercom_packet_seek) + 20);
+	intercom_packet_seek *packet = l3roamd_alloc(sizeof(intercom_packet_seek) + 20);
 
 	int offset = assemble_header(&packet->hdr, 255, INTERCOM_SEEK);
 	offset += assemble_seek_address((void*)packet + offset, address);
@@ -551,10 +552,7 @@ void intercom_handle_in(intercom_ctx *ctx, int fd) {
 void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client, bool relinquished) {
 	char str_mac[18];
 
-	intercom_packet_info *packet = malloc(sizeof(intercom_packet_info) + sizeof(intercom_packet_info_plat) +  (8 + INFO_MAX * sizeof(intercom_packet_info_entry)));
-	if (packet == NULL) {
-		exit_error("could not allocate memory when generating info packet");
-	}
+	intercom_packet_info *packet = l3roamd_alloc(sizeof(intercom_packet_info) + sizeof(intercom_packet_info_plat) +  (8 + INFO_MAX * sizeof(intercom_packet_info_entry)));
 	printf("allocated packet at %p\n", packet);
 
 	mac_addr_n2a(str_mac, client->mac);
@@ -593,7 +591,6 @@ void claim_retry_task(void *d) {
 	int repeatable_claim_index;
 	if (!find_repeatable_claim(data->client->mac, &repeatable_claim_index))
 		return;
-	printf("claim_retry_taks for packet: %p\n", data->packet);
 
 	if (data->recipient != NULL) {
 		if (l3ctx.debug) {
@@ -632,34 +629,26 @@ void free_claim_task(void *d) {
 }
 
 void schedule_claim_retry(struct claim_task *data, int timeout) {
-	struct claim_task *ndata = calloc(1, sizeof(struct claim_task));
+	if (data->retries_left == 0)
+		return;
 
-	ndata->client = malloc(sizeof(struct client));
-	if (! ndata->client) {
-		perror("malloc");
-		exit_error("could not allocate memory for claim - client");
-	}
+	struct claim_task *ndata = l3roamd_alloc(sizeof(struct claim_task));
+
+	ndata->client = l3roamd_alloc(sizeof(struct client));
 	memcpy(ndata->client, data->client,sizeof(struct client));
 
-
 	ndata->packet_len = data->packet_len;
-	ndata->packet = malloc(data->packet_len);
-	if (! ndata->packet) {
-		perror("malloc");
-		exit_error("could not allocate memory for claim packet");
-	}
+	ndata->packet = l3roamd_alloc(data->packet_len);
 	memcpy(ndata->packet, data->packet, ndata->packet_len);
-	printf("old location of packet: %p new location: %p\n", data->packet, ndata->packet);
 
 	ndata->recipient = NULL;
 	if (data->recipient) {
-		ndata->recipient = calloc(1, sizeof(struct in6_addr));
+		ndata->recipient = l3roamd_alloc_aligned(sizeof(struct in6_addr), sizeof(struct in6_addr));
 		memcpy(ndata->recipient, data->recipient, sizeof(struct in6_addr));
 	}
 
 	ndata->retries_left = data->retries_left -1;
-	if (data->retries_left > 0)
-		ndata->check_task = post_task(&l3ctx.taskqueue_ctx, timeout, 0, claim_retry_task, free_claim_task, ndata);
+	ndata->check_task = post_task(&l3ctx.taskqueue_ctx, timeout, 0, claim_retry_task, free_claim_task, ndata);
 }
 
 bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client) {
@@ -680,34 +669,24 @@ bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct 
 			printf("CLAIMING client [%s]\n", mac_str);
 	}
 
-	struct claim_task *data = malloc(sizeof(struct claim_task)) ;
+	struct claim_task *data = l3roamd_alloc(sizeof(struct claim_task));
+	data->packet = l3roamd_alloc(sizeof(intercom_packet_claim) + 8);
 
-	data->packet = malloc(sizeof(intercom_packet_claim) + 8);
-	if (!data->packet) {
-		perror("malloc");
-		exit_error("could not allocate packet for claim");
-	}
-	printf("allocated: %zi Bytes at %p\n", sizeof(intercom_packet_claim) + 8, data->packet);
-
-	int offset = assemble_header(&data->packet->hdr, 255, INTERCOM_CLAIM);
-
-	printf("offset: %i\n", offset);
-	offset += assemble_macinfo((void*)(data->packet) + offset, client->mac, CLAIM_MAC);
-	data->packet_len = offset;
-	printf("offset: %i\n", offset);
+	data->packet_len = assemble_header(&data->packet->hdr, 255, INTERCOM_CLAIM);
+	data->packet_len += assemble_macinfo((void*)(data->packet) + data->packet_len, client->mac, CLAIM_MAC);
 
 	intercom_recently_seen_add(ctx, &data->packet->hdr);
 
 	VECTOR_ADD(ctx->repeatable_claims, *client);
 
-	data->client = malloc(sizeof(struct client));
+	data->client = l3roamd_alloc(sizeof(struct client));
 	memcpy(data->client, client,sizeof(struct client));
 	data->retries_left = CLAIM_RETRY_MAX;
 	data->check_task = NULL;
 	data->recipient = NULL;
 
 	if (recipient) {
-		data->recipient = malloc(sizeof(struct in6_addr));
+		data->recipient = l3roamd_alloc_aligned(sizeof(struct in6_addr),16);
 		memcpy(data->recipient, recipient, sizeof(struct in6_addr));
 		data->packet->hdr.ttl = 1; // when sending unicast, do not continue to forward this packet at the destination
 	}

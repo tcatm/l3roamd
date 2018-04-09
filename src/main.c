@@ -37,6 +37,7 @@
 #include "prefix.h"
 #include "l3roamd.h"
 #include "types.h"
+#include "alloc.h"
 
 #define SIGTERM_MSG "Exiting. Removing routes for prefixes and clients.\n"
 
@@ -192,7 +193,7 @@ void loop() {
 	}
 
 	/* Buffer where events are returned */
-	events = calloc(maxevents, sizeof(struct epoll_event));
+	events = l3roamd_alloc0_array(maxevents, sizeof(struct epoll_event));
 	printf("starting loop\n");
 
 	/* The event loop */
