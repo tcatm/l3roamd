@@ -41,7 +41,9 @@ void taskqueue_init(taskqueue_ctx *ctx) {
 
 /** Enqueues a new task. A task with a timeout of zero is scheduled immediately. */
 taskqueue_t * post_task(taskqueue_ctx *ctx, unsigned int timeout, int millisecs, void (*function)(void*), void (*cleanup)(void*), void *data) {
-	taskqueue_t *task = l3roamd_alloc0_array(1, sizeof(taskqueue_t));
+	taskqueue_t *task = l3roamd_alloc(sizeof(taskqueue_t));
+	task->children = task->next = NULL;
+	task->pprev = NULL;
 
 	clock_gettime(CLOCK_MONOTONIC, &task->due);
 
