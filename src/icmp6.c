@@ -155,13 +155,13 @@ struct __attribute__((__packed__)) dest_unreach_packet {
 struct __attribute__((__packed__)) sol_packet {
 	struct nd_neighbor_solicit hdr;
 	struct nd_opt_hdr opt;
-	uint8_t hw_addr[6];
+	uint8_t hw_addr[ETH_ALEN];
 };
 
 struct __attribute__((__packed__)) adv_packet {
 	struct nd_neighbor_advert hdr;
 	struct nd_opt_hdr opt;
-	uint8_t hw_addr[6];
+	uint8_t hw_addr[ETH_ALEN];
 };
 
 void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {

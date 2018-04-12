@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ipmgr.h"
+#include "common.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <netinet/in.h>
@@ -15,7 +16,7 @@ typedef struct {
 	unsigned int ifindex;
 	bool ok;
 	bool ndp_disabled;
-	uint8_t mac[6];
+	uint8_t mac[ETH_ALEN];
 } icmp6_ctx;
 
 void icmp6_handle_in(icmp6_ctx *ctx, int fd);

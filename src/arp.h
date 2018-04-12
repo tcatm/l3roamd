@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <netinet/in.h>
@@ -14,9 +15,9 @@ struct __attribute__((packed)) arp_packet {
 	uint8_t hdl;
 	uint8_t prl;
 	uint16_t op;
-	uint8_t sha[6];
+	uint8_t sha[ETH_ALEN];
 	uint8_t spa[4];
-	uint8_t dha[6];
+	uint8_t dha[ETH_ALEN];
 	uint8_t dpa[4];
 };
 
@@ -27,7 +28,7 @@ typedef struct {
 	unsigned int ifindex;
 	int fd;
 	bool ok;
-	uint8_t mac[6];
+	uint8_t mac[ETH_ALEN];
 } arp_ctx;
 
 void arp_handle_in(arp_ctx *ctx, int fd);

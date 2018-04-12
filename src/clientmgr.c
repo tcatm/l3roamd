@@ -58,13 +58,13 @@ void mac_addr_n2a(char *mac_addr, unsigned char *arg) {
 }
 
 
-//struct in6_addr node_client_mcast_ip_from_mac(uint8_t mac[6]) {
+//struct in6_addr node_client_mcast_ip_from_mac(uint8_t mac[ETH_ALEN]) {
 //	char addr_str[INET6_ADDRSTRLEN];
 //	snprintf(&addr_str[0], INET6_ADDRSTRLEN, "ff02::1:ff%02x:%02x%02x", mac[3], mac[4], mac[5]);
 //}
 
 // generate mac-based ipv6-address in prefix link-local-address-style
-struct in6_addr mac2ipv6(uint8_t mac[6], struct prefix *prefix) {
+struct in6_addr mac2ipv6(uint8_t mac[ETH_ALEN], struct prefix *prefix) {
 	struct in6_addr address = prefix->prefix;
 
 	address.s6_addr[8] = mac[0] ^ 0x02;
@@ -296,7 +296,7 @@ void clientmgr_client_remove_route(clientmgr_ctx *ctx, struct client *client, st
 /** Given a MAC address returns a client object.
     Returns NULL if the client is not known.
     */
-struct client *findinvector(void *_vector, const uint8_t mac[6]) {
+struct client *findinvector(void *_vector, const uint8_t mac[ETH_ALEN]) {
 	VECTOR(struct client) *vector = _vector;
 	for (int i = VECTOR_LEN(*vector) -1 ; i>=0; i--) {
 		struct client *e = &VECTOR_INDEX(*vector, i);
@@ -308,11 +308,11 @@ struct client *findinvector(void *_vector, const uint8_t mac[6]) {
 	return NULL;
 }
 
-struct client *get_client(const uint8_t mac[6]) {
+struct client *get_client(const uint8_t mac[ETH_ALEN]) {
 	return findinvector(&l3ctx.clientmgr_ctx.clients, mac);
 }
 
-struct client *get_client_old(const uint8_t mac[6]) {
+struct client *get_client_old(const uint8_t mac[ETH_ALEN]) {
 	return findinvector(&l3ctx.clientmgr_ctx.oldclients, mac);
 }
 
@@ -348,7 +348,7 @@ bool clientmgr_is_known_address(clientmgr_ctx *ctx, const struct in6_addr *addre
 	return false;
 }
 
-struct client *create_client(client_vector *vector, const uint8_t mac[6],const unsigned int ifindex) {
+struct client *create_client(client_vector *vector, const uint8_t mac[ETH_ALEN],const unsigned int ifindex) {
 	struct client _client = {};
 	memcpy(_client.mac, mac, sizeof(uint8_t) * 6);
 	VECTOR_ADD(*vector, _client);
@@ -361,7 +361,7 @@ struct client *create_client(client_vector *vector, const uint8_t mac[6],const u
 
 /** Get a client or create a new, empty one.
   */
-struct client *get_or_create_client(clientmgr_ctx *ctx, const uint8_t mac[6], unsigned int ifindex) {
+struct client *get_or_create_client(clientmgr_ctx *ctx, const uint8_t mac[ETH_ALEN], unsigned int ifindex) {
 	struct client *client = get_client(mac);
 
 	if (client == NULL) {
@@ -422,7 +422,7 @@ void client_deactivate(struct client *client) {
 /** Given a MAC address deletes a client. Safe to call if the client is not
   known.
   */
-void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[6]) {
+void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[ETH_ALEN]) {
 	struct client *client = get_client(mac);
 	char mac_str[18];
 	mac_addr_n2a(mac_str, mac);
@@ -715,7 +715,7 @@ void purge_oldclients_task() {
 
 /** Handle claim (info request). return true if we acted on a local client, false otherwise
   */
-bool clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[6]) {
+bool clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, uint8_t mac[ETH_ALEN]) {
 	bool old = false;
 	struct client *client = get_client(mac);
 	if (client == NULL) {

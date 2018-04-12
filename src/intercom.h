@@ -52,13 +52,13 @@ typedef struct __attribute__((__packed__)) {
 } intercom_packet_info_plat;
 
 typedef struct {
-	uint8_t mac[6];
+	uint8_t mac[ETH_ALEN];
 } claim;
 
 typedef struct __attribute__((__packed__)) {
 	uint8_t type;
 	uint8_t length;
-	uint8_t mac[6];
+	uint8_t mac[ETH_ALEN];
 	// afterwards an array of elements of type intercom_packet_info_entry is expected
 } intercom_packet_info_basic;
 

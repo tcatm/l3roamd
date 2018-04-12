@@ -461,7 +461,7 @@ void rtnl_change_address(routemgr_ctx *ctx, struct in6_addr *address, int type, 
 	rtmgr_rtnl_talk(ctx, (struct nlmsghdr*)&req);
 }
 
-void routemgr_probe_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_addr *address, uint8_t mac[6]) {
+void routemgr_probe_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_addr *address, uint8_t mac[ETH_ALEN]) {
 	int family = AF_INET6;
 	size_t addr_len = 16;
 	void *addr = address->s6_addr;
@@ -500,7 +500,7 @@ void routemgr_probe_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_ad
 	rtmgr_rtnl_talk(ctx, (struct nlmsghdr*)&req);
 }
 
-void routemgr_insert_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_addr *address, uint8_t mac[6]) {
+void routemgr_insert_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_addr *address, uint8_t mac[ETH_ALEN]) {
 	struct nlneighreq req = {
 		.nl = {
 			.nlmsg_type = RTM_NEWNEIGH,
@@ -521,7 +521,7 @@ void routemgr_insert_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_a
 }
 
 
-void routemgr_remove_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_addr *address, uint8_t mac[6]) {
+void routemgr_remove_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_addr *address, uint8_t mac[ETH_ALEN]) {
 	struct nlneighreq req = {
 		.nl = {
 			.nlmsg_type = RTM_DELNEIGH,
@@ -623,7 +623,7 @@ void rtmgr_rtnl_talk(routemgr_ctx *ctx, struct nlmsghdr *req) {
 }
 
 
-void routemgr_insert_neighbor4(routemgr_ctx *ctx, const int ifindex, struct in_addr *address, uint8_t mac[6]) {
+void routemgr_insert_neighbor4(routemgr_ctx *ctx, const int ifindex, struct in_addr *address, uint8_t mac[ETH_ALEN]) {
 	struct nlneighreq req = {
 		.nl = {
 			.nlmsg_type = RTM_NEWNEIGH,
@@ -643,7 +643,7 @@ void routemgr_insert_neighbor4(routemgr_ctx *ctx, const int ifindex, struct in_a
 	rtmgr_rtnl_talk(ctx, (struct nlmsghdr*)&req);
 }
 
-void routemgr_remove_neighbor4(routemgr_ctx *ctx, const int ifindex, struct in_addr *address, uint8_t mac[6]) {
+void routemgr_remove_neighbor4(routemgr_ctx *ctx, const int ifindex, struct in_addr *address, uint8_t mac[ETH_ALEN]) {
 	struct nlneighreq req = {
 		.nl = {
 			.nlmsg_type = RTM_NEWNEIGH,

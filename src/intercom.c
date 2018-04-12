@@ -433,7 +433,7 @@ static fastd_peer_t ** peer_p_find_by_id(uint64_t id) {
 }
 */
 
-bool find_repeatable_claim(uint8_t mac[6], int *index) {
+bool find_repeatable_claim(uint8_t mac[ETH_ALEN], int *index) {
 	// TODO: replace this with VECTOR_BSEARCH -- see the example above
 	for (*index=0;*index<VECTOR_LEN(l3ctx.intercom_ctx.repeatable_claims);(*index)++) {
 		struct client *client = &VECTOR_INDEX(l3ctx.intercom_ctx.repeatable_claims, *index);

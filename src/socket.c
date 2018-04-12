@@ -192,14 +192,14 @@ void socket_handle_in(socket_ctx *ctx) {
 
 	struct prefix _prefix = {};
 	struct json_object *retval = json_object_new_object();
-	uint8_t mac[6] = { 0xff, 0xfe, 0xfd, 0xfc, 0xfb, 0xfa };
+	uint8_t mac[ETH_ALEN] = { 0xff, 0xfe, 0xfd, 0xfc, 0xfb, 0xfa };
 	struct in6_addr address = {};
 	char *str_address = NULL;
 	char *str_mac = NULL;
 
 	switch (cmd) {
 		case PROBE:
-			str_address = strtok(&line[6], " ");
+			str_address = strtok(&line[ETH_ALEN], " ");
 			str_mac = strtok(NULL, " ");
 			sscanf(str_mac, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx", &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
 			if (inet_pton(AF_INET6, str_address, &address) == 1) {
