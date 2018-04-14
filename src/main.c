@@ -269,6 +269,8 @@ void usage() {
 	puts("  -t <export table>  export routes to this table");
 	puts("  -4 <prefix>        IPv4 translation prefix");
 	puts("  -V|--version       show version information");
+	puts("  -v                 verbose output");
+	puts("  -d                 debug output");
 	puts("  -D                 Device name for the l3roamd tun-device");
 	puts("  --no-netlink       do not use fdb or neighbour-table to learn new clients");
 	puts("  --no-ndp           do not use ndp to learn new clients");
@@ -340,6 +342,7 @@ int main(int argc, char *argv[]) {
 	l3ctx.wifistations_ctx.nl80211_disabled = false;
 	l3ctx.icmp6_ctx.ndp_disabled = false;
 
+	l3ctx.verbose = false;
 	l3ctx.debug = false;
 	l3ctx.l3device = strdup("l3roam0");
 
@@ -358,7 +361,7 @@ int main(int argc, char *argv[]) {
 	};
 
 	int c;
-	while ((c = getopt_long(argc, argv, "dha:b:e:p:i:m:t:c:4:n:s:d:VD:P:", long_options, &option_index)) != -1)
+	while ((c = getopt_long(argc, argv, "dhva:b:e:p:i:m:t:c:4:n:s:d:VD:P:", long_options, &option_index)) != -1)
 		switch (c) {
 			case 'V':
 				printf("l3roamd %s\n", SOURCE_VERSION);
@@ -451,7 +454,10 @@ int main(int argc, char *argv[]) {
 			case 's':
 				socketpath = optarg;
 				break;
+			case 'v':
+				l3ctx.verbose = true;
 			case 'd':
+				l3ctx.verbose = true;
 				l3ctx.debug = true;
 				break;
 			case 'n':
@@ -473,7 +479,6 @@ int main(int argc, char *argv[]) {
 			default:
 				fprintf(stderr, "Invalid parameter %c ignored.\n", c);
 		}
-
 
 	if (!v4_initialized) {
 		fprintf(stderr, "-4 was not specified. Defaulting to 0:0:0:0:0:ffff::/96\n");

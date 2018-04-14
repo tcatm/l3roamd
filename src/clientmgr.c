@@ -200,10 +200,12 @@ void add_special_ip(clientmgr_ctx *ctx, struct client *client) {
 /** close and remove an fd from a client
 **/
 void close_client_fd(int *fd) {
+	log_debug("closing client fd %i\n", fd);
+
 	if (*fd>0) {
 		del_fd(l3ctx.efd, *fd);
 		while (close(*fd)) {
-			printf("could not close client fd %i", *fd);
+			fprintf(stderr, "could not close client fd %i", *fd);
 			perror("close ");
 		}
 		*fd=-1;

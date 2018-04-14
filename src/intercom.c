@@ -511,7 +511,9 @@ void intercom_handle_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_l
 	else {
 		// if the packet version is unknown we cannot decrement ttl because we do not know where it is in the packet. Also the check whether we have already seen it fails.
 		// all we can do is self-preservation and not crash and forward. However if we forward while having no already_seen_checks we will break the network. => dropping the packet.
-		printf("unknown packet with version %i received on intercom. Ignoring content and dropping the packet\n", hdr->version);
+		printf("unknown packet with version %i received on intercom. Ignoring content and dropping the packet that could have originated from: ", hdr->version);
+		print_ip((void*)&packet[6], " or ");
+		print_ip((void*)hdr->sender, ". We are guessing here because the format may have shifted.\n");
 	}
 }
 
@@ -530,8 +532,8 @@ void intercom_handle_in(intercom_ctx *ctx, int fd) {
 				 data. So go back to the main loop.
 			   if the last intercom packet was a claim for a local client, then we have just dropped the local client and will receive EBADF on the fd for the node-client-IP. This is not an error.*/
 			if (errno == EBADF) {
-//				perror("read error - if we just dropped a local client due to this intercom packet being a claim then this is all right. otherwise there is something crazy going on. - returning to the main loop");
-//				printf("fd: %i\n", fd);
+				perror("read error - if we just dropped a local client due to this intercom packet being a claim then this is all right. otherwise there is something crazy going on. - returning to the main loop");
+				printf("fd: %i\n", fd);
 			}
 			else if (errno != EAGAIN) {
 				perror("read error - this should not happen - going back to main loop");

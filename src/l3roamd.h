@@ -34,6 +34,7 @@ struct l3ctx {
 	int client_mtu;
 	int efd;
 	bool debug;
+	bool verbose;
 };
 
 extern l3ctx_t l3ctx;
