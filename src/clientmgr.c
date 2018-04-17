@@ -168,8 +168,7 @@ int bind_to_address(struct in6_addr *address) {
 	}
 
 	if (bind(fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-		printf("Could not bind to socket %i on special ip for address: ", fd);
-		print_ip(address, " exiting.\n");
+		fprintf(stderr, "Could not bind to socket %i on special ip for address: %s. exiting.\n", fd, print_ip(address));
 		exit_error("bind socket to node-client-IP failed.");
 	}
 
@@ -216,8 +215,7 @@ void close_client_fd(int *fd) {
 */
 void remove_special_ip(clientmgr_ctx *ctx, struct client *client) {
 	struct in6_addr address = mac2ipv6(client->mac, &ctx->node_client_prefix);
-	printf("Removing special address: ");
-	print_ip(&address, "\n");
+	printf("Removing special address: %s\n", print_ip(&address));
 	close_client_fd(&client->fd);
 	rtnl_remove_address(CTX(routemgr), &address);
 	client->node_ip_initialized = false;
@@ -258,22 +256,24 @@ void delete_client_ip(struct client *client, const struct in6_addr *address, boo
 
 }
 
-/** Adds a route.
+/** Adds a route and a neighbour entry
 */
 void client_add_route(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip) {
-	routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr , client->mac);
-	printf("adding route for "); 
-	print_ip(&ip->addr, "");
-	if (clientmgr_is_ipv4(ctx, &ip->addr)) {
-		printf(" (IPv4)\n");
-		struct in_addr ip4 = {
-			.s_addr = ip->addr.s6_addr[12] << 24 | ip->addr.s6_addr[13] << 16 | ip->addr.s6_addr[14] << 8 | ip->addr.s6_addr[15]
-		};
 
-		routemgr_insert_route(CTX(routemgr), ctx->export_table, ctx->nat46ifindex, &ip->addr, 128);
+	log_verbose("adding neighbour and route for %s", print_ip(&ip->addr));
+	if (clientmgr_is_ipv4(ctx, &ip->addr)) {
+		log_verbose(" (IPv4)\n");
+		struct in_addr ip4 = {
+			.s_addr = ip->addr.s6_addr[15] << 24 | ip->addr.s6_addr[14] << 16 | ip->addr.s6_addr[13] << 8 | ip->addr.s6_addr[12]
+		};
+		routemgr_insert_neighbor4(&l3ctx.routemgr_ctx, client->ifindex, &ip4, client->mac);
+
+// 		routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr, client->mac);
+//		routemgr_insert_route(CTX(routemgr), ctx->export_table, ctx->nat46ifindex, &ip->addr, 128);
 		routemgr_insert_route4(CTX(routemgr), ctx->export_table, client->ifindex, &ip4);
 	} else {
-		printf(" (IPv6)\n");
+		log_verbose(" (IPv6)\n");
+		routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr, client->mac);
 		routemgr_insert_route(CTX(routemgr), ctx->export_table, client->ifindex, &ip->addr, 128);
 	}
 }
@@ -283,10 +283,10 @@ void client_add_route(clientmgr_ctx *ctx, struct client *client, struct client_i
 void clientmgr_client_remove_route(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip) {
 	if (clientmgr_is_ipv4(ctx, &ip->addr)) {
 		struct in_addr ip4 = {
-			.s_addr = ip->addr.s6_addr[12] << 24 | ip->addr.s6_addr[13] << 16 | ip->addr.s6_addr[14] << 8 | ip->addr.s6_addr[15]
+			.s_addr = ip->addr.s6_addr[15] << 24 | ip->addr.s6_addr[14] << 16 | ip->addr.s6_addr[13] << 8 | ip->addr.s6_addr[12]
 		};
 
-		routemgr_remove_route(CTX(routemgr), ctx->export_table, &ip->addr, 128);
+//		routemgr_remove_route(CTX(routemgr), ctx->export_table, &ip->addr, 128);
 		routemgr_remove_route4(CTX(routemgr), ctx->export_table, &ip4);
 		routemgr_remove_neighbor4(CTX(routemgr), client->ifindex, &ip4, client->mac);
 	} else {
@@ -332,8 +332,7 @@ bool clientmgr_is_known_address(clientmgr_ctx *ctx, const struct in6_addr *addre
 				if (l3ctx.debug) {
 					char mac_str[18];
 					mac_addr_n2a(mac_str, c->mac);
-					print_ip(address, " is attached to local client ");
-					printf("%s\n", mac_str);
+					printf("%s is attached to local client %s\n", print_ip(address), mac_str);
 				}
 
 				if (client) {
@@ -344,8 +343,7 @@ bool clientmgr_is_known_address(clientmgr_ctx *ctx, const struct in6_addr *addre
 		}
 	}
 
-	if (l3ctx.debug)
-		print_ip(address, " is not assigned to any of the local clients\n");
+	log_debug("%s is not assigned to any of the local clients\n", print_ip(address));
 
 	return false;
 }
@@ -475,6 +473,7 @@ const char *state_str(enum ip_state state) {
 
 /** Change state of an IP address. Trigger all side effects like resetting
     counters, timestamps and route changes.
+TODO: we really should update the neighbour-table here too instead of clientmgr_add_client et al.
   */
 void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip, enum ip_state state) {
 	struct timespec now;
@@ -531,21 +530,11 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 			break;
 	}
 
-	if (!nop || l3ctx.debug) {
-		print_ip(&ip->addr, "");
-		printf(" changes from %s to %s\n", state_str(ip->state), state_str(state));
-	}
+	if (!nop || l3ctx.debug)
+		printf("%s changes from %s to %s\n", print_ip(&ip->addr), state_str(ip->state), state_str(state));
 
 	ip->state = state;
 }
-
-
-void ipset_remove() {
-}
-
-void ipset_add() {
-}
-
 
 /** Check whether an IP address is contained in a client prefix.
   */
@@ -556,10 +545,10 @@ bool clientmgr_valid_address(clientmgr_ctx *ctx, struct in6_addr *address) {
 			return true;
 	}
 
-	return clientmgr_is_ipv4(ctx, address);
+	return false;
 }
 
-/** Check whether an IP address is contained in the IPv4 prefix.
+/** Check whether an IP address is contained in the IPv4 prefix or the empty prefix.
   */
 bool clientmgr_is_ipv4(clientmgr_ctx *ctx, struct in6_addr *address) {
 	return prefix_contains(&ctx->v4prefix, address);
@@ -591,10 +580,7 @@ void clientmgr_remove_address(clientmgr_ctx *ctx, struct client *client, struct 
 void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t *mac, unsigned int ifindex) {
 
 	if (!clientmgr_valid_address(ctx, address) ) {
-		if (l3ctx.debug) {
-			printf("address is not within a client-prefix and not ll-address, not adding: ");
-			print_ip(address, "\n");
-		}
+		log_debug("address is not within a client-prefix and not ll-address, not adding: %s\n", print_ip(address));
 		return;
 	}
 	
@@ -632,8 +618,6 @@ void clientmgr_add_address(clientmgr_ctx *ctx, struct in6_addr *address, uint8_t
 		intercom_claim(CTX(intercom), &address, client); // this will set the special_ip after the claiming cycle
 	}
 
-	// this will set NUD_REACHABLE for the clients address we are working on	
-	routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, address, client->mac);
 }
 
 /** Notify the client manager about a new MAC (e.g. a new wifi client).
@@ -691,8 +675,7 @@ void purge_oldclientlist_from_old_clients() {
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
 
-	if (l3ctx.debug)
-		printf("Purging old clients\n");
+	log_debug("Purging old clients\n");
 
 	for (int i = VECTOR_LEN(l3ctx.clientmgr_ctx.oldclients)-1;i>=0;i--) {
 		_client = &VECTOR_INDEX(l3ctx.clientmgr_ctx.oldclients, i);
@@ -742,8 +725,7 @@ bool clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 //	if (active)
 //		return;
 	if (!old) {
-		printf("Dropping client %02x:%02x:%02x:%02x:%02x:%02x in response to claim from sender",  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-		print_ip(sender, "\n");
+		printf("Dropping client %02x:%02x:%02x:%02x:%02x:%02x in response to claim from sender %s\n",  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], print_ip(sender));
 		clientmgr_delete_client(ctx, client->mac);
 	}
 	return true;
@@ -759,8 +741,7 @@ bool clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
 	}
 
 	if (client == NULL) {
-		if (l3ctx.debug)
-			printf("received info message for client but client is either not locally connected - discarding message\n");
+		log_debug("received info message for client but client is either not locally connected - discarding message\n");
 		return false;
 	}
 
@@ -772,10 +753,6 @@ bool clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
 		if (ip != NULL)
 			continue;
 
-//		VECTOR_ADD(client->addresses, *foreign_ip);
-//		ip = &VECTOR_INDEX(client->addresses, VECTOR_LEN(client->addresses) - 1);
-//		client_ip_set_state(ctx, client, ip, IP_ACTIVE);
-	
 		clientmgr_add_address(ctx, &foreign_ip->addr, foreign_client->mac, l3ctx.icmp6_ctx.ifindex);
 	}
 

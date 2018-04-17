@@ -251,10 +251,8 @@ bool intercom_send_packet_unicast(intercom_ctx *ctx, const struct in6_addr *reci
 
 	// printf("fd: %i, packet %p, length: %zi\n", ctx->unicast_nodeip_fd, packet, packet_len);
 	ssize_t rc = sendto(ctx->unicast_nodeip_fd, packet, packet_len, 0, (struct sockaddr*)&addr, sizeof(addr));
-	if (l3ctx.debug) {
-		printf("sent intercom packet rc: %zi to ", rc);
-		print_ip(recipient, "\n");
-	}
+	log_debug("sent intercom packet rc: %zi to %s\n", rc, print_ip(recipient));
+
 	if (rc < 0)
 		perror("sendto failed");
 
@@ -342,8 +340,7 @@ int parse_basic(const uint8_t *packet,  struct client *client){
 	for (int i = 0; i < num_addresses; i++) {
 		memcpy(&ip.addr.s6_addr, &entry->address, sizeof(uint8_t) * 16);
 		VECTOR_ADD(client->addresses, ip);
-		if (l3ctx.debug)
-			print_ip(&ip.addr, " learnt from info packet\n");
+		log_debug("%s learnt from info packet\n", print_ip(&ip.addr));
 		entry++;
 	}
 
@@ -360,14 +357,12 @@ bool intercom_handle_seek(intercom_ctx *ctx, intercom_packet_seek *packet, int p
 	while (currentoffset < packet_len) {
 		packetpointer = &((uint8_t*)packet)[currentoffset];
 		type = *packetpointer;
-		if (l3ctx.debug)
-			printf("offset: %i %p %p\n", currentoffset, packet ,packetpointer);
+		log_debug("offset: %i %p %p\n", currentoffset, packet ,packetpointer);
 		switch (type) {
 			case SEEK_ADDRESS:
 				currentoffset += parse_address(packetpointer, &address);
 
-				printf("\x1b[36mSEEK: Looking for ");
-				print_ip(&address, "\x1b[0m\n");
+				printf("\x1b[36mSEEK: Looking for %s\x1b[0m\n", print_ip(&address));
 
 				if (clientmgr_is_ipv4(CTX(clientmgr), &address))
 					arp_send_request(CTX(arp), &address);
@@ -391,8 +386,7 @@ bool intercom_handle_claim(intercom_ctx *ctx, intercom_packet_claim *packet, int
 
 	claim claim = { };
 	memcpy(&sender.s6_addr, &packet->hdr.sender, sizeof(uint8_t) * 16);
-	printf("handling claim from: ");
-	print_ip(&sender, "\n");
+	printf("handling claim from: %s\n", print_ip(&sender));
 
 	while (currentoffset < packet_len) {
 		packetpointer = &((uint8_t*)packet)[currentoffset];
@@ -451,10 +445,7 @@ bool intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet, int p
 
 	memcpy(&sender.s6_addr, &packet->hdr.sender, sizeof(uint8_t) * 16);
 
-	if (l3ctx.debug) {
-		printf("parsing info packet with length %i from: ", packet_len);
-		print_ip(&sender, "\n");
-	}
+	log_debug("parsing info packet with length %i from: %s\n", packet_len, print_ip(&sender));
 
 	while (currentoffset < packet_len) {
 		packetpointer = &((uint8_t*)packet)[currentoffset];
@@ -511,22 +502,19 @@ void intercom_handle_packet(intercom_ctx *ctx, uint8_t *packet, ssize_t packet_l
 	else {
 		// if the packet version is unknown we cannot decrement ttl because we do not know where it is in the packet. Also the check whether we have already seen it fails.
 		// all we can do is self-preservation and not crash and forward. However if we forward while having no already_seen_checks we will break the network. => dropping the packet.
-		printf("unknown packet with version %i received on intercom. Ignoring content and dropping the packet that could have originated from: ", hdr->version);
-		print_ip((void*)&packet[6], " or ");
-		print_ip((void*)hdr->sender, ". We are guessing here because the format may have shifted.\n");
+		printf("unknown packet with version %i received on intercom. Ignoring content and dropping the packet that could have originated from: %s or %s. We are guessing here because the format may have shifted.\n ", hdr->version, print_ip((void*)&packet[6]), print_ip((void*)hdr->sender));
 	}
 }
 
 void intercom_handle_in(intercom_ctx *ctx, int fd) {
 	ssize_t count;
 	uint8_t buf[ctx->mtu];
-	if (l3ctx.debug)
-		printf("HANDLING INTERCOM PACKET on fd %i using buffersize of %i ", fd, ctx->mtu);
+
+	log_debug("HANDLING INTERCOM PACKET on fd %i using buffersize of %i ", fd, ctx->mtu);
 
 	while (1) {
 		count = read(fd, buf, ctx->mtu);
-		if (l3ctx.debug)
-			printf("- read %zi Bytes of data\n", count);
+		log_debug("- read %zi Bytes of data\n", count);
 		if (count == -1) {
 			/* If errno == EAGAIN, that means we have read all
 				 data. So go back to the main loop.
@@ -555,17 +543,14 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 	char str_mac[18];
 
 	intercom_packet_info *packet = l3roamd_alloc(sizeof(intercom_packet_info) + sizeof(intercom_packet_info_plat) +  (8 + INFO_MAX * sizeof(intercom_packet_info_entry)));
-	if (l3ctx.debug)
-		printf("allocated packet at %p\n", packet);
+	log_debug("allocated packet at %p\n", packet);
 
 	mac_addr_n2a(str_mac, client->mac);
 
-	if (l3ctx.debug)
-		printf("packet %p\n", packet);
+	log_debug("packet %p\n", packet);
 
 	int currentoffset = assemble_header(&packet->hdr, 255, INTERCOM_INFO);
-	if (l3ctx.debug)
-		printf("currentoffset: %i\n", currentoffset);
+	log_debug("currentoffset: %i\n", currentoffset);
 
 	currentoffset += assemble_platinfo((void*)packet + currentoffset );
 	currentoffset += assemble_basicinfo((void*)packet + currentoffset, client);
@@ -573,16 +558,12 @@ void intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 
 	if (recipient != NULL) {
 		packet->hdr.ttl = 1;
-		if (l3ctx.debug) {
-			printf("sending unicast info with length %i for client %s to ",  currentoffset, str_mac);
-			print_ip(recipient, "\n");
-		}
+		log_debug("sending unicast info with length %i for client %s to %s\n",  currentoffset, str_mac, print_ip(recipient));
 		intercom_send_packet_unicast(ctx, recipient, (uint8_t*)packet, currentoffset);
 	}
 	else {
 		// forward packet to other l3roamd instances
-		if (l3ctx.debug)
-			printf("sending info for client %s to l3roamd neighbours\n", str_mac);
+		log_debug("sending info for client %s to l3roamd neighbours\n", str_mac);
 
 		intercom_recently_seen_add(ctx, &packet->hdr);
 		intercom_send_packet(ctx, (uint8_t*)packet, currentoffset);
@@ -598,18 +579,13 @@ void claim_retry_task(void *d) {
 		return;
 
 	if (data->recipient != NULL) {
-		if (l3ctx.debug) {
-			printf("sending unicast claim for client %02x:%02x:%02x:%02x:%02x:%02x to ",  data->client->mac[0], data->client->mac[1], data->client->mac[2], data->client->mac[3], data->client->mac[4], data->client->mac[5]);
-			print_ip(data->recipient, "\n");
-		}
+		log_debug("sending unicast claim for client %02x:%02x:%02x:%02x:%02x:%02x to %s\n",  data->client->mac[0], data->client->mac[1], data->client->mac[2], data->client->mac[3], data->client->mac[4], data->client->mac[5], print_ip(data->recipient));
 		if (!intercom_send_packet_unicast(&l3ctx.intercom_ctx, data->recipient, (uint8_t*)data->packet, data->packet_len) ) {
 			intercom_recently_seen_add(&l3ctx.intercom_ctx, &data->packet->hdr);
 			intercom_send_packet(&l3ctx.intercom_ctx, (uint8_t*)data->packet, data->packet_len); // sending unicast did not work (node too new in the network OR client new to the network), fall back to multicast for now. Althogh this puts unnecessary load on the intercom network whenever a truly new client appears.
 		}
 	} else {
-		if (l3ctx.debug) {
-			printf("sending multicast claim for client %02x:%02x:%02x:%02x:%02x:%02x\n",  data->client->mac[0], data->client->mac[1], data->client->mac[2], data->client->mac[3], data->client->mac[4], data->client->mac[5]);
-		}
+		log_debug("sending multicast claim for client %02x:%02x:%02x:%02x:%02x:%02x\n",  data->client->mac[0], data->client->mac[1], data->client->mac[2], data->client->mac[3], data->client->mac[4], data->client->mac[5]);
 		intercom_recently_seen_add(&l3ctx.intercom_ctx, &data->packet->hdr);
 		intercom_send_packet(&l3ctx.intercom_ctx, (uint8_t*)&data->packet, data->packet_len);
 	}

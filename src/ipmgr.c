@@ -88,17 +88,12 @@ struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k, int *index) {
 	for (int i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
 		struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
 		if (memcmp(k, &(e->address), sizeof(struct in6_addr)) == 0) {
-			if (l3ctx.debug) {
-				print_ip(k, " is on the unknown-clients list\n");
-			}
+			log_debug("%s is on the unknown-clients list\n", print_ip(k));
 			if (index)
 				*index = i;
 			return e;
 		}
 	}
-
-//	if (l3ctx.debug)
-//		print_ip(k, " is not on the unknown-clients list\n");
 
 	return NULL;
 }
@@ -160,11 +155,8 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 	if (a0 == 0xff)
 		return;
 
-	printf("Got packet from ");
 	src = packet_get_src(packet);
-	print_ip(&src, " destined to ");
-	print_ip(&dst, "\n");
-
+	printf("Got packet from %s destined to %s\n", print_ip(&src), print_ip(&dst));
 
 	if (!clientmgr_valid_address(CTX(clientmgr), &dst)) {
 		char str[INET6_ADDRSTRLEN];
@@ -211,10 +203,7 @@ bool should_we_really_seek(struct in6_addr *destination) {
 	struct entry *e = find_entry(&l3ctx.ipmgr_ctx, destination, NULL);
 	// if a route to this client appeared, the queue will be emptied -- no seek necessary
 	if (!e) {
-		if (l3ctx.debug) {
-			printf("INFO: seek task was scheduled but no packets to be delivered to host: ");
-			print_ip(destination, "\n");
-		}
+		log_debug("INFO: seek task was scheduled but no packets to be delivered to host: %s\n",  print_ip(destination));
 		return false;
 	}
 
@@ -222,8 +211,8 @@ bool should_we_really_seek(struct in6_addr *destination) {
 		printf("=================================================\n");
 		printf("================= FAT WARNING ===================\n");
 		printf("=================================================\n");
-		printf("seek task was scheduled, there are packets to be delivered to the host: ");
-		print_ip(destination, ",\nwhich is a known client. This should not happen. Flushing packets for this destination\n");
+		printf("seek task was scheduled, there are packets to be delivered to the host: %s\n", print_ip(destination));
+		printf("which is a known client. This should not happen. Flushing packets for this destination\n");
 		ipmgr_route_appeared(&l3ctx.ipmgr_ctx, destination);
 
 		return false;
@@ -262,11 +251,7 @@ int purge_old_packets(struct in6_addr *destination) {
 	for (int i = VECTOR_LEN(e->packets) - 1; i>=0; i--) {
 		struct packet p = VECTOR_INDEX(e->packets, i);
 		if (timespec_cmp(p.timestamp, then) <= 0) {
-			if (l3ctx.debug) {
-				printf("deleting old packet with destination ");
-				print_ip(&e->address, "\n");
-			}
-
+			log_debug("deleting old packet with destination %s\n", print_ip(&e->address));
 			remove_packet_from_vector(e, i);
 		}
 	}
@@ -310,8 +295,7 @@ void seek_task(void *d) {
 	struct ip_task *data = d;
 
 	if (should_we_really_seek(&data->address)) {
-		printf("\x1b[36mseeking on intercom for client with the address ");
-		print_ip(&data->address, "\x1b[0m\n");
+		printf("\x1b[36mseeking on intercom for client with the address %s\x1b[0m\n", print_ip(&data->address));
 
 		intercom_seek(&l3ctx.intercom_ctx, (const struct in6_addr*) &(data->address));
 

@@ -32,6 +32,7 @@
 struct prefix {
 	struct in6_addr prefix;
 	int plen; /* in bits */
+	bool isv4;
 };
 
 bool add_prefix(void *prefixes, struct prefix prefix);

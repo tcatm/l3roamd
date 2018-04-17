@@ -213,8 +213,7 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 		if (l3ctx.debug) {
 			char str[INET6_ADDRSTRLEN];
 			inet_ntop(AF_INET6, &packet.hdr.ip6_src, str, INET6_ADDRSTRLEN);
-			printf("Received Neighbor Solicitation from %s [%02x:%02x:%02x:%02x:%02x:%02x] for IP ", str, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-			print_ip(&packet.sol.hdr.nd_ns_target, ". Learning source-IP for client.\n");
+			printf("Received Neighbor Solicitation from %s [%02x:%02x:%02x:%02x:%02x:%02x] for IP %s. Learning source-IP for client.\n", str, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], print_ip(&packet.sol.hdr.nd_ns_target));
 		}
 
 		clientmgr_notify_mac(CTX(clientmgr), mac, ctx->ifindex);
@@ -226,8 +225,7 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 	if (ctx->ndp_disabled)
 		return;
 	
-	if (l3ctx.debug)
-		printf("handling icmp6 event\n");
+	log_debug("handling icmp6 event\n");
 
 	struct msghdr msghdr;
 	memset (&msghdr, 0, sizeof (msghdr));
@@ -267,8 +265,7 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 		return;
 
 	if (l3ctx.debug) {
-		printf("Learning from Neighbour Advertisement that Client [%02x:%02x:%02x:%02x:%02x:%02x] ",  packet.hw_addr[0], packet.hw_addr[1], packet.hw_addr[2], packet.hw_addr[3], packet.hw_addr[4], packet.hw_addr[5]);
-		print_ip(&packet.hdr.nd_na_target, " is active.\n");
+		printf("Learning from Neighbour Advertisement that Client [%02x:%02x:%02x:%02x:%02x:%02x] is active on ip %s\n",  packet.hw_addr[0], packet.hw_addr[1], packet.hw_addr[2], packet.hw_addr[3], packet.hw_addr[4], packet.hw_addr[5], print_ip(&packet.hdr.nd_na_target));
 	}
 	
 	clientmgr_add_address(CTX(clientmgr), &packet.hdr.nd_na_target, packet.hw_addr, ctx->ifindex);
@@ -298,13 +295,11 @@ void icmp6_send_dest_unreachable(const struct in6_addr *addr, const struct packe
 	while (len <= 0 && retries > 0){
 		len = sendto((&l3ctx.icmp6_ctx)->unreachfd, &packet, sizeof(packet.hdr) + dlen, 0, (struct sockaddr*)&dst, sizeof(dst));
 
-		if (l3ctx.debug && len > 0) {
-			printf("sent %i bytes ICMP6 destination unreachable to ", len);
-			print_ip(addr, "\n");
+		if (len > 0) {
+			log_debug("sent %i bytes ICMP6 destination unreachable to %s\n", len, print_ip(addr));
 		}
 		else if (len < 0) {
-			printf("Error while sending ICMP destination unreachable, retrying ");
-			print_ip(addr, "\n");
+			fprintf(stderr, "Error while sending ICMP destination unreachable, retrying %s\n", print_ip(addr));
 			perror("sendto");
 		}
 		retries--;
@@ -360,8 +355,7 @@ void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 	int retries = 3;
 	while (len <= 0 && retries > 0){
 		len = sendto(ctx->fd, &packet, sizeof(packet), 0, (struct sockaddr*)&dst, sizeof(dst));
-		if (l3ctx.debug)
-			printf("sent NS to %s %i\n", str, len);
+		log_debug("sent NS with length %i to %s %i\n", len, str);
 		if (len < 0)
 			perror("Error while sending NS, retrying");
 		retries--;

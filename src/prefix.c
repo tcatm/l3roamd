@@ -25,6 +25,7 @@
 
 #include "prefix.h"
 #include <string.h>
+#include "util.h"
 
 /* this will parse the string str and return a prefix struct
 */
@@ -36,9 +37,15 @@ bool parse_prefix(struct prefix *prefix, const char *str) {
 	if (ptr == NULL)
 		return false;
 
-	int rc = inet_pton(AF_INET6, ptr, &(prefix->prefix));
-	if (rc != 1)
-		return false;
+	prefix->isv4 = false;
+
+	int rc6 = inet_pton(AF_INET6, ptr, &(prefix->prefix));
+	if (rc6 != 1) {
+		int rc4 = inet_pton(AF_INET, ptr, &(prefix->prefix));
+		if (rc4 != 1)
+			return false;
+		prefix->isv4 = true;
+	}
 
 	ptr = strtok_r(NULL, "/", &saveptr);
 	if (ptr == NULL)
@@ -76,14 +83,19 @@ bool del_prefix(void *prefixes, struct prefix _prefix) {
 
 	return false;
 }
-
+#include <stdio.h>
 bool prefix_contains(const struct prefix *prefix, struct in6_addr *addr) {
+	int offset=0;
+	if (prefix->isv4)  {
+		offset = 12; // ipv4 addresses are stored from the 12th byte onwards in an in6_addr
+	}
+
 	int mask=0xff;
 	for (int remaining_plen = prefix->plen, i=0;remaining_plen > 0; remaining_plen-= 8) {
 		if (remaining_plen < 8)
 			mask = 0xff & (0xff00 >>remaining_plen);
 
-		if ((addr->s6_addr[i] & mask) != prefix->prefix.s6_addr[i])
+		if ((addr->s6_addr[i + offset] & mask) != prefix->prefix.s6_addr[i])
 			return false;
 		i++;
 	}

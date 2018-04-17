@@ -49,7 +49,6 @@ void rtmgr_client_remove_address(struct in6_addr *dst_address) {
 }
 
 void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
-	char ifname[IFNAMSIZ+1] = "";
 	struct rtattr * tb[NDA_MAX+1];
 	memset(tb, 0, sizeof(struct rtattr *) * (NDA_MAX + 1));
 	char mac_str[18] = {};
@@ -82,27 +81,22 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 
 
 	if (nh->nlmsg_type == RTM_NEWNEIGH && msg->ndm_state & NUD_REACHABLE && tb[NDA_LLADDR]) {
-		if (l3ctx.debug)
-			printf("Status-Change to NUD_REACHABLE, notifying change for client-mac [%s]\n",  mac_str) ;
+		log_debug("Status-Change to NUD_REACHABLE, notifying change for client-mac [%s]\n", mac_str) ;
 		clientmgr_notify_mac(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
 	}
 
-	if (l3ctx.debug) {
-		if_indextoname(msg->ndm_ifindex, ifname);
-		printf("neighbour [%s] (%s) changed on interface %s, type: %i, state: %i ... (msgif: %i cif: %i brif: %i)\n", mac_str, ip_str, ifname, nh->nlmsg_type, msg->ndm_state, msg->ndm_ifindex, ctx->clientif_index, br_index ); // see include/uapi/linux/neighbour.h NUD_REACHABLE for numeric values
-	}
+	char ifname[IFNAMSIZ+1] = "";
+	log_debug("neighbour [%s] (%s) changed on interface %s, type: %i, state: %i ... (msgif: %i cif: %i brif: %i)\n", mac_str, ip_str, if_indextoname(msg->ndm_ifindex, ifname), nh->nlmsg_type, msg->ndm_state, msg->ndm_ifindex, ctx->clientif_index, br_index ); // see include/uapi/linux/neighbour.h NUD_REACHABLE for numeric values
 
 	if (msg->ndm_state & NUD_REACHABLE) {
 		if (nh->nlmsg_type == RTM_NEWNEIGH && tb[NDA_DST] && tb[NDA_LLADDR]) {
-			if (l3ctx.debug)
-				printf("Status-Change to NUD_REACHABLE, ADDING address %s [%s]\n", ip_str, mac_str) ;
+			log_debug("Status-Change to NUD_REACHABLE, ADDING address %s [%s]\n", ip_str, mac_str) ;
 			clientmgr_add_address(CTX(clientmgr), &dst_address, RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
 		}
 	}
 	else if (msg->ndm_state & NUD_FAILED) {
 		if (nh->nlmsg_type == RTM_NEWNEIGH) {// TODO: re-try sending NS if no NA is received
-			if (l3ctx.debug)
-				printf("NEWNEIGH & NUD_FAILED received - sending NS for ip %s [%s]\n", ip_str, mac_str);
+			log_debug("NEWNEIGH & NUD_FAILED received - sending NS for ip %s [%s]\n", ip_str, mac_str);
 
 			// we cannot directly use probe here because
 			// that would lead to an endless loop.
@@ -110,7 +104,7 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 			// remember how often we where in this state
 			// for each client. If that was >3 times,
 			// remove client.
-			if (clientmgr_is_ipv4(CTX(clientmgr), &dst_address)) {
+			if (msg->ndm_family == AF_INET) {
 				arp_send_request(CTX(arp), &dst_address);
 			}
 			else {
@@ -118,14 +112,12 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 			}
 		}
 		else if (nh->nlmsg_type == RTM_DELNEIGH) {
-			if (l3ctx.debug)
-				printf("REMOVING (DELNEIGH) %s [%s]\n", ip_str, mac_str);
+			log_debug("REMOVING (DELNEIGH) %s [%s]\n", ip_str, mac_str);
 			rtmgr_client_remove_address(&dst_address);
 		}
 	}
 	else if (msg->ndm_state & NUD_NOARP) {
-		if (l3ctx.debug)
-			printf("REMOVING (NOARP) %s [%s]\n", ip_str, mac_str);
+		log_debug("REMOVING (NOARP) %s [%s]\n", ip_str, mac_str);
 		rtmgr_client_remove_address(&dst_address);
 	}
 }
@@ -426,10 +418,7 @@ int rtnl_addattr(struct nlmsghdr *n, int maxlen, int type, void *data, int datal
 }
 
 void rtnl_add_address(routemgr_ctx *ctx, struct in6_addr *address) {
-	if (l3ctx.debug) {
-		printf("Adding special address to lo: ");
-		print_ip(address, "\n");
-	}
+	log_debug("Adding special address to lo: %s\n", print_ip(address));
 	rtnl_change_address(ctx, address, RTM_NEWADDR, NLM_F_CREATE | NLM_F_EXCL | NLM_F_REQUEST);
 }
 
@@ -467,18 +456,12 @@ void routemgr_probe_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_ad
 	void *addr = address->s6_addr;
 
 	if (clientmgr_is_ipv4(CTX(clientmgr), address)) {
-		if (l3ctx.debug) {
-			printf("probing for IPv4-address! ");
-			print_ip((struct in6_addr*)addr, "\n");
-		}
+		log_debug("probing for IPv4-address! %s\n", print_ip((struct in6_addr*)addr));
 		addr = address->s6_addr + 12;
 		addr_len = 4;
 		family = AF_INET;
 	} else {
-		if (l3ctx.debug) {
-			printf("probing for IPv6-address! ");
-			print_ip((struct in6_addr*)address, "\n");
-		}
+		log_debug("probing for IPv6-address! %s\n", print_ip((struct in6_addr*)address));
 	}
 
 	struct nlneighreq req = {
@@ -671,7 +654,7 @@ void routemgr_insert_route4(routemgr_ctx *ctx, const int table, const int ifinde
 			.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg)),
 		},
 		.rt = {
-			.rtm_family = AF_INET6,
+			.rtm_family = AF_INET,
 			.rtm_table = table,
 			.rtm_protocol = ROUTE_PROTO,
 			.rtm_scope = RT_SCOPE_UNIVERSE,

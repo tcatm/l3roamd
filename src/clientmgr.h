@@ -21,7 +21,7 @@ typedef VECTOR(struct client) client_vector;
 struct client_ip {
 	struct in6_addr addr;
 	struct timespec timestamp;
-	int tentative_retries_left;
+	uint8_t tentative_retries_left;
 	enum ip_state state;
 };
 

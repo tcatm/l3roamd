@@ -398,8 +398,8 @@ int main(int argc, char *argv[]) {
 					struct prefix _prefix = {};
 					if (!parse_prefix(&_prefix, optarg))
 						exit_error("Can not parse prefix");
-					if (_prefix.plen != 64)
-						exit_error("IPv6 prefix must be /64");
+			//		if (_prefix.plen != 64)
+			//			exit_error("IPv6 prefix must be /64");
 					add_prefix(&l3ctx.clientmgr_ctx.prefixes, _prefix);
 					p_initialized=true;
 				}
@@ -419,7 +419,6 @@ int main(int argc, char *argv[]) {
 			case '4':
 				if (!parse_prefix(&l3ctx.clientmgr_ctx.v4prefix, optarg))
 					exit_error("Can not parse IPv4 prefix");
-
 
 				//if (l3ctx.clientmgr_ctx.v4prefix.plen != 96)
 				//	exit_error("IPv4 prefix must be /96");
@@ -454,11 +453,10 @@ int main(int argc, char *argv[]) {
 			case 's':
 				socketpath = optarg;
 				break;
+			case 'd':
+				l3ctx.debug = true;
 			case 'v':
 				l3ctx.verbose = true;
-			case 'd':
-				l3ctx.verbose = true;
-				l3ctx.debug = true;
 				break;
 			case 'n':
 				l3ctx.clientmgr_ctx.nat46ifindex = if_nametoindex(optarg);
