@@ -83,7 +83,7 @@ error:
 }
 
 /* find an entry in the ipmgr's unknown-clients list*/
-struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
+struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k, int *index) {
 	// TODO: make use of VECTOR_BSEARCH here.
 	for (int i = 0; i < VECTOR_LEN(ctx->addrs); i++) {
 		struct entry *e = &VECTOR_INDEX(ctx->addrs, i);
@@ -91,6 +91,8 @@ struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 			if (l3ctx.debug) {
 				print_ip(k, " is on the unknown-clients list\n");
 			}
+			if (index)
+				*index = i;
 			return e;
 		}
 	}
@@ -103,14 +105,9 @@ struct entry *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k) {
 
 /** This will remove an entry from the ipmgr unknown-clients list */
 void delete_entry(const struct in6_addr *k) {
-	for (int i = 0; i < VECTOR_LEN((&l3ctx.ipmgr_ctx)->addrs); i++) {
-		struct entry *e = &VECTOR_INDEX((&l3ctx.ipmgr_ctx)->addrs, i);
-
-		if (memcmp(k, &(e->address), sizeof(struct in6_addr)) == 0) {
-			VECTOR_DELETE((&l3ctx.ipmgr_ctx)->addrs, i);
-			break;
-		}
-	}
+	int i;
+	find_entry(&l3ctx.ipmgr_ctx, k, &i);
+	VECTOR_DELETE((&l3ctx.ipmgr_ctx)->addrs, i);
 }
 
 struct ip_task *create_task(struct in6_addr *dst) {
@@ -121,9 +118,9 @@ struct ip_task *create_task(struct in6_addr *dst) {
 	return task;
 }
 
-void schedule_purge_task(struct in6_addr *destination) {
+taskqueue_t *schedule_purge_task(struct in6_addr *destination, int timeout) {
 	struct ip_task *purge_data = create_task(destination);
-	post_task(&l3ctx.taskqueue_ctx, PACKET_TIMEOUT, 0, ipmgr_purge_task, free, purge_data);
+	return post_task(&l3ctx.taskqueue_ctx, timeout, 0, ipmgr_purge_task, free, purge_data);
 }
 
 /** This will seek an address by checking locally and if needed querying the network by scheduling a task */
@@ -179,7 +176,7 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
 
-	struct entry *e = find_entry(ctx, &dst);
+	struct entry *e = find_entry(ctx, &dst, NULL);
 
 	bool new_unknown_dst = !e;
 
@@ -191,28 +188,27 @@ void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 
 		VECTOR_ADD(ctx->addrs, entry);
 		e = &VECTOR_INDEX(ctx->addrs, VECTOR_LEN(ctx->addrs) - 1);
-
 	}
 
-	struct packet *p = l3roamd_alloc(sizeof(struct packet));
+	struct packet p;
 
-	p->timestamp = now;
-	p->len = packet_len;
-	p->data = l3roamd_alloc(packet_len);
+	p.timestamp = now;
+	p.len = packet_len;
+	p.data = l3roamd_alloc(packet_len);
 
-	memcpy(p->data, packet, packet_len);
+	memcpy(p.data, packet, packet_len);
 
 	VECTOR_ADD(e->packets, p);
 
-	if (new_unknown_dst)
+	if (new_unknown_dst) {
 		ipmgr_seek_address(ctx, &dst);
-
-	schedule_purge_task(&dst);
+		e->check_task = schedule_purge_task(&dst, PACKET_TIMEOUT);
+	}
 }
 
 bool should_we_really_seek(struct in6_addr *destination) {
 	struct client *client = NULL;
-	struct entry *e = find_entry(&l3ctx.ipmgr_ctx, destination);
+	struct entry *e = find_entry(&l3ctx.ipmgr_ctx, destination, NULL);
 	// if a route to this client appeared, the queue will be emptied -- no seek necessary
 	if (!e) {
 		if (l3ctx.debug) {
@@ -237,31 +233,35 @@ bool should_we_really_seek(struct in6_addr *destination) {
 }
 
 void remove_packet_from_vector(struct entry *entry, int element) {
-	struct packet *p = VECTOR_INDEX(entry->packets, element);
+	struct packet p = VECTOR_INDEX(entry->packets, element);
 
-	struct in6_addr src = packet_get_src(p->data);
-	icmp6_send_dest_unreachable(&src, p);
+	struct in6_addr src = packet_get_src(p.data);
+	icmp6_send_dest_unreachable(&src, &p);
 
-	free(p->data);
-	free(p);
+	free(p.data);
+	// free(p);
 	VECTOR_DELETE(entry->packets, element);
 }
 
-void purge_old_packets(struct in6_addr *destination) {
-	struct entry *e = find_entry(&l3ctx.ipmgr_ctx, destination);
+int purge_old_packets(struct in6_addr *destination) {
+	int elementindex;
+	struct entry *e = find_entry(&l3ctx.ipmgr_ctx, destination, &elementindex);
 
 	if (!e)
-		return;
+		return 0;
 
 	struct timespec now;
-	clock_gettime(CLOCK_MONOTONIC, &now);
+	if (clock_gettime(CLOCK_MONOTONIC, &now) < 0 ) {
+		perror("clock_gettime");
+		return -1; //skip this purging-cycle
+	}
 
 	struct timespec then = now;
 	then.tv_sec -= PACKET_TIMEOUT;
 
 	for (int i = VECTOR_LEN(e->packets) - 1; i>=0; i--) {
-		struct packet *p = VECTOR_INDEX(e->packets, i);
-		if (timespec_cmp(p->timestamp, then) <= 0) {
+		struct packet p = VECTOR_INDEX(e->packets, i);
+		if (timespec_cmp(p.timestamp, then) <= 0) {
 			if (l3ctx.debug) {
 				printf("deleting old packet with destination ");
 				print_ip(&e->address, "\n");
@@ -273,15 +273,19 @@ void purge_old_packets(struct in6_addr *destination) {
 
 	if (VECTOR_LEN(e->packets) == 0) {
 		VECTOR_FREE(e->packets);
-		delete_entry(&e->address);
+		VECTOR_DELETE(l3ctx.ipmgr_ctx.addrs, elementindex);
+		return 0;
 	}
+
+	return VECTOR_LEN(e->packets);
 }
 
 
 void ipmgr_purge_task(void *d) {
 	struct ip_task *data = d;
-
-	purge_old_packets(&data->address);
+	struct entry *e = find_entry(&l3ctx.ipmgr_ctx, &data->address, NULL);
+	if (purge_old_packets(&data->address))
+		e->check_task = schedule_purge_task(&data->address, 1);
 }
 
 void ipmgr_ns_task(void *d) {
@@ -388,14 +392,14 @@ void ipmgr_handle_out(ipmgr_ctx *ctx, int fd) {
 }
 
 void ipmgr_route_appeared(ipmgr_ctx *ctx, const struct in6_addr *destination) {
-	struct entry *e = find_entry(ctx, destination);
+	struct entry *e = find_entry(ctx, destination, NULL);
 
 	if (!e)
 		return;
 
 	for (int i = 0; i < VECTOR_LEN(e->packets); i++) {
-		struct packet *p = VECTOR_INDEX(e->packets, i);
-		VECTOR_ADD(ctx->output_queue, *p);
+		struct packet p = VECTOR_INDEX(e->packets, i);
+		VECTOR_ADD(ctx->output_queue, p);
 	}
 
 	VECTOR_FREE(e->packets);

@@ -49,7 +49,7 @@ struct entry {
 	struct timespec timestamp;
 	taskqueue_t *check_task;
 	enum tasktype type;
-	VECTOR(struct packet*) packets;
+	VECTOR(struct packet) packets;
 };
 
 typedef struct {
