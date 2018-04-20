@@ -70,8 +70,7 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	if (tb[NDA_DST]) {
 		if (msg->ndm_family == AF_INET) {
 			// form a transformed ipv6 address from the ipv4 address, we just parsed
-			memcpy(&dst_address, &l3ctx.clientmgr_ctx.v4prefix,12);
-			memcpy(&dst_address.s6_addr[12], RTA_DATA(tb[NDA_DST]), 4);
+			mapv4_v6(RTA_DATA(tb[NDA_DST]), &dst_address);
 		}
 		else
 			memcpy(&dst_address, RTA_DATA(tb[NDA_DST]),16);
@@ -123,7 +122,7 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 }
 
 void client_bridge_changed(const struct nlmsghdr *nh, const struct ifinfomsg *msg) {
-        struct rtattr * tb[IFLA_MAX+1];
+	struct rtattr * tb[IFLA_MAX+1];
 	memset(tb, 0, sizeof(struct rtattr *) * (IFLA_MAX + 1));
 	char ifname[IFNAMSIZ];
 	char str_mac[6*3];
@@ -167,7 +166,8 @@ void client_bridge_changed(const struct nlmsghdr *nh, const struct ifinfomsg *ms
 void rtnl_handle_link(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	const struct ifinfomsg *msg = NLMSG_DATA(nh);
 
-	client_bridge_changed(nh, msg);
+	if (l3ctx.clientif_set)
+		client_bridge_changed(nh, msg);
 
 	interfaces_changed(nh->nlmsg_type, msg);
 }
@@ -197,25 +197,11 @@ void handle_kernel_routes(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 		return;
 
 	/* only interested in host routes */
-	if (route.plen != 128)
+	if ( (rtm->rtm_family == AF_INET6) && (route.plen != 128) )
 		return;
 
 	if (clientmgr_valid_address(&l3ctx.clientmgr_ctx, &route.prefix)) {
-//		if (nh->nlmsg_type == RTM_NEWROUTE)
-			ipmgr_route_appeared(CTX(ipmgr), &route.prefix);
-/*		else if (nh->nlmsg_type == RTM_DELROUTE) {
-			printf("KERNEL ROUTE WAS REMOVED - SHOULD WE HANDLE THIS? ");
-			print_ip(&route.prefix, "\n");
-			struct client *_client = NULL;
-			if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &route.prefix, &_client)) {
-				printf("   the route is for one of our clients\n");
-				//if (client_is_active(&l3ctx.clientmgr_ctx, _client))
-				//	printf("      The client is active\n");
-				//				struct *client_ip *ip = get_client_ip(struct client *client, const struct in6_addr *address) {
-				//client_ip_set_state(&l3ctx.clientmgr_ctx, struct client *client, struct client_ip *ip, IP_INACTIVE);
-			}
-		}
-		*/
+		ipmgr_route_appeared(CTX(ipmgr), &route.prefix);
 	}
 }
 
@@ -225,27 +211,23 @@ void rtnl_handle_msg(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 
 	switch (nh->nlmsg_type) {
 		case RTM_NEWROUTE:
-//		case RTM_DELROUTE:
-			if (l3ctx.debug)
-				printf("handling netlink message for route change\n");
+			//		case RTM_DELROUTE:
+			log_debug("handling netlink message for route change\n");
 			handle_kernel_routes(ctx, nh);
 			break;
 		case RTM_NEWNEIGH:
 		case RTM_DELNEIGH:
-			if (l3ctx.debug)
-				printf("handling netlink message for neighbour change\n");
+			log_debug("handling netlink message for neighbour change\n");
 			rtnl_handle_neighbour(ctx, nh);
 			break;
 		case RTM_NEWLINK:
 		case RTM_DELLINK:
 		case RTM_SETLINK:
-			if (l3ctx.debug)
-				printf("handling netlink message for link change\n");
+			log_debug("handling netlink message for link change\n");
 			rtnl_handle_link(ctx, nh);
 			break;
 		default:
-			if (l3ctx.debug)
-				printf("not handling unknown netlink message with type: %i\n", nh->nlmsg_type);
+			log_debug("not handling unknown netlink message with type: %i\n", nh->nlmsg_type);
 			return;
 	}
 }
@@ -281,8 +263,11 @@ void routemgr_init(routemgr_ctx *ctx) {
 
 	struct sockaddr_nl snl = {
 		.nl_family = AF_NETLINK,
-		.nl_groups = RTMGRP_IPV6_ROUTE | RTMGRP_LINK | RTMGRP_NEIGH,
+		.nl_groups = RTMGRP_IPV6_ROUTE | RTMGRP_LINK | RTMGRP_IPV4_ROUTE,
 	};
+
+	if (l3ctx.clientif_set)
+		snl.nl_groups |=  RTMGRP_NEIGH;
 
 	if (bind(ctx->fd, (struct sockaddr *)&snl, sizeof(snl)) < 0)
 		exit_error("can't bind RTNL socket");
@@ -296,6 +281,10 @@ void routemgr_init(routemgr_ctx *ctx) {
 		routemgr_insert_route(ctx, 254, if_nametoindex(CTX(ipmgr)->ifname), (struct in6_addr*)(prefix->prefix.s6_addr), prefix->plen );
 	}
 
+	if (!l3ctx.clientif_set) {
+		fprintf(stderr, "warning: we were started without -i - not initializing any client interfaces.\n");
+		return;
+	}
 	// determine mac address of client-bridge
 	memset(ctx->bridge_mac, 0, 6);
 	struct ifreq req = {};
@@ -309,23 +298,7 @@ void routemgr_init(routemgr_ctx *ctx) {
 		printf("extracted mac of client-bridge: %s\n",str_mac);
 	}
 
-	// set route for clat-prefix
-	 /*
-	char str[INET6_ADDRSTRLEN+1];
-	struct prefix *prefix = &l3ctx.clientmgr_ctx.v4prefix;
-	inet_ntop(AF_INET6, prefix->prefix.s6_addr, str, INET6_ADDRSTRLEN);
-	printf("Activating route for prefix %s/%i on clat-device %i in main routing-table\n", str, prefix->plen, l3ctx.clientmgr_ctx.nat46ifindex);
-
-	routemgr_insert_route(ctx, 254, l3ctx.clientmgr_ctx.nat46ifindex, (struct in6_addr*)(prefix->prefix.s6_addr), prefix->plen );
-*/
-
-
-
 	ctx->clientif_index = if_nametoindex(ctx->clientif);
-	if (!ctx->clientif_index) {
-		fprintf(stderr, "warning: we were started without -i - not initializing any client interfaces.\n");
-		return;
-	}
 	routemgr_initial_neighbours(ctx, AF_INET);
 	routemgr_initial_neighbours(ctx, AF_INET6);
 }

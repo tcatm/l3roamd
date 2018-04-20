@@ -128,34 +128,102 @@ void ipmgr_seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
 	post_task(CTX(taskqueue), 0, 300, seek_task, free, data);
 }
 
+struct in_addr packet_get_ip4(uint8_t packet[], int offset) {
+	struct in_addr src;
+	memcpy(&src, packet + offset, 4);
+	return src;
+}
 
+struct in_addr packet_get_src4(uint8_t packet[]) {
+	return packet_get_ip4(packet, 12);
+}
+struct in_addr packet_get_dst4(uint8_t packet[]) {
+	return packet_get_ip4(packet, 16);
+}
 
-
-struct in6_addr packet_get_ip(uint8_t packet[], int offset) {
+struct in6_addr packet_get_ip6(uint8_t packet[], int offset) {
 	struct in6_addr src;
 	memcpy(&src, packet + offset, 16);
 	return src;
 }
 
-struct in6_addr packet_get_src(uint8_t packet[]) {
-	return packet_get_ip(packet, 8);
+struct in6_addr packet_get_src6(uint8_t packet[]) {
+	return packet_get_ip6(packet, 8);
 }
-struct in6_addr packet_get_dst(uint8_t packet[]) {
-	return packet_get_ip(packet, 24);
+struct in6_addr packet_get_dst6(uint8_t packet[]) {
+	return packet_get_ip6(packet, 24);
 }
 
-void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
+void handle_packet_ipv4(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
+	struct in6_addr dst;
+	struct in6_addr src;
+
+	struct in_addr tmp = packet_get_dst4(packet);
+
+	// Ignore multicast
+	uint8_t a0 = ( (tmp.s_addr >>3 ) && 0xff);
+	if (a0 == 0x14 )
+		return;
+
+	mapv4_v6(&tmp, &dst);
+
+	tmp = packet_get_src4(packet);
+	mapv4_v6(&tmp, &src);
+	printf("Got packet from %s destined to %s\n", print_ip(&src), print_ip(&dst));
+
+// TODO: this whole function needs to be adjusted to ipv4
+	if (!clientmgr_valid_address(CTX(clientmgr), &dst)) {
+		char str[INET6_ADDRSTRLEN];
+		inet_ntop(AF_INET6, &dst, str, sizeof str);
+		fprintf(stderr, "The destination of the packet (%s) is not within the client prefixes. Ignoring packet\n", str);
+		return;
+	}
+
+	struct timespec now;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+
+	struct entry *e = find_entry(ctx, &dst, NULL);
+
+	bool new_unknown_dst = !e;
+
+	if (new_unknown_dst) {
+		struct entry entry = {
+			.address = dst,
+			.timestamp = now,
+		};
+
+		VECTOR_ADD(ctx->addrs, entry);
+		e = &VECTOR_INDEX(ctx->addrs, VECTOR_LEN(ctx->addrs) - 1);
+	}
+
+	struct packet p;
+
+	p.timestamp = now;
+	p.len = packet_len;
+	p.data = l3roamd_alloc(packet_len);
+
+	memcpy(p.data, packet, packet_len);
+
+	VECTOR_ADD(e->packets, p);
+
+	if (new_unknown_dst) {
+		ipmgr_seek_address(ctx, &dst);
+		e->check_task = schedule_purge_task(&dst, PACKET_TIMEOUT);
+	}
+}
+
+void handle_packet_ipv6(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 	struct in6_addr dst;
 	struct in6_addr src;
 
 
 	// Ignore multicast
-	dst = packet_get_dst(packet);
+	dst = packet_get_dst6(packet);
 	uint8_t a0 = dst.s6_addr[0];
 	if (a0 == 0xff)
 		return;
 
-	src = packet_get_src(packet);
+	src = packet_get_src6(packet);
 	printf("Got packet from %s destined to %s\n", print_ip(&src), print_ip(&dst));
 
 	if (!clientmgr_valid_address(CTX(clientmgr), &dst)) {
@@ -224,7 +292,7 @@ bool should_we_really_seek(struct in6_addr *destination) {
 void remove_packet_from_vector(struct entry *entry, int element) {
 	struct packet p = VECTOR_INDEX(entry->packets, element);
 
-	struct in6_addr src = packet_get_src(p.data);
+	struct in6_addr src = packet_get_src6(p.data);
 	icmp6_send_dest_unreachable(&src, &p);
 
 	free(p.data);
@@ -278,14 +346,15 @@ void ipmgr_ns_task(void *d) {
 	char str[INET6_ADDRSTRLEN];
 
 	if (should_we_really_seek(&data->address)) {
-		inet_ntop(AF_INET6, &data->address, str, sizeof str);
-		printf("\x1b[36mLooking for %s locally\x1b[0m\n", str);
+		if (l3ctx.clientif_set) {
+			inet_ntop(AF_INET6, &data->address, str, sizeof str);
+			printf("\x1b[36mLooking for %s locally\x1b[0m\n", str);
 
-		if (clientmgr_is_ipv4(&l3ctx.clientmgr_ctx, &data->address))
-			arp_send_request(&l3ctx.arp_ctx, &data->address);
-		else
-			icmp6_send_solicitation(&l3ctx.icmp6_ctx, &data->address);
-
+			if (clientmgr_is_ipv4(&l3ctx.clientmgr_ctx, &data->address))
+				arp_send_request(&l3ctx.arp_ctx, &data->address);
+			else
+				icmp6_send_solicitation(&l3ctx.icmp6_ctx, &data->address);
+		}
 		struct ip_task *ns_data = create_task(&data->address);
 		post_task(&l3ctx.taskqueue_ctx, SEEK_INTERVAL, 0, ipmgr_ns_task, free, ns_data);
 	}
@@ -307,11 +376,10 @@ void seek_task(void *d) {
 void ipmgr_handle_in(ipmgr_ctx *ctx, int fd) {
 	ssize_t count;
 	uint8_t buf[l3ctx.client_mtu];
-	if (l3ctx.debug)
-		printf("handling ipmgr event\n");
+	log_debug("handling ipmgr event\n");
 
 	while (1) {
-		count = read(fd, buf, sizeof buf);
+		count = read(fd, buf, sizeof(buf));
 
 		if (count == -1) {
 			/* If errno == EAGAIN, that means we have read all
@@ -331,10 +399,10 @@ void ipmgr_handle_in(ipmgr_ctx *ctx, int fd) {
 			continue;
 
 		// We're only interested in ip6 packets
-		if ((buf[0] & 0xf0) != 0x60)
-			continue;
-
-		handle_packet(ctx, buf, count);
+		if ((buf[0] & 0xf0) == 0x60)
+			handle_packet_ipv6(ctx, buf, count);
+		else if ((buf[0] & 0xf0) == 0x40)
+			handle_packet_ipv4(ctx, buf, count);
 	}
 }
 
@@ -399,13 +467,5 @@ static inline int setsockopt_int(int socket, int level, int option, int value) {
 
 bool ipmgr_init(ipmgr_ctx *ctx, char *tun_name, unsigned int mtu) {
 	bool tun = tun_open(ctx, tun_name, mtu, "/dev/net/tun");
-	int sock_fd = socket(PF_INET6, SOCK_RAW | SOCK_NONBLOCK, IPPROTO_ICMPV6);
-	setsockopt_int(sock_fd, IPPROTO_RAW, IPV6_CHECKSUM, 2);
-	setsockopt_int(sock_fd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, 255);
-	setsockopt_int(sock_fd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, 1);
-	setsockopt_int(sock_fd, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, 1);
-	setsockopt_int(sock_fd, IPPROTO_IPV6, IPV6_AUTOFLOWLABEL, 0);
-	ctx->sockfd = sock_fd;
-
 	return tun;
 }

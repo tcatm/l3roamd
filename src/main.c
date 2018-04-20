@@ -38,6 +38,7 @@
 #include "l3roamd.h"
 #include "types.h"
 #include "alloc.h"
+#include "util.h"
 
 #define SIGTERM_MSG "Exiting. Removing routes for prefixes and clients.\n"
 
@@ -92,23 +93,20 @@ void sig_term_handler(int signum, siginfo_t *info, void *ptr)
 bool intercom_ready(const int fd){
 	for (int j=VECTOR_LEN(l3ctx.intercom_ctx.interfaces) - 1; j>=0; j--) {
 		if (VECTOR_INDEX(l3ctx.intercom_ctx.interfaces, j).mcast_recv_fd == fd) {
-			if (l3ctx.debug)
-				printf("received intercom packet on one of the mesh interfaces\n");
+			log_debug("received intercom packet on one of the mesh interfaces\n");
 			return true;
 		}
 	}
 
 	for (int j=VECTOR_LEN(l3ctx.clientmgr_ctx.clients) - 1; j>=0; j--) {
 		if (VECTOR_INDEX(l3ctx.clientmgr_ctx.clients, j).fd == fd) {
-			if (l3ctx.debug)
-				printf("received intercom packet for a locally connected client\n");
+			log_debug("received intercom packet for a locally connected client\n");
 			return true;
 		}
 	}
 
 	if ( l3ctx.intercom_ctx.unicast_nodeip_fd == fd ) {
-		if (l3ctx.debug)
-			printf("received intercom packet for unicast_nodeip\n");
+		log_debug("received intercom packet for unicast_nodeip\n");
 		return true;
 	}
 
@@ -162,54 +160,46 @@ void loop() {
 	l3ctx.efd = efd;
 
 	add_fd(efd, l3ctx.ipmgr_ctx.fd, EPOLLIN);
-//	add_fd(efd, l3ctx.ipmgr_ctx.fd, EPOLLIN | EPOLLET);
-	// add_fd(efd, l3ctx.routemgr_ctx.fd, EPOLLIN | EPOLLET);
 	add_fd(efd, l3ctx.routemgr_ctx.fd, EPOLLIN);
+	add_fd(efd, l3ctx.icmp6_ctx.unreachfd, EPOLLIN);
+	add_fd(efd, l3ctx.intercom_ctx.unicast_nodeip_fd, EPOLLIN);
+	add_fd(efd, l3ctx.taskqueue_ctx.fd, EPOLLIN);
 
-	if (strlen(l3ctx.icmp6_ctx.clientif)) {
+	if (l3ctx.clientif_set) {
 		printf("adding icmp6-fd to epoll\n");
 		add_fd(efd, l3ctx.icmp6_ctx.fd, EPOLLIN);
 		add_fd(efd, l3ctx.icmp6_ctx.nsfd, EPOLLIN);
-	}
 
-	if (strlen(l3ctx.arp_ctx.clientif)) {
 		printf("adding arp-fd to epoll\n");
 		add_fd(efd, l3ctx.arp_ctx.fd, EPOLLIN);
+
+		if (l3ctx.wifistations_ctx.fd >= 0)
+			add_fd(efd, l3ctx.wifistations_ctx.fd, EPOLLIN);
 	}
 
 	for (int i=VECTOR_LEN(l3ctx.intercom_ctx.interfaces) - 1; i>=0; i--) {
 		add_fd(efd, VECTOR_INDEX(l3ctx.intercom_ctx.interfaces, i).mcast_recv_fd, EPOLLIN);
 	}
 
-	add_fd(efd, l3ctx.intercom_ctx.unicast_nodeip_fd, EPOLLIN);
-	add_fd(efd, l3ctx.taskqueue_ctx.fd, EPOLLIN);
-
-	if (l3ctx.socket_ctx.fd >= 0) {
+	if (l3ctx.socket_ctx.fd >= 0)
 		add_fd(efd, l3ctx.socket_ctx.fd, EPOLLIN);
-	}
-
-	if (l3ctx.wifistations_ctx.fd >= 0) {
-		add_fd(efd, l3ctx.wifistations_ctx.fd, EPOLLIN);
-	}
 
 	/* Buffer where events are returned */
 	events = l3roamd_alloc0_array(maxevents, sizeof(struct epoll_event));
-	printf("starting loop\n");
+	log_verbose("starting loop\n");
 
 	/* The event loop */
 	while (1) {
 		int n = epoll_wait(efd, events, maxevents, -1);
 		for(int i = 0; i < n; i++) {
-			if (l3ctx.debug) {
-				printf("handling event on fd %i. taskqueue.fd: %i routemgr: %i ipmgr: %i icmp6: %i icmp6.ns: %i arp: %i socket: %i, wifistations: %i, intercom_unicast_nodeip_fd: %i - ", events[i].data.fd, l3ctx.taskqueue_ctx.fd, l3ctx.routemgr_ctx.fd, l3ctx.ipmgr_ctx.fd, l3ctx.icmp6_ctx.fd, l3ctx.icmp6_ctx.nsfd, l3ctx.arp_ctx.fd, l3ctx.socket_ctx.fd, l3ctx.wifistations_ctx.fd, l3ctx.intercom_ctx.unicast_nodeip_fd);
-			}
-			if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) ||  (!(events[i].events & EPOLLIN || events[i].events & EPOLLET))) {
-				printf("epoll error received on fd %i, continuing. taskqueue.fd: %i routemgr: %i ipmgr: %i icmp6: %i icmp6.ns: %i arp: %i socket: %i, wifistations: %i\n", events[i].data.fd, l3ctx.taskqueue_ctx.fd, l3ctx.routemgr_ctx.fd, l3ctx.ipmgr_ctx.fd, l3ctx.icmp6_ctx.fd, l3ctx.icmp6_ctx.nsfd, l3ctx.arp_ctx.fd, l3ctx.socket_ctx.fd, l3ctx.wifistations_ctx.fd);
+			log_debug("handling event on fd %i. taskqueue.fd: %i routemgr: %i ipmgr: %i icmp6: %i icmp6.ns: %i arp: %i socket: %i, wifistations: %i, intercom_unicast_nodeip_fd: %i - ", events[i].data.fd, l3ctx.taskqueue_ctx.fd, l3ctx.routemgr_ctx.fd, l3ctx.ipmgr_ctx.fd, l3ctx.icmp6_ctx.fd, l3ctx.icmp6_ctx.nsfd, l3ctx.arp_ctx.fd, l3ctx.socket_ctx.fd, l3ctx.wifistations_ctx.fd, l3ctx.intercom_ctx.unicast_nodeip_fd);
+
+			if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) ||  (!(events[i].events & EPOLLIN))) {
+				fprintf(stderr, "epoll error received on fd %i. Dumping fd: taskqueue.fd: %i routemgr: %i ipmgr: %i icmp6: %i icmp6.ns: %i arp: %i socket: %i, wifistations: %i ... continuing\n", events[i].data.fd, l3ctx.taskqueue_ctx.fd, l3ctx.routemgr_ctx.fd, l3ctx.ipmgr_ctx.fd, l3ctx.icmp6_ctx.fd, l3ctx.icmp6_ctx.nsfd, l3ctx.arp_ctx.fd, l3ctx.socket_ctx.fd, l3ctx.wifistations_ctx.fd);
 				if (reconnect_fd(events[i].data.fd))
 					continue;
 				perror("epoll error without contingency plan. Exiting now.");
 				sig_term_handler(0, 0, 0);
-				// TODO: routemgr is handling routes from kernel AND direct neighbours from fdb. Refactor this at is actually a netlink-handler
 			} else if (l3ctx.wifistations_ctx.fd == events[i].data.fd) {
 				wifistations_handle_in(&l3ctx.wifistations_ctx);
 			} else if (l3ctx.taskqueue_ctx.fd == events[i].data.fd) {
@@ -226,6 +216,10 @@ void loop() {
 			} else if (l3ctx.ipmgr_ctx.fd == events[i].data.fd) {
 				if (events[i].events & EPOLLIN)
 					ipmgr_handle_in(&l3ctx.ipmgr_ctx, events[i].data.fd);
+			} else if (l3ctx.icmp6_ctx.unreachfd == events[i].data.fd) {
+				unsigned char trash[l3ctx.client_mtu];
+				int amount = read(l3ctx.icmp6_ctx.unreachfd, trash, l3ctx.client_mtu); // TODO: why do we even have to read here? This should be write-only
+				log_debug("ignoring bogus data on unreachfd, %i Bytes\n", amount);
 			} else if (l3ctx.icmp6_ctx.fd == events[i].data.fd) {
 				if (events[i].events & EPOLLIN)
 					icmp6_handle_in(&l3ctx.icmp6_ctx, events[i].data.fd);
@@ -238,8 +232,7 @@ void loop() {
 			} else if (l3ctx.socket_ctx.fd == events[i].data.fd) {
 				socket_handle_in(&l3ctx.socket_ctx);
 			} else if (intercom_ready(events[i].data.fd)) {
-				if (l3ctx.debug)
-					printf("handling intercom event\n");
+				log_debug("handling intercom event\n");
 				if (events[i].events & EPOLLIN)
 					intercom_handle_in(&l3ctx.intercom_ctx, events[i].data.fd);
 			} else {
@@ -286,7 +279,6 @@ void usage() {
 	puts("del_address <addr> <mac> This will remove the ipv6 address from the client represented by <mac>");
 	puts("probe <addr> <mac>   This will start a neighbour discovery for a neighbour <mac> with address <addr>");
 }
-
 
 void interfaces_changed(int type, const struct ifinfomsg *msg) {
 	printf("interfaces changed\n");
@@ -337,7 +329,7 @@ int main(int argc, char *argv[]) {
 	bool v4_initialized = false;
 	bool a_initialized = false;
 	bool p_initialized = false;
-	bool clientif_set = false;
+	l3ctx.clientif_set = false;
 	l3ctx.routemgr_ctx.nl_disabled = false;
 	l3ctx.wifistations_ctx.nl80211_disabled = false;
 	l3ctx.icmp6_ctx.ndp_disabled = false;
@@ -366,8 +358,7 @@ int main(int argc, char *argv[]) {
 			case 'V':
 				printf("l3roamd %s\n", SOURCE_VERSION);
 #if defined(GIT_BRANCH) && defined(GIT_COMMIT_HASH)
-				printf("branch: %s\n", GIT_BRANCH);
-				printf("commit: %s\n", GIT_COMMIT_HASH);
+				printf("branch: %s\n commit: %s\n", GIT_BRANCH, GIT_COMMIT_HASH);
 #endif
 				exit(EXIT_SUCCESS);
 			case 'b':
@@ -398,8 +389,6 @@ int main(int argc, char *argv[]) {
 					struct prefix _prefix = {};
 					if (!parse_prefix(&_prefix, optarg))
 						exit_error("Can not parse prefix");
-			//		if (_prefix.plen != 64)
-			//			exit_error("IPv6 prefix must be /64");
 					add_prefix(&l3ctx.clientmgr_ctx.prefixes, _prefix);
 					p_initialized=true;
 				}
@@ -428,14 +417,14 @@ int main(int argc, char *argv[]) {
 				v4_initialized=true;
 				break;
 			case 'i':
-				if (if_nametoindex(optarg) && !clientif_set ) {
+				if (if_nametoindex(optarg) && !l3ctx.clientif_set ) {
 					free(l3ctx.routemgr_ctx.clientif);
 					free(l3ctx.icmp6_ctx.clientif);
 					free(l3ctx.arp_ctx.clientif);
 					l3ctx.routemgr_ctx.clientif = strdupa(optarg);
 					l3ctx.icmp6_ctx.clientif = strdupa(optarg);
 					l3ctx.arp_ctx.clientif = strdupa(optarg);
-					clientif_set=true;
+					l3ctx.clientif_set=true;
 				} else {
 					fprintf(stderr, "ignoring unknown client-interface %s or client-interface was already set. Only the first client-interface will be considered.\n", optarg);
 				}
@@ -482,14 +471,13 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr, "-4 was not specified. Defaulting to 0:0:0:0:0:ffff::/96\n");
 		parse_prefix(&l3ctx.clientmgr_ctx.v4prefix, "0:0:0:0:0:ffff::/96");
 		l3ctx.arp_ctx.prefix = l3ctx.clientmgr_ctx.v4prefix.prefix;
-		v4_initialized=true;
+		v4_initialized = true;
 	}
 
 	// clients have ll-addresses too
 	struct prefix _prefix = {};
 	parse_prefix(&_prefix, "fe80::/64");
 	add_prefix(&l3ctx.clientmgr_ctx.prefixes, _prefix);
-
 
 	if (!a_initialized)
 		exit_error("specifying -a is mandatory");
@@ -503,16 +491,16 @@ int main(int argc, char *argv[]) {
 	socket_init(&l3ctx.socket_ctx, socketpath);
 	if (!ipmgr_init(&l3ctx.ipmgr_ctx, l3ctx.l3device, 9000))
 		exit_error("could not open the tun device for l3roamd. exiting now\n");
-	routemgr_init(&l3ctx.routemgr_ctx);
-	wifistations_init(&l3ctx.wifistations_ctx);
-	taskqueue_init(&l3ctx.taskqueue_ctx);
-	clientmgr_init();
 
-	printf("initializing icmp and arp\n");
-	icmp6_init(&l3ctx.icmp6_ctx);
-	if (strlen(l3ctx.routemgr_ctx.clientif)) {
+	routemgr_init(&l3ctx.routemgr_ctx);
+	if (l3ctx.clientif_set) {
+		wifistations_init(&l3ctx.wifistations_ctx);
 		arp_init(&l3ctx.arp_ctx);
 	}
+
+	taskqueue_init(&l3ctx.taskqueue_ctx);
+	clientmgr_init();
+	icmp6_init(&l3ctx.icmp6_ctx);
 
 	loop();
 

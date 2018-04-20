@@ -35,6 +35,7 @@ struct l3ctx {
 	int efd;
 	bool debug;
 	bool verbose;
+	bool clientif_set;
 };
 
 extern l3ctx_t l3ctx;

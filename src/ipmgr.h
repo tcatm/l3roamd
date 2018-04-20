@@ -58,7 +58,6 @@ typedef struct {
 	VECTOR(struct entry) addrs;
 	VECTOR(struct packet) output_queue;
 	int fd;
-	int sockfd;
 } ipmgr_ctx;
 
 struct ip_task {

@@ -46,43 +46,41 @@ static inline int setsockopt_int(int socket, int level, int option, int value) {
 }
 
 void icmp6_init(icmp6_ctx *ctx) {
-	int fd = socket(PF_INET6, SOCK_RAW | SOCK_NONBLOCK, IPPROTO_ICMPV6);
-	setsockopt_int(fd, IPPROTO_RAW, IPV6_CHECKSUM, 2);
-	setsockopt_int(fd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, 255);
-	setsockopt_int(fd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, 1);
-	setsockopt_int(fd, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, 1);
-	setsockopt_int(fd, IPPROTO_IPV6, IPV6_AUTOFLOWLABEL, 0);
+	if (l3ctx.clientif_set) {
+		int fd = socket(PF_INET6, SOCK_RAW | SOCK_NONBLOCK, IPPROTO_ICMPV6);
+		setsockopt_int(fd, IPPROTO_RAW, IPV6_CHECKSUM, 2);
+		setsockopt_int(fd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, 255);
+		setsockopt_int(fd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, 1);
+		setsockopt_int(fd, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, 1);
+		setsockopt_int(fd, IPPROTO_IPV6, IPV6_AUTOFLOWLABEL, 0);
 
-	// receive NA on fd	
-	struct icmp6_filter filter;
-	ICMP6_FILTER_SETBLOCKALL(&filter);
-	ICMP6_FILTER_SETPASS(ND_NEIGHBOR_ADVERT, &filter);
-	setsockopt(fd, IPPROTO_ICMPV6, ICMP6_FILTER, &filter, sizeof(filter));
-
+		// receive NA on fd
+		struct icmp6_filter filter;
+		ICMP6_FILTER_SETBLOCKALL(&filter);
+		ICMP6_FILTER_SETPASS(ND_NEIGHBOR_ADVERT, &filter);
+		setsockopt(fd, IPPROTO_ICMPV6, ICMP6_FILTER, &filter, sizeof(filter));
+		ctx->fd = fd;
+		ctx->nsfd = icmp6_init_packet();
+	}
 
 	// send icmp6 unreachable on unreachfd
 	int unreachfd = socket(AF_INET6, SOCK_RAW,IPPROTO_ICMPV6);
-	struct icmp6_filter filterv6;
+	struct icmp6_filter filterv6 = {};
 
 	ICMP6_FILTER_SETBLOCKALL(&filterv6);
+	// shutdown(unreachfd, SHUT_RD);
 	ICMP6_FILTER_SETPASS(ICMP6_DST_UNREACH, &filterv6);
 	setsockopt(unreachfd, IPPROTO_ICMPV6, ICMP6_FILTER, &filterv6, sizeof (filterv6));
-
-	ctx->fd = fd;
-
 	ctx->unreachfd = unreachfd;
 
-	ctx->nsfd = icmp6_init_packet();
-
-	if (strlen(ctx->clientif))
-		icmp6_setup_interface(ctx);
+	icmp6_setup_interface(ctx);
 }
 
 void icmp6_setup_interface(icmp6_ctx *ctx) {
-	if (!strlen(ctx->clientif))
-		return;
-
 	ctx->ok = false;
+
+	if (! l3ctx.clientif_set)
+		return;
 
 	int rc = setsockopt(ctx->fd, SOL_SOCKET, SO_BINDTODEVICE, ctx->clientif, strnlen(ctx->clientif, IFNAMSIZ-1));
 	printf("Setting up icmp6 interface: %i\n", rc);
@@ -91,7 +89,7 @@ void icmp6_setup_interface(icmp6_ctx *ctx) {
 		perror("icmp6 - setsockopt fd:");
 		return;
 	}
-	
+
 	struct ifreq req = {};
 	strncpy(req.ifr_name, ctx->clientif, IFNAMSIZ-1);
 	ioctl(ctx->fd, SIOCGIFHWADDR, &req);
@@ -100,7 +98,6 @@ void icmp6_setup_interface(icmp6_ctx *ctx) {
 	struct ifreq req1 = {};
 	strncpy(req1.ifr_name, ctx->clientif, IFNAMSIZ-1);
 	ioctl(ctx->fd, SIOCGIFINDEX, &req1);
-
 	struct sockaddr_ll lladdr;
 
 	// Bind the socket to the interface we're interested in
@@ -165,11 +162,6 @@ struct __attribute__((__packed__)) adv_packet {
 };
 
 void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
-
-
-	struct msghdr msghdr = {};
-	memset (&msghdr, 0, sizeof (msghdr));
-
 	char cbuf[CMSG_SPACE (sizeof (int))];
 
 	struct __attribute__((__packed__)) {
@@ -177,14 +169,14 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 		struct sol_packet sol;
 	} packet = {};
 
-	struct iovec iov =	{
+	struct iovec iov = {
 		.iov_base = &packet,
 		.iov_len = sizeof(packet)
 	};
 
 	struct sockaddr_ll lladdr;
 
-	struct msghdr hdr =	{
+	struct msghdr hdr = {
 		.msg_name = &lladdr,
 		.msg_namelen = sizeof(lladdr),
 		.msg_iov = &iov,
@@ -193,38 +185,40 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 		.msg_controllen = sizeof (cbuf)
 	};
 
-	ssize_t rc = recvmsg(ctx->nsfd, &hdr, 0);
+	while (true) {
 
-	if (ctx->ndp_disabled)
-		return;
-	
-	if (rc == -1)
-		return;
-	
-	if (l3ctx.debug)
-		printf("handling icmp6-NS event\n");
-	
-	uint8_t *mac = lladdr.sll_addr;
+		ssize_t rc = recvmsg(ctx->nsfd, &hdr, 0);
 
-	if (packet.sol.hdr.nd_ns_hdr.icmp6_type == ND_NEIGHBOR_SOLICIT) {
-		if (memcmp(&packet.hdr.ip6_src, "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 16) == 0)
+		if (ctx->ndp_disabled)
 			return;
 
-		if (l3ctx.debug) {
-			char str[INET6_ADDRSTRLEN];
-			inet_ntop(AF_INET6, &packet.hdr.ip6_src, str, INET6_ADDRSTRLEN);
-			printf("Received Neighbor Solicitation from %s [%02x:%02x:%02x:%02x:%02x:%02x] for IP %s. Learning source-IP for client.\n", str, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], print_ip(&packet.sol.hdr.nd_ns_target));
-		}
+		if (rc == -1)
+			return;
 
-		clientmgr_notify_mac(CTX(clientmgr), mac, ctx->ifindex);
-		clientmgr_add_address(CTX(clientmgr), &packet.hdr.ip6_src, mac, ctx->ifindex);
+		log_debug("handling icmp6-NDP packet\n");
+
+		uint8_t *mac = lladdr.sll_addr;
+
+		if (packet.sol.hdr.nd_ns_hdr.icmp6_type == ND_NEIGHBOR_SOLICIT) {
+			if (memcmp(&packet.hdr.ip6_src, "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", 16) == 0)
+				continue;
+
+			if (l3ctx.debug) {
+				char str[INET6_ADDRSTRLEN];
+				inet_ntop(AF_INET6, &packet.hdr.ip6_src, str, INET6_ADDRSTRLEN);
+				printf("Received Neighbor Solicitation from %s [%02x:%02x:%02x:%02x:%02x:%02x] for IP %s. Learning source-IP for client.\n", str, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], print_ip(&packet.sol.hdr.nd_ns_target));
+			}
+
+			clientmgr_notify_mac(CTX(clientmgr), mac, ctx->ifindex);
+			clientmgr_add_address(CTX(clientmgr), &packet.hdr.ip6_src, mac, ctx->ifindex);
+		}
 	}
 }
 
 void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 	if (ctx->ndp_disabled)
 		return;
-	
+
 	log_debug("handling icmp6 event\n");
 
 	struct msghdr msghdr;
@@ -248,29 +242,30 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 		.msg_control = cbuf,
 		.msg_controllen = sizeof (cbuf)
 	};
+	while (true) {
+		ssize_t rc = recvmsg(ctx->fd, &hdr, 0);
 
-	ssize_t rc = recvmsg(ctx->fd, &hdr, 0);
+		if (rc == -1)
+			return;
 
-	if (rc == -1)
-		return;
-	
-	if (packet.hdr.nd_na_hdr.icmp6_type != ND_NEIGHBOR_ADVERT) {
-		printf("not an advertisement - returning\n");
-		return;
+		if (packet.hdr.nd_na_hdr.icmp6_type != ND_NEIGHBOR_ADVERT) {
+			printf("not an advertisement - returning\n");
+			continue;
+		}
+		//	if (packet.hdr.nd_na_hdr.icmp6_code != 0)
+		//		return;
+
+		if (memcmp(packet.hw_addr, "\x00\x00\x00\x00\x00\x00", 6) == 0)
+			continue;
+
+		if (l3ctx.debug) {
+			printf("Learning from Neighbour Advertisement that Client [%02x:%02x:%02x:%02x:%02x:%02x] is active on ip %s\n",  packet.hw_addr[0], packet.hw_addr[1], packet.hw_addr[2], packet.hw_addr[3], packet.hw_addr[4], packet.hw_addr[5], print_ip(&packet.hdr.nd_na_target));
+		}
+
+		clientmgr_add_address(CTX(clientmgr), &packet.hdr.nd_na_target, packet.hw_addr, ctx->ifindex);
 	}
-//	if (packet.hdr.nd_na_hdr.icmp6_code != 0)
-//		return;
-
-	if (memcmp(packet.hw_addr, "\x00\x00\x00\x00\x00\x00", 6) == 0)
-		return;
-
-	if (l3ctx.debug) {
-		printf("Learning from Neighbour Advertisement that Client [%02x:%02x:%02x:%02x:%02x:%02x] is active on ip %s\n",  packet.hw_addr[0], packet.hw_addr[1], packet.hw_addr[2], packet.hw_addr[3], packet.hw_addr[4], packet.hw_addr[5], print_ip(&packet.hdr.nd_na_target));
-	}
-	
-	clientmgr_add_address(CTX(clientmgr), &packet.hdr.nd_na_target, packet.hw_addr, ctx->ifindex);
 }
-
+#include <unistd.h>
 void icmp6_send_dest_unreachable(const struct in6_addr *addr, const struct packet *data) {
 	struct dest_unreach_packet packet = {};
 	memset(&packet, 0, sizeof(packet));
@@ -292,8 +287,9 @@ void icmp6_send_dest_unreachable(const struct in6_addr *addr, const struct packe
 
 	int len=0;
 	int retries = 3;
+
 	while (len <= 0 && retries > 0){
-		len = sendto((&l3ctx.icmp6_ctx)->unreachfd, &packet, sizeof(packet.hdr) + dlen, 0, (struct sockaddr*)&dst, sizeof(dst));
+		len = sendto(l3ctx.icmp6_ctx.unreachfd, &packet, sizeof(packet.hdr) + dlen, 0, (struct sockaddr*)&dst, sizeof(dst));
 
 		if (len > 0) {
 			log_debug("sent %i bytes ICMP6 destination unreachable to %s\n", len, print_ip(addr));
@@ -307,7 +303,7 @@ void icmp6_send_dest_unreachable(const struct in6_addr *addr, const struct packe
 }
 
 void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
-	if (!strlen(ctx->clientif))
+	if (!ctx->ok)
 		return;
 
 	struct sol_packet packet = {};
