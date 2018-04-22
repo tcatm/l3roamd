@@ -11,6 +11,24 @@ Integrating tightly with mac80211 and netlink, l3roamd will be doing the followi
  
 Ideally, I'd like to split this up into multiple daemons communicating using standardized protocols:
 
+## Building l3roamd
+
+### Build
+in the root of this project, run:
+ mkdir build
+ cd build
+ cmake ..
+ make 
+ make install
+
+to build and install the program.
+
+### Dependencies
+The following programs / libraries are needed to build and run l3roamd:
+ - libnl-genl
+ - libjson-c
+ - kmod-tun
+
 ## Managing clients
 
 l3roamd will directly monitor a set of interfaces for clients.
