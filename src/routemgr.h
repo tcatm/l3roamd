@@ -34,13 +34,13 @@ struct nlneighreq {
 
 struct kernel_route {
 	struct in6_addr prefix;
-	int plen;
 	struct in6_addr src_prefix;
+	struct in6_addr gw;
+	int plen;
 	int src_plen; /* no source prefix <=> src_plen == 0 */
 	int metric;
-	unsigned int ifindex;
 	int proto;
-	struct in6_addr gw;
+	unsigned int ifindex;
 	unsigned int table;
 };
 
