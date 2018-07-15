@@ -250,7 +250,7 @@ static void routemgr_initial_neighbours ( routemgr_ctx *ctx, uint8_t family )
 
 void routemgr_init ( routemgr_ctx *ctx )
 {
-    printf ( "initializing routemgr\n" );
+    log_verbose ( "initializing routemgr\n" );
     ctx->fd = socket ( AF_NETLINK, SOCK_RAW|SOCK_NONBLOCK, NETLINK_ROUTE );
     if ( ctx->fd < 0 )
         exit_error ( "can't open RTNL socket" );
@@ -267,20 +267,19 @@ void routemgr_init ( routemgr_ctx *ctx )
         exit_error ( "can't bind RTNL socket" );
 
     for ( int i=0; i<VECTOR_LEN ( CTX ( clientmgr )->prefixes ); i++ ) {
-        char str[INET6_ADDRSTRLEN+1];
         struct prefix *prefix = & ( VECTOR_INDEX ( CTX ( clientmgr )->prefixes, i ) );
-        inet_ntop ( AF_INET6, prefix->prefix.s6_addr, str, INET6_ADDRSTRLEN );
-        printf ( "Activating route for prefix %s/%i on device %s(%i) in main routing-table\n", str, prefix->plen, CTX ( ipmgr )->ifname, if_nametoindex ( CTX ( ipmgr )->ifname ) );
+        log_verbose ( "Activating route for prefix %s/%i on device %s(%i) in main routing-table\n", print_ip(&prefix->prefix), prefix->plen, CTX ( ipmgr )->ifname, if_nametoindex ( CTX ( ipmgr )->ifname ) );
+
         if ( prefix->isv4 ) {
             struct in_addr ip4  = extractv4_v6 ( &prefix->prefix );
-            printf("ipv4: %s\n",print_ip4(&ip4));
+            log_verbose("ipv4: %s\n",print_ip4(&ip4));
             routemgr_insert_route4 ( ctx, 254, if_nametoindex ( CTX ( ipmgr )->ifname ), &ip4, prefix->plen - 96 );
         } else
             routemgr_insert_route ( ctx, 254, if_nametoindex ( CTX ( ipmgr )->ifname ), ( struct in6_addr* ) ( prefix->prefix.s6_addr ), prefix->plen );
     }
 
     if ( !l3ctx.clientif_set ) {
-        fprintf ( stderr, "warning: we were started without -i - not initializing any client interfaces.\n" );
+        log_error ( "warning: we were started without -i - not initializing any client interfaces.\n" );
         return;
     }
     // determine mac address of client-bridge

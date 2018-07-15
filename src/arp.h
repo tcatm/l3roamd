@@ -27,7 +27,6 @@ typedef struct {
     char *clientif;
     unsigned int ifindex;
     int fd;
-    bool ok;
     uint8_t mac[ETH_ALEN];
 } arp_ctx;
 
