@@ -222,9 +222,11 @@ static int purge_old_packets ( struct in6_addr *destination )
 			log_debug ( "deleting old packet with destination %s\n", print_ip ( &e->address ) );
 
 			struct in6_addr src = packet_get_src ( p.data );
-			// TODO run arp request here if src is an ipv4 address
 			if ( !address_is_ipv4 ( &src ) )
 				icmp6_send_dest_unreachable ( &src, &p );
+			else
+				icmp_send_dest_unreachable( &src, &p );
+
 			remove_packet_from_vector ( e, i );
 		}
 	}

@@ -34,12 +34,21 @@ static struct in6_addr packet_get_dst6(const uint8_t packet[]) {
     return packet_get_ip6(packet, 24);
 }
 
-static inline bool packet_isv4(const uint8_t packet[]) {
+uint8_t packet_ipv4_get_header_length(const uint8_t packet[]) {
+    return (packet[0] & 0x0f) << 2; // IHL * 32 / 8 = IHL * 32/4 = IHL << 2
+}
+
+uint16_t packet_ipv4_get_length(const uint8_t packet[]) {
+    uint16_t length =  ( ( packet[3] <<8 ) | packet[4]);
+    return length;
+}
+
+static bool packet_isv4(const uint8_t packet[]) {
     return (packet[0] & 0xf0) == 0x40;
 }
 
 
-static inline bool packet_isv6(const uint8_t packet[]) {
+static bool packet_isv6(const uint8_t packet[]) {
     return (packet[0] & 0xf0) == 0x60;
 }
 

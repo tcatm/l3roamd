@@ -11,10 +11,13 @@
 #include <error.h>
 #include <netinet/ip6.h>
 #include <netinet/icmp6.h>
+#include <linux/icmp.h>
 #include <linux/if_packet.h>
 #include <linux/if_ether.h>
 #include <linux/filter.h>
 #include <unistd.h>
+
+unsigned short csum(unsigned short *ptr, int nbytes);
 
 int icmp6_init_packet() {
 	int sock, err;
@@ -66,15 +69,21 @@ void icmp6_init(icmp6_ctx *ctx) {
 		ctx->nsfd = icmp6_init_packet();
 	}
 
-	// send icmp6 unreachable on unreachfd
-	int unreachfd = socket(AF_INET6, SOCK_RAW | SOCK_NONBLOCK, IPPROTO_ICMPV6);
+	// send icmp6 unreachable on unreachfd6
+	int unreachfd6 = socket(AF_INET6, SOCK_RAW | SOCK_NONBLOCK, IPPROTO_ICMPV6);
 	struct icmp6_filter filterv6 = {};
 
 	ICMP6_FILTER_SETBLOCKALL(&filterv6);
-	// shutdown(unreachfd, SHUT_RD);
+	// shutdown(unreachfd6, SHUT_RD);
 	ICMP6_FILTER_SETPASS(ICMP6_DST_UNREACH, &filterv6);
-	setsockopt(unreachfd, IPPROTO_ICMPV6, ICMP6_FILTER, &filterv6, sizeof (filterv6));
-	ctx->unreachfd = unreachfd;
+	setsockopt(unreachfd6, IPPROTO_ICMPV6, ICMP6_FILTER, &filterv6, sizeof (filterv6));
+	ctx->unreachfd6 = unreachfd6;
+
+	struct icmp_filter filterv4 = {};
+	filterv4.data |= 1 << ICMP_DEST_UNREACH;
+	int unreachfd4 = socket(AF_INET, SOCK_RAW | SOCK_NONBLOCK, IPPROTO_ICMP);
+	setsockopt(unreachfd4, IPPROTO_ICMP, ICMP_FILTER, &filterv4, sizeof (filterv4));
+	ctx->unreachfd4 = unreachfd4;
 
 	icmp6_setup_interface(ctx);
 }
@@ -86,7 +95,7 @@ void icmp6_setup_interface(icmp6_ctx *ctx) {
 		return;
 
 	int rc = setsockopt(ctx->fd, SOL_SOCKET, SO_BINDTODEVICE, ctx->clientif, strnlen(ctx->clientif, IFNAMSIZ-1));
-	printf("Setting up icmp6 interface: %i\n", rc);
+	log_verbose("Setting up icmp6 interface: %i\n", rc);
 
 	if (rc < 0) {
 		perror("icmp6 - setsockopt fd:");
@@ -130,7 +139,7 @@ void icmp6_interface_changed(icmp6_ctx *ctx, int type, const struct ifinfomsg *m
 	if (strcmp(ifname, ctx->clientif) != 0)
 		return;
 
-	printf("icmp6 interface change detected\n");
+	log_verbose("icmp6 interface change detected\n");
 
 	ctx->ifindex = msg->ifi_index;
 
@@ -149,6 +158,11 @@ void icmp6_interface_changed(icmp6_ctx *ctx, int type, const struct ifinfomsg *m
 
 
 struct __attribute__((__packed__)) dest_unreach_packet {
+	struct icmphdr hdr;
+	uint8_t data[1272];
+};
+
+struct __attribute__((__packed__)) dest_unreach_packet6 {
 	struct icmp6_hdr hdr;
 	uint8_t data[1272];
 };
@@ -210,11 +224,7 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 				post_task ( CTX ( taskqueue ), 0, 0, ipmgr_ns_task, free, ns_data );
 			}
 			else {
-				if (l3ctx.debug) {
-					char str[INET6_ADDRSTRLEN];
-					inet_ntop(AF_INET6, &packet.hdr.ip6_src, str, INET6_ADDRSTRLEN);
-					log_debug("Received Neighbor Solicitation from %s [%s] for IP %s. Learning source-IP for client.\n", str, print_mac(mac), print_ip(&packet.sol.hdr.nd_ns_target));
-				}
+				log_debug("Received Neighbor Solicitation from %s [%s] for IP %s. Learning source-IP for client.\n", print_ip(&packet.hdr.ip6_src), print_mac(mac), print_ip(&packet.sol.hdr.nd_ns_target));
 
 				clientmgr_notify_mac(CTX(clientmgr), mac, ctx->ifindex);
 				clientmgr_add_address(CTX(clientmgr), &packet.hdr.ip6_src, mac, ctx->ifindex);
@@ -257,7 +267,7 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 			return;
 
 		if (packet.hdr.nd_na_hdr.icmp6_type != ND_NEIGHBOR_ADVERT) {
-			printf("not an advertisement - returning\n");
+			log_debug("not an advertisement - returning\n");
 			continue;
 		}
 		//	if (packet.hdr.nd_na_hdr.icmp6_code != 0)
@@ -274,13 +284,53 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 	}
 }
 
-void icmp6_send_dest_unreachable(const struct in6_addr *addr, const struct packet *data) {
+int icmp_send_dest_unreachable(const struct in6_addr *addr, const struct packet *data) {
+	int len = 0, retries = 3;
 	struct dest_unreach_packet packet = {};
+
+	memset(&packet, 0, sizeof(packet));
+	memset(&packet.hdr, 0, sizeof(packet.hdr));
+	packet.hdr.type = ICMP_DEST_UNREACH;
+	packet.hdr.code = ICMP_HOST_UNREACH;
+	packet.hdr.checksum = htons(0);
+
+	int dlen = packet_ipv4_get_header_length((uint8_t*)data) + 8;
+	if (dlen < packet_ipv4_get_length((uint8_t*)data))
+		dlen = data->len;
+
+	memcpy(packet.data, data->data, dlen);
+
+	struct sockaddr_in dst = {};
+	dst.sin_family = AF_INET;
+
+	struct in_addr sin = extractv4_v6(addr);
+	memcpy(&dst.sin_addr, &sin, sizeof(struct in_addr));
+
+	packet.hdr.checksum = csum((unsigned short *)&packet, sizeof(struct icmphdr) + dlen); // icmp dest unreachbyte is 8 Bytes according to RFC 792
+
+	while (len <= 0 && retries > 0) {
+		len = sendto(l3ctx.icmp6_ctx.unreachfd4, &packet, sizeof(struct icmphdr) + dlen, 0, (struct sockaddr*)&dst, sizeof(dst));
+
+		if (len > 0) {
+			log_debug("sent %i bytes ICMP destination unreachable to %s\n", len, print_ip(addr));
+			return 0;
+		}
+		else if (len < 0) {
+			fprintf(stderr, "Error while sending ICMP destination unreachable, retrying %s\n", print_ip(addr));
+			perror("sendto");
+		}
+		retries--;
+	}
+	return 1;
+}
+
+int icmp6_send_dest_unreachable(const struct in6_addr *addr, const struct packet *data) {
+	struct dest_unreach_packet6 packet = {};
 	memset(&packet, 0, sizeof(packet));
 	memset(&packet.hdr, 0, sizeof(packet.hdr));
 	packet.hdr.icmp6_type = ICMP6_DST_UNREACH;
 	packet.hdr.icmp6_code = ICMP6_DST_UNREACH_NOROUTE;
-	packet.hdr.icmp6_cksum = htons(0); 
+	packet.hdr.icmp6_cksum = htons(0);
 
 	int dlen = 1272;
 	if (data->len < 1272)
@@ -293,14 +343,15 @@ void icmp6_send_dest_unreachable(const struct in6_addr *addr, const struct packe
 	dst.sin6_flowinfo = 0;
 	memcpy(&dst.sin6_addr, addr, 16);
 
-	int len=0;
+	int len = 0;
 	int retries = 3;
 
 	while (len <= 0 && retries > 0){
-		len = sendto(l3ctx.icmp6_ctx.unreachfd, &packet, sizeof(packet.hdr) + dlen, 0, (struct sockaddr*)&dst, sizeof(dst));
+		len = sendto(l3ctx.icmp6_ctx.unreachfd6, &packet, sizeof(packet.hdr) + dlen, 0, (struct sockaddr*)&dst, sizeof(dst));
 
 		if (len > 0) {
 			log_debug("sent %i bytes ICMP6 destination unreachable to %s\n", len, print_ip(addr));
+			return 0;
 		}
 		else if (len < 0) {
 			fprintf(stderr, "Error while sending ICMP destination unreachable, retrying %s\n", print_ip(addr));
@@ -308,6 +359,7 @@ void icmp6_send_dest_unreachable(const struct in6_addr *addr, const struct packe
 		}
 		retries--;
 	}
+	return 1;
 }
 
 void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
@@ -364,4 +416,26 @@ void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 			perror("Error while sending NS, retrying");
 		retries--;
 	}
+}
+
+// TODO why doesn't the kernel calculate the ICMP checksum?
+unsigned short csum(unsigned short *ptr, int nbytes) {
+	u_int32_t sum;
+	u_int16_t oddbyte;
+
+	sum = 0;
+	while(nbytes > 1) {
+		sum += *ptr++;
+		nbytes -= 2;
+	}
+
+	if(nbytes == 1) {
+		oddbyte = 0;
+		*((u_char*)&oddbyte) = *(u_char*)ptr;
+		sum += oddbyte;
+	}
+
+	sum = (sum >> 16) + (sum & 0xffff);
+	sum = sum + (sum >> 16);
+	return (u_int16_t)~sum;
 }

@@ -39,6 +39,8 @@
 #include "types.h"
 #include "alloc.h"
 #include "util.h"
+#include "packet.h"
+#include "icmp6.h"
 
 #define SIGTERM_MSG "Exiting. Removing routes for prefixes and clients.\n"
 
@@ -107,11 +109,34 @@ int test_mac() {
 	return 0;
 }
 
-int all_tests() {
+int test_icmp_dest_unreachable4() {
+	struct in6_addr addr = {};
 
+	struct packet data = {};
+	data.len = 12;
+	uint8_t actualdata[data.len];
+	strncpy ( actualdata, "xxxxxxxxxxxxx", data.len);
+	data.data = actualdata;
+	data.family = 4;
+
+	if ( inet_pton ( AF_INET6, "::ffff:192.168.12.15", &addr ) != 1 )
+		return 1;
+
+	l3ctx.clientif_set = true;
+	l3ctx.icmp6_ctx.clientif = strdupa ( "tst1" );
+
+	l3ctx.icmp6_ctx.l3ctx = &l3ctx;
+	
+	icmp6_init(&l3ctx.icmp6_ctx);
+
+	return icmp_send_dest_unreachable( &addr, &data);
+}
+
+int all_tests() {
 	_verify(test_vector_init);
 	_verify(test_ntohl_ipv4);
 	_verify(test_mac);
+	_verify(test_icmp_dest_unreachable4);
 	return 0;
 }
 
@@ -119,6 +144,8 @@ int main(int argc, char **argv) {
 	int result = all_tests();
 	if (result == 0)
 		printf("PASSED\n");
+	else
+		printf("FAILED\n");
 	printf("Tests run: %d\n", tests_run);
 
 	return result != 0;

@@ -106,8 +106,7 @@ bool prefix_contains ( const struct prefix* prefix, const struct in6_addr* addr 
 //         offset = 12; // ipv4 addresses are stored from the 12th byte onwards in an in6_addr
 //     }
 
-		log_debug("checking if prefix %s contains ", print_ip(&prefix->prefix));
-		log_debug("address %s\n", print_ip(addr));
+    log_debug("checking if prefix %s contains address %s\n", print_ip(&prefix->prefix), print_ip(addr));
 
     int mask=0xff;
     for ( int remaining_plen = prefix->plen, i=0; remaining_plen > 0; remaining_plen-= 8 ) {

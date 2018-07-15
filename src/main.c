@@ -145,7 +145,8 @@ void loop()
 
     add_fd ( efd, l3ctx.ipmgr_ctx.fd, EPOLLIN );
     add_fd ( efd, l3ctx.routemgr_ctx.fd, EPOLLIN );
-    add_fd ( efd, l3ctx.icmp6_ctx.unreachfd, EPOLLIN );
+    add_fd ( efd, l3ctx.icmp6_ctx.unreachfd6, EPOLLIN );
+    add_fd ( efd, l3ctx.icmp6_ctx.unreachfd4, EPOLLIN );
     add_fd ( efd, l3ctx.intercom_ctx.unicast_nodeip_fd, EPOLLIN );
     add_fd ( efd, l3ctx.taskqueue_ctx.fd, EPOLLIN );
 
@@ -190,20 +191,22 @@ void loop()
                 taskqueue_run ( &l3ctx.taskqueue_ctx );
             } else if ( l3ctx.routemgr_ctx.fd == events[i].data.fd ) {
                 if ( events[i].events & EPOLLIN ) {
-                    if ( l3ctx.debug )
-                        printf ( " INBOUND\n" );
-                    routemgr_handle_in ( &l3ctx.routemgr_ctx, events[i].data.fd );
+			log_debug ( " INBOUND\n" );
+			routemgr_handle_in ( &l3ctx.routemgr_ctx, events[i].data.fd );
                 } else {
-                    if ( l3ctx.debug )
-                        printf ( "\n" );
+			log_debug ( "\n" );
                 }
             } else if ( l3ctx.ipmgr_ctx.fd == events[i].data.fd ) {
                 if ( events[i].events & EPOLLIN )
                     ipmgr_handle_in ( &l3ctx.ipmgr_ctx, events[i].data.fd );
-            } else if ( l3ctx.icmp6_ctx.unreachfd == events[i].data.fd ) {
+            } else if ( l3ctx.icmp6_ctx.unreachfd6 == events[i].data.fd ) {
                 unsigned char trash[l3ctx.client_mtu];
-                int amount = read ( l3ctx.icmp6_ctx.unreachfd, trash, l3ctx.client_mtu ); // TODO: why do we even have to read here? This should be write-only
-                log_debug ( "ignoring bogus data on unreachfd, %i Bytes\n", amount );
+                int amount = read ( l3ctx.icmp6_ctx.unreachfd6, trash, l3ctx.client_mtu ); // TODO: why do we even have to read here? This should be write-only
+                log_debug ( "ignoring bogus data on unreachfd6, %i Bytes\n", amount );
+            } else if ( l3ctx.icmp6_ctx.unreachfd4 == events[i].data.fd ) {
+                unsigned char trash[l3ctx.client_mtu];
+                int amount = read ( l3ctx.icmp6_ctx.unreachfd4, trash, l3ctx.client_mtu ); // TODO: why do we even have to read here? This should be write-only
+                log_debug ( "ignoring bogus data on unreachfd4, %i Bytes\n", amount );
             } else if ( l3ctx.icmp6_ctx.fd == events[i].data.fd ) {
                 if ( events[i].events & EPOLLIN )
                     icmp6_handle_in ( &l3ctx.icmp6_ctx, events[i].data.fd );
