@@ -7,7 +7,7 @@
 #include "error.h"
 #include <sys/epoll.h>
 
-#define STRBUFELEMENTS 2
+#define STRBUFELEMENTS 3
 
 static char strbuffer[STRBUFELEMENTS][INET6_ADDRSTRLEN+1];
 static int str_bufferoffset = 0;

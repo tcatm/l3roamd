@@ -131,8 +131,7 @@ static void handle_packet ( ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len
 	}
 
 	struct in6_addr src = packet_get_src ( packet );
-	log_verbose ( "Got packet from %s ", print_ip ( &src ) );
-	log_verbose ( "destined to %s\n", print_ip ( &dst ) );
+	log_verbose ( "Got packet from %s destined to %s\n", print_ip ( &src ), print_ip ( &dst ) );
 
 
 	struct timespec now;
