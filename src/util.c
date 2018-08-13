@@ -7,38 +7,27 @@
 #include "error.h"
 #include <sys/epoll.h>
 
+#define STRBUFELEMENTS 2
+
+static char strbuffer[STRBUFELEMENTS][INET6_ADDRSTRLEN+1];
+static int str_bufferoffset = 0;
+
+const char *print_ip4(const struct in_addr *addr) {
+	str_bufferoffset = ( str_bufferoffset + 1) % STRBUFELEMENTS;
+	return inet_ntop(AF_INET, &(addr->s_addr), strbuffer[str_bufferoffset], INET6_ADDRSTRLEN);
+}
+
 /* print a human-readable representation of an in6_addr struct to stdout
 ** */
-static char ipaddress_buffer[INET6_ADDRSTRLEN+1];
-static char mac_buffer[INET6_ADDRSTRLEN+1];
-
-const char inline *print_ip4(const struct in_addr *addr) {
-	return inet_ntop(AF_INET, &(addr->s_addr), ipaddress_buffer, INET6_ADDRSTRLEN);
+const char *print_ip(const struct in6_addr *addr) {
+	str_bufferoffset = ( str_bufferoffset + 1) % STRBUFELEMENTS;
+	return inet_ntop(AF_INET6, &(addr->s6_addr), strbuffer[str_bufferoffset], INET6_ADDRSTRLEN);
 }
-const char inline *print_ip(const struct in6_addr *addr) {
-	return inet_ntop(AF_INET6, &(addr->s6_addr), ipaddress_buffer, INET6_ADDRSTRLEN);
-}
-
-static void mac_addr_n2a ( char *mac_addr, const unsigned char *arg )
-{
-	int i, l;
-
-	for ( i = 0, l = 0; i < 6; i++ ) {
-		if ( i == 0 ) {
-			sprintf ( mac_addr+l, "%02x", arg[i] );
-			l += 2;
-		} else {
-			sprintf ( mac_addr+l, ":%02x", arg[i] );
-			l += 3;
-		}
-	}
-	mac_addr[17] = '\0';
-}
-
 
 const char *print_mac(const uint8_t *mac) {
-	mac_addr_n2a(mac_buffer, mac);
-	return mac_buffer;
+	str_bufferoffset = ( str_bufferoffset + 1) % STRBUFELEMENTS;
+	snprintf(strbuffer[str_bufferoffset], 18, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+	return strbuffer[str_bufferoffset];
 }
 
 struct in_addr inline extractv4_v6(const struct in6_addr *src) {
@@ -54,8 +43,6 @@ void inline mapv4_v6(const struct in_addr *src, struct in6_addr *dst) {
 	memcpy(dst, &l3ctx.clientmgr_ctx.v4prefix,12);
 	memcpy(&(dst->s6_addr)[12], src, 4);
 }
-
-
 
 void log_error(const char *format, ...) {
 	va_list args;
