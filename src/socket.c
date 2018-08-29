@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2017, Christof Schulze <christof.schulze@gmx.net>
+   Copyright (c) 2017, Christof Schulze <christof@christofschulze.com>
    All rights reserved.
 
    Redistribution and use in source and binary forms, with or without

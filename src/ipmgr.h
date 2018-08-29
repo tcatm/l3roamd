@@ -1,6 +1,6 @@
 /*
   Copyright (c) 2015, Nils Schneider <nils@nilsschneider.net>
-  Copyright (c) 2017,2018, Christof Schulze <christof.schulze@gmx.net>
+  Copyright (c) 2017,2018, Christof Schulze <christof@christofschulze.com>
   All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
