@@ -261,7 +261,7 @@ bool intercom_send_packet_unicast(intercom_ctx *ctx, const struct in6_addr *reci
 	log_debug("sent intercom packet rc: %zi to %s\n", rc, print_ip(recipient));
 
 	if (rc < 0)
-		perror("sendto failed");
+		perror("sendto failed (if this was a claim and there is a >Permission denied< then this is ok, the client is new to the network)"); // How could we catch this better?
 
 	return rc >= 0;
 }
