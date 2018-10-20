@@ -1,5 +1,9 @@
 # l3roamd
 
+[![standard-readme compliant](https://img.shields.io/badge/readme%20style-standard-brightgreen.svg?style=flat-square)](https://github.com/RichardLitt/standard-readme)
+
+> l3roamd, pronunced *ɛl θriː ɹoʊm diː*, is a core part of layer 3 mesh networks.
+
 l3roamd, is a core part of layer 3 mesh networks.
 At first it will be built to work with [babeld](https://github.com/jech/babeld).
 
@@ -8,28 +12,12 @@ Integrating tightly with mac80211 and netlink, l3roamd will be doing the followi
  - allow network-wide search for IP-addresses
  - manage distribution of prefixes across the mesh (for router advertisements) [RA]
  - monitor babeld for duplicate host routes that this node also announces
- 
-Ideally, I'd like to split this up into multiple daemons communicating using standardized protocols:
 
-## Building l3roamd
+Ideally, this should be split up into multiple daemons communicating over standardized protocols.
 
-### Build
-in the root of this project, run:
- mkdir build
- cd build
- cmake ..
- make 
- make install
+## Background
 
-to build and install the program.
-
-### Dependencies
-The following programs / libraries are needed to build and run l3roamd:
- - libnl-genl
- - libjson-c
- - kmod-tun
-
-## Managing clients
+### Managing clients
 
 l3roamd will directly monitor a set of interfaces for clients.
 On the mac80211/fdb layer it will monitor clients and act whenever a new client appears (query the database or create an entry)
@@ -42,9 +30,8 @@ In worst case two nodes may have to switch routes fast and repeatably due to a c
 to either node. The whole cycle should be
 These nodes may not be connected directly.
 
- 
-## [DB] Distributed Database
- 
+
+### [DB] Distributed Database
 
 *Does anyone know a client with this $MAC and if so, what IPs did it use?*
 
@@ -59,13 +46,13 @@ The node requesting this drop will parse the info-packet, extract the
 IP-addresses used by this client and immediately adjust the 
 corresponding routes.
 
-### Data stored about clients
+#### Data stored about clients
 
  - MAC
  - a set of IPs
  - (optional) a set of multicast groups
 
-## [RA] Router Advertisements and Prefix Management
+### [RA] Router Advertisements and Prefix Management
 
 *THIS PART IS NOT IMPLEMENTED YET AND LIKELY WILL NEVER BE INSIDE L3ROAMD*
 Instead this should be implemented in a separate daemon called prefixd.
@@ -88,12 +75,13 @@ I.e. it will actively deprecate prefixes of clients it deems unreliably.
 This is likely to happen during roaming longer distances when a completely different set of uplinks should be used.
 As stated before, this will not break active connections.
 
-## IPv4?
+### IPv4?
+
 IPv4-Clients are supported as well. Inside the mesh there is only 
 ipv6, so we need clat on the node and plat somewhere else on the net. We 
 support using a single exit at the moment and are working on multi-exit-support for plat.
 
-# Intercom Packets
+## Intercom Packets
 
 This documents version 1 of the packet format.
 Please refer to roaming.pu and roaming.atxt for a sequence diagram of the roaming cycle.
@@ -110,19 +98,24 @@ There are four packet types used by l3roamd:
 SEEK are usually sent as multicast while CLAIM, INFO and ACK are sent as unicast.
 
 
-## Addresses
-### Multicast-address
+### Addresses
+
+#### Multicast-address
+
 ff02::5523 will be used as destination for multicast packets.
 
-### node-client-ip address
+#### node-client-ip address
+
 The node-client-ip address is assigned to a node whenever a client
 connects to a node. It is calculated using the clients mac address and
 the node-client-prefix (parameter -P).
 
-## Port
+### Port
+
 The packets are directed at port 5523.
 
-## Header
+### Header
+
 Each packet consists of a common header structure:
 ```
 0        7        15       23       31
@@ -146,7 +139,7 @@ type    - this is the packet-type, one of INTERCOM_SEEK, INTERCOM_CLAIM, INTERCO
 nonce   - this is a random number that is used to identify duplicate packets and drop them.  
 sender  - ipv6-address of the sender of the packet.  
 
-## SEEK
+### SEEK
 The seek operation is sent to determine where a client having a specific 
 IP address is connected. This triggers local neighbor discovery 
 mechanisms. SEEK-packets have the following structure:
@@ -178,10 +171,8 @@ addr contains the unknown ipv6-address.
 | addr13 | addr14 | addr15 | addr16 |
 +-----------------------------------+
 ```
+### CLAIM
 
-Upon receiving a seek packet, a node will attempt to locally detect clients having the seeked IP address. When found, it is added to the routing table and distributed across the network using the mesh protocol outside of l3roamd. When the route appears on the node that triggered the seek, the packets to that destination are flushed. There is no immediate reply by l3roamd.
-
-## CLAIM
 When a client connects to a node, this node sends a claim to the special 
 node-client IP-address via unicast. So whichever node was the previous 
 AP for this client will receive this message, drop all host-routes for 
@@ -209,7 +200,8 @@ CLAIM-packets have the following structure:
 ```
 MAC - is the mac-address of the client being claimed.
 
-## INFO
+### INFO
+
 This packet contains all IP-addresses being in active use by a given client. It 
 will be sent in response to CLAIM via unicast.
 
@@ -274,7 +266,8 @@ addr1-addr# are 1-n ipv6 addresses.
 plat is the plat-prefix used by this client.  
 lease is the remaining lease time of the clients ipv4 address in seconds.  
 
-### ACK
+#### ACK
+
 This packet is sent in reply of an INFO packet. Upon reception the retry-cycle for sending INFO packets for the client identified by the MAC is aborted.
 ```
 0        7        15       23       31
@@ -297,16 +290,66 @@ This packet is sent in reply of an INFO packet. Upon reception the retry-cycle f
 +-----------------------------------+
 ```
 ---
-  
-  
-## Improvements welcome!
 
-If you can improve this specifications (typos, better wording, restructering, ...) or even new important aspects, feel free to open
-a pull request. Please prefix your commits with "README: $my message" and try to summarize the changes in the commit
-message even if the commit message turns out to be longer than the change. Say, if you change a singel word, write a message like
+
+## Install
+
+### Dependencies
+
+The following programs / libraries are needed to build and run l3roamd:
+ - libnl-genl
+ - libjson-c
+ - kmod-tun
+
+### Build
+
+In the root of this project, run:
+
+```
+mkdir build
+cd build
+cmake ..
+make
+make install
+```
+
+to build and install the program.
+
+## Usage
+
+tdb
+
+## Contribute
+
+If you can improve this specifications (typos, better wording, restructering, …) or even new important aspects, feel free to open a pull request.
+Please prefix your commits with "README: $my message" and try to summarize the changes in the commit message even if the commit message turns out to be longer than the change. Say, if you change a singel word, write a message like
 
     README: corrected singel to single
     
     This corrects a typo in the "Improvements welcome!" section.
 
 This approach makes reviewing and reasoning about changes a lot easier.
+
+## License
+
+```
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
+
+    1. Redistributions of source code must retain the above copyright notice,
+       this list of conditions and the following disclaimer.
+    2. Redistributions in binary form must reproduce the above copyright notice,
+       this list of conditions and the following disclaimer in the documentation
+       and/or other materials provided with the distribution.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
