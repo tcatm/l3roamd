@@ -101,11 +101,6 @@ bool del_prefix ( void *prefixes, struct prefix _prefix )
 
 bool prefix_contains ( const struct prefix* prefix, const struct in6_addr* addr )
 {
-//     int offset=0;
-//     if ( prefix->isv4 )  {
-//         offset = 12; // ipv4 addresses are stored from the 12th byte onwards in an in6_addr
-//     }
-
     log_debug("checking if prefix %s contains address %s\n", print_ip(&prefix->prefix), print_ip(addr));
 
     int mask=0xff;
@@ -113,12 +108,10 @@ bool prefix_contains ( const struct prefix* prefix, const struct in6_addr* addr 
         if ( remaining_plen < 8 )
             mask = 0xff & ( 0xff00 >>remaining_plen );
 
-        if ( ( addr->s6_addr[i ] & mask ) != prefix->prefix.s6_addr[i] )
+        if ( ( addr->s6_addr[i] & mask ) != prefix->prefix.s6_addr[i] )
             return false;
         i++;
     }
     return true;
 }
-
-
 
