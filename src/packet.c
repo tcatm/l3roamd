@@ -47,11 +47,13 @@ static bool packet_isv4(const uint8_t packet[]) {
     return (packet[0] & 0xf0) == 0x40;
 }
 
-
 static bool packet_isv6(const uint8_t packet[]) {
     return (packet[0] & 0xf0) == 0x60;
 }
 
+uint8_t packet_get_family(const uint8_t packet[]) {
+    return ( packet_isv6(packet) ? AF_INET6 : AF_INET );
+}
 
 struct in6_addr packet_get_src(const uint8_t packet[]) {
     if ( packet_isv4(packet) )

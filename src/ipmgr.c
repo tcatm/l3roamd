@@ -150,6 +150,7 @@ static void handle_packet ( ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len
 	p.timestamp = now;
 	p.len = packet_len;
 	p.data = l3roamd_alloc ( packet_len );
+	p.family = packet_get_family( packet );
 
 	memcpy ( p.data, packet, packet_len );
 
