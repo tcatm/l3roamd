@@ -3,16 +3,17 @@
  */
 
 #include <asm/errno.h>
-#include <netlink/genl/genl.h>
-#include <netlink/genl/family.h>
-#include <netlink/genl/ctrl.h>
-#include <netlink/msg.h>
-#include <netlink/attr.h>
 #include <linux/genetlink.h>
+#include <netlink/attr.h>
+#include <netlink/genl/ctrl.h>
+#include <netlink/genl/family.h>
+#include <netlink/genl/genl.h>
+#include <netlink/msg.h>
 
 #include "genl.h"
 
-static int error_handler(struct sockaddr_nl *nla, struct nlmsgerr *err, void *arg) {
+static int error_handler(struct sockaddr_nl *nla, struct nlmsgerr *err,
+			 void *arg) {
 	int *ret = arg;
 	*ret = err->error;
 	return NL_STOP;
@@ -45,14 +46,15 @@ static int family_handler(struct nl_msg *msg, void *arg) {
 	nla_for_each_nested(mcgrp, tb[CTRL_ATTR_MCAST_GROUPS], rem_mcgrp) {
 		struct nlattr *tb_mcgrp[CTRL_ATTR_MCAST_GRP_MAX + 1];
 
-		nla_parse(tb_mcgrp, CTRL_ATTR_MCAST_GRP_MAX,
-			  nla_data(mcgrp), nla_len(mcgrp), NULL);
+		nla_parse(tb_mcgrp, CTRL_ATTR_MCAST_GRP_MAX, nla_data(mcgrp),
+			  nla_len(mcgrp), NULL);
 
 		if (!tb_mcgrp[CTRL_ATTR_MCAST_GRP_NAME] ||
 		    !tb_mcgrp[CTRL_ATTR_MCAST_GRP_ID])
 			continue;
 		if (strncmp(nla_data(tb_mcgrp[CTRL_ATTR_MCAST_GRP_NAME]),
-			    grp->group, nla_len(tb_mcgrp[CTRL_ATTR_MCAST_GRP_NAME])))
+			    grp->group,
+			    nla_len(tb_mcgrp[CTRL_ATTR_MCAST_GRP_NAME])))
 			continue;
 		grp->id = nla_get_u32(tb_mcgrp[CTRL_ATTR_MCAST_GRP_ID]);
 		break;
@@ -61,13 +63,13 @@ static int family_handler(struct nl_msg *msg, void *arg) {
 	return NL_SKIP;
 }
 
-int nl_get_multicast_id(struct nl_sock *sock, const char *family, const char *group) {
+int nl_get_multicast_id(struct nl_sock *sock, const char *family,
+			const char *group) {
 	struct nl_msg *msg;
 	struct nl_cb *cb;
 	int ret, ctrlid;
 	struct handler_args grp = {
-		.group = group,
-		.id = -ENOENT,
+	    .group = group, .id = -ENOENT,
 	};
 
 	msg = nlmsg_alloc();
@@ -82,8 +84,7 @@ int nl_get_multicast_id(struct nl_sock *sock, const char *family, const char *gr
 
 	ctrlid = genl_ctrl_resolve(sock, "nlctrl");
 
-	genlmsg_put(msg, 0, 0, ctrlid, 0,
-		    0, CTRL_CMD_GETFAMILY, 0);
+	genlmsg_put(msg, 0, 0, ctrlid, 0, 0, CTRL_CMD_GETFAMILY, 0);
 
 	ret = -ENOBUFS;
 	NLA_PUT_STRING(msg, CTRL_ATTR_FAMILY_NAME, family);
@@ -98,15 +99,14 @@ int nl_get_multicast_id(struct nl_sock *sock, const char *family, const char *gr
 	nl_cb_set(cb, NL_CB_ACK, NL_CB_CUSTOM, ack_handler, &ret);
 	nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, family_handler, &grp);
 
-	while (ret > 0)
-		nl_recvmsgs(sock, cb);
+	while (ret > 0) nl_recvmsgs(sock, cb);
 
 	if (ret == 0)
 		ret = grp.id;
- nla_put_failure:
- out:
+nla_put_failure:
+out:
 	nl_cb_put(cb);
- out_fail_cb:
+out_fail_cb:
 	nlmsg_free(msg);
 	return ret;
 }

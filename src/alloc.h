@@ -29,18 +29,16 @@
    \em memory allocation functions
  */
 
-
 #pragma once
 
 #include "error.h"
-
 
 /**
    Allocates a block of uninitialized memory on the heap
 
    Terminates the process on failure.
 */
-static inline void * l3roamd_alloc(size_t size) {
+static inline void *l3roamd_alloc(size_t size) {
 	void *ret = malloc(size);
 	if (!ret)
 		exit_errno("malloc");
@@ -53,7 +51,7 @@ static inline void * l3roamd_alloc(size_t size) {
 
    Terminates the process on failure.
 */
-static inline void * l3roamd_alloc_aligned(size_t size, size_t align) {
+static inline void *l3roamd_alloc_aligned(size_t size, size_t align) {
 	void *ret;
 	int err = posix_memalign(&ret, align, size);
 	if (err)
@@ -67,7 +65,7 @@ static inline void * l3roamd_alloc_aligned(size_t size, size_t align) {
 
    Terminates the process on failure.
 */
-static inline void * l3roamd_alloc0_array(size_t members, size_t size) {
+static inline void *l3roamd_alloc0_array(size_t members, size_t size) {
 	void *ret = calloc(members, size);
 	if (!ret)
 		exit_errno("calloc");
@@ -80,7 +78,7 @@ static inline void * l3roamd_alloc0_array(size_t members, size_t size) {
 
    Terminates the process on failure.
 */
-static inline void * l3roamd_alloc0(size_t size) {
+static inline void *l3roamd_alloc0(size_t size) {
 	return l3roamd_alloc0_array(1, size);
 }
 
@@ -89,34 +87,38 @@ static inline void * l3roamd_alloc0(size_t size) {
 
    Terminates the process on failure.
 */
-static inline void * l3roamd_realloc(void *ptr, size_t size) {
+static inline void *l3roamd_realloc(void *ptr, size_t size) {
 	void *ret = realloc(ptr, size);
-//	printf("realloc with size: %i\n", size);
+	//	printf("realloc with size: %i\n", size);
 	if (!ret)
 		exit_errno("realloc");
 
 	return ret;
 }
 
-
 /** Allocates a block of uninitialized memory in the size of a given type */
 #define l3roamd_new(type) ((type *)l3roamd_alloc(sizeof(type)))
 
-/** Allocates a block of uninitialized memory in the size of a given type, aligned to 16 bytes */
-#define l3roamd_new_aligned(type, align) ((type *)l3roamd_alloc_aligned(sizeof(type), align))
+/** Allocates a block of uninitialized memory in the size of a given type,
+ * aligned to 16 bytes */
+#define l3roamd_new_aligned(type, align) \
+	((type *)l3roamd_alloc_aligned(sizeof(type), align))
 
 /** Allocates a block of memory set to zero in the size of a given type */
 #define l3roamd_new0(type) ((type *)l3roamd_alloc0(sizeof(type)))
 
-/** Allocates a block of undefined memory for an array of elements of a given type */
-#define l3roamd_new_array(members, type) ((type *)l3roamd_alloc(members * sizeof(type)))
+/** Allocates a block of undefined memory for an array of elements of a given
+ * type */
+#define l3roamd_new_array(members, type) \
+	((type *)l3roamd_alloc(members * sizeof(type)))
 
-/** Allocates a block of memory set to zero for an array of elements of a given type */
-#define l3roamd_new0_array(members, type) ((type *)l3roamd_alloc0_array(members, sizeof(type)))
-
+/** Allocates a block of memory set to zero for an array of elements of a given
+ * type */
+#define l3roamd_new0_array(members, type) \
+	((type *)l3roamd_alloc0_array(members, sizeof(type)))
 
 /** Duplicates a string (string may be NULL) */
-static inline char * l3roamd_strdup(const char *s) {
+static inline char *l3roamd_strdup(const char *s) {
 	if (!s)
 		return NULL;
 
@@ -128,7 +130,7 @@ static inline char * l3roamd_strdup(const char *s) {
 }
 
 /** Duplicates a string up to a maximum length (string may be NULL) */
-static inline char * l3roamd_strndup(const char *s, size_t n) {
+static inline char *l3roamd_strndup(const char *s, size_t n) {
 	if (!s)
 		return NULL;
 

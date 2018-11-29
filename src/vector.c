@@ -29,16 +29,14 @@
    Typesafe dynamically sized arrays
 */
 
-
 #include "vector.h"
 #include "alloc.h"
 
 #include <string.h>
 
-
-/** The minimum number of elements to allocate even when less elements are used */
+/** The minimum number of elements to allocate even when less elements are used
+ */
 #define MIN_VECTOR_ALLOC 4
-
 
 /**
    Resizes a vector
@@ -47,18 +45,18 @@
 
    Internal function, use VECTOR_RESIZE() instead.
 */
-void _l3roamd_vector_resize(l3roamd_vector_desc_t *desc, void **data, size_t n, size_t elemsize) {
+void _l3roamd_vector_resize(l3roamd_vector_desc_t *desc, void **data, size_t n,
+			    size_t elemsize) {
 	desc->length = n;
 
 	size_t alloc = desc->allocated;
 
 	if (!alloc) {
 		alloc = MIN_VECTOR_ALLOC;
-		n = n*3/2;
+		n = n * 3 / 2;
 	}
 
-	while (alloc < n)
-		alloc <<= 1;
+	while (alloc < n) alloc <<= 1;
 
 	if (alloc != desc->allocated) {
 		desc->allocated = alloc;
@@ -71,14 +69,15 @@ void _l3roamd_vector_resize(l3roamd_vector_desc_t *desc, void **data, size_t n, 
 
    Internal function, use VECTOR_INSERT() and VECTOR_ADD() instead.
 */
-void *_l3roamd_vector_insert(l3roamd_vector_desc_t *desc, void **data, void *element, size_t pos, size_t elemsize) {
-	_l3roamd_vector_resize(desc, data, desc->length+1, elemsize);
+void *_l3roamd_vector_insert(l3roamd_vector_desc_t *desc, void **data,
+			     void *element, size_t pos, size_t elemsize) {
+	_l3roamd_vector_resize(desc, data, desc->length + 1, elemsize);
 
-	void *p = *data + pos*elemsize;
+	void *p = *data + pos * elemsize;
 
-	memmove(p+elemsize, p, (desc->length-pos-1)*elemsize);
+	memmove(p + elemsize, p, (desc->length - pos - 1) * elemsize);
 	memcpy(p, element, elemsize);
-	return(p);
+	return (p);
 }
 
 /**
@@ -86,11 +85,10 @@ void *_l3roamd_vector_insert(l3roamd_vector_desc_t *desc, void **data, void *ele
 
    Internal function, use VECTOR_DELETE() instead.
 */
-void _l3roamd_vector_delete(l3roamd_vector_desc_t *desc, void **data, size_t pos, size_t elemsize) {
-	void *p = *data + pos*elemsize;
-	memmove(p, p+elemsize, (desc->length-pos-1)*elemsize);
+void _l3roamd_vector_delete(l3roamd_vector_desc_t *desc, void **data,
+			    size_t pos, size_t elemsize) {
+	void *p = *data + pos * elemsize;
+	memmove(p, p + elemsize, (desc->length - pos - 1) * elemsize);
 
-	_l3roamd_vector_resize(desc, data, desc->length-1, elemsize);
+	_l3roamd_vector_resize(desc, data, desc->length - 1, elemsize);
 }
-
-

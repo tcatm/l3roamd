@@ -1,16 +1,16 @@
 #pragma once
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <stddef.h>
 #include <inttypes.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/un.h>
 
 #define LINEBUFFER_SIZE 1024
 
 enum socket_command {
-	GET_CLIENTS =0,
+	GET_CLIENTS = 0,
 	PROBE,
 	ADD_MESHIF,
 	DEL_MESHIF,

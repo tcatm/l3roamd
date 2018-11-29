@@ -24,10 +24,10 @@
 */
 #pragma once
 
-#include "vector.h"
-#include <stdbool.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
+#include <stdbool.h>
+#include "vector.h"
 
 struct prefix {
 	struct in6_addr prefix;
@@ -39,4 +39,3 @@ bool add_prefix(void *prefixes, struct prefix prefix);
 bool del_prefix(void *prefixes, struct prefix prefix);
 bool parse_prefix(struct prefix *prefix, const char *str);
 bool prefix_contains(const struct prefix *prefix, const struct in6_addr *addr);
-

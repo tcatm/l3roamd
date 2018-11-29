@@ -22,8 +22,8 @@ void parse_line(char *line) {
 }
 
 bool parse_config(const char *filename) {
-	FILE * fp;
-	char * line = NULL;
+	FILE *fp;
+	char *line = NULL;
 	size_t len = 0;
 	ssize_t read;
 
@@ -31,8 +31,7 @@ bool parse_config(const char *filename) {
 	if (fp == NULL)
 		return false;
 
-	while ((read = getline(&line, &len, fp)) != -1)
-		parse_line(line);
+	while ((read = getline(&line, &len, fp)) != -1) parse_line(line);
 
 	fclose(fp);
 	free(line);

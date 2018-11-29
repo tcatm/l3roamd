@@ -1,24 +1,23 @@
 #pragma once
 
-
-#include "vector.h"
-#include "intercom.h"
-#include "wifistations.h"
-#include "clientmgr.h"
-#include "taskqueue.h"
-#include "icmp6.h"
-#include "ipmgr.h"
 #include "arp.h"
+#include "clientmgr.h"
+#include "icmp6.h"
+#include "if.h"
+#include "intercom.h"
+#include "ipmgr.h"
 #include "routemgr.h"
 #include "socket.h"
-#include "if.h"
+#include "taskqueue.h"
 #include "types.h"
+#include "vector.h"
+#include "wifistations.h"
 
-#include <stdint.h>
-#include <stdlib.h>
-#include <stddef.h>
 #include <arpa/inet.h>
 #include <linux/rtnetlink.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
 
 struct l3ctx {
 	taskqueue_ctx taskqueue_ctx;
@@ -45,4 +44,4 @@ void add_fd(int efd, int fd, uint32_t events);
 void del_fd(int efd, int fd);
 
 #define INTERCOM_PORT 5523
-#define CTX(tgt) (&ctx->l3ctx->tgt ## _ctx)
+#define CTX(tgt) (&ctx->l3ctx->tgt##_ctx)

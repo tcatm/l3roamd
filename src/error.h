@@ -32,7 +32,8 @@
 
 #define exit_errno(message) _exit_error(1, errno, "%s", message)
 
-static inline void _exit_error(int status, int errnum, const char *format, ...) {
+static inline void _exit_error(int status, int errnum, const char *format,
+			       ...) {
 	va_list ap;
 	va_start(ap, format);
 	vfprintf(stderr, format, ap);

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "vector.h"
 #include <stdbool.h>
+#include "vector.h"
 
 typedef struct {
 	char *ifname;

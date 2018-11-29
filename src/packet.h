@@ -1,8 +1,8 @@
 #pragma once
 
-#include "timespec.h"
 #include <stdint.h>
 #include <sys/types.h>
+#include "timespec.h"
 
 struct packet {
 	struct timespec timestamp;
@@ -10,7 +10,6 @@ struct packet {
 	uint8_t *data;
 	uint8_t family;
 };
-
 
 uint16_t packet_ipv4_get_length(const uint8_t packet[]);
 uint8_t packet_ipv4_get_header_length(const uint8_t packet[]);

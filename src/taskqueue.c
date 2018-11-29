@@ -26,36 +26,38 @@
 */
 
 #include <stdio.h>
-#include <unistd.h>
 #include <sys/timerfd.h>
+#include <unistd.h>
 
-#include "util.h"
-#include "taskqueue.h"
-#include "error.h"
-#include "timespec.h"
-#include "l3roamd.h"
 #include "alloc.h"
+#include "error.h"
+#include "l3roamd.h"
+#include "taskqueue.h"
+#include "timespec.h"
+#include "util.h"
 
 void taskqueue_init(taskqueue_ctx *ctx) {
 	ctx->fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
 	ctx->queue = NULL;
 }
 
-/** this will add timeout seconds and millisecs milliseconds to the current time to calculate at which time a task should run given an offset */
+/** this will add timeout seconds and millisecs milliseconds to the current time
+ * to calculate at which time a task should run given an offset */
 struct timespec settime(unsigned int timeout, unsigned int millisecs) {
 	struct timespec due;
 	clock_gettime(CLOCK_MONOTONIC, &due);
 
-	struct timespec t = {
-		.tv_sec = timeout,
-		.tv_nsec = millisecs * 1000000l
-	};
+	struct timespec t = {.tv_sec = timeout,
+			     .tv_nsec = millisecs * 1000000l};
 
 	return timeAdd(&due, &t);
 }
 
-/** Enqueues a new task. A task with a timeout of zero is scheduled immediately. */
-taskqueue_t * post_task(taskqueue_ctx *ctx, unsigned int timeout, unsigned int millisecs, void (*function)(void*), void (*cleanup)(void*), void *data) {
+/** Enqueues a new task. A task with a timeout of zero is scheduled immediately.
+ */
+taskqueue_t *post_task(taskqueue_ctx *ctx, unsigned int timeout,
+		       unsigned int millisecs, void (*function)(void *),
+		       void (*cleanup)(void *), void *data) {
 	taskqueue_t *task = l3roamd_alloc(sizeof(taskqueue_t));
 	task->children = task->next = NULL;
 	task->pprev = NULL;
@@ -73,7 +75,8 @@ taskqueue_t * post_task(taskqueue_ctx *ctx, unsigned int timeout, unsigned int m
 
 /** Changes the timeout of a task.
   */
-bool reschedule_task(taskqueue_ctx *ctx, taskqueue_t *task, unsigned int timeout, unsigned int millisecs) {
+bool reschedule_task(taskqueue_ctx *ctx, taskqueue_t *task,
+		     unsigned int timeout, unsigned int millisecs) {
 	if (task == NULL || !taskqueue_linked(task))
 		return false;
 
@@ -93,9 +96,7 @@ void taskqueue_schedule(taskqueue_ctx *ctx) {
 	if (ctx->queue == NULL)
 		return;
 
-	struct itimerspec t = {
-		.it_value = ctx->queue->due
-	};
+	struct itimerspec t = {.it_value = ctx->queue->due};
 
 	timerfd_settime(ctx->fd, TFD_TIMER_ABSTIME, &t, NULL);
 }
@@ -154,7 +155,7 @@ static inline void taskqueue_unlink(taskqueue_t *elem) {
 
    \e queue2 may be empty (NULL)
 */
-static taskqueue_t * taskqueue_merge(taskqueue_t *queue1, taskqueue_t *queue2) {
+static taskqueue_t *taskqueue_merge(taskqueue_t *queue1, taskqueue_t *queue2) {
 	if (!queue1)
 		exit_bug("taskqueue_merge: queue1 unset");
 	if (queue1->next)
@@ -169,8 +170,7 @@ static taskqueue_t * taskqueue_merge(taskqueue_t *queue1, taskqueue_t *queue2) {
 	if (timespec_cmp(queue1->due, queue2->due) < 0) {
 		lo = queue1;
 		hi = queue2;
-	}
-	else {
+	} else {
 		lo = queue2;
 		hi = queue1;
 	}
@@ -181,7 +181,7 @@ static taskqueue_t * taskqueue_merge(taskqueue_t *queue1, taskqueue_t *queue2) {
 }
 
 /** Merges a list of priority queues */
-static taskqueue_t * taskqueue_merge_pairs(taskqueue_t *queue0) {
+static taskqueue_t *taskqueue_merge_pairs(taskqueue_t *queue0) {
 	if (!queue0)
 		return NULL;
 
@@ -197,13 +197,15 @@ static taskqueue_t * taskqueue_merge_pairs(taskqueue_t *queue0) {
 
 	queue0->next = queue1->next = NULL;
 
-	return taskqueue_merge(taskqueue_merge(queue0, queue1), taskqueue_merge_pairs(queue2));
+	return taskqueue_merge(taskqueue_merge(queue0, queue1),
+			       taskqueue_merge_pairs(queue2));
 }
 
 /** Inserts a new element into a priority queue */
 void taskqueue_insert(taskqueue_t **queue, taskqueue_t *elem) {
 	if (elem->pprev || elem->next || elem->children)
-		exit_bug("taskqueue_insert: tried to insert linked queue element");
+		exit_bug(
+		    "taskqueue_insert: tried to insert linked queue element");
 
 	*queue = taskqueue_merge(elem, *queue);
 	(*queue)->pprev = queue;

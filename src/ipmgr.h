@@ -25,48 +25,50 @@
 */
 #pragma once
 
-#include "vector.h"
 #include "taskqueue.h"
-#include "types.h"
 #include "time.h"
+#include "types.h"
+#include "vector.h"
 
-#include <stdint.h>
 #include <netinet/in.h>
-#define PACKET_TIMEOUT 5  // drop packet after it sat in the unknown destination-queue for this amount of time
-#define SEEK_INTERVAL 3   // retry a seek every n seconds
+#include <stdint.h>
+#define PACKET_TIMEOUT \
+	5  // drop packet after it sat in the unknown destination-queue for this
+	   // amount of time
+#define SEEK_INTERVAL 3  // retry a seek every n seconds
 
 struct unknown_address {
-    struct in6_addr address;
-    taskqueue_t *check_task;
-    VECTOR ( struct packet ) packets;
+	struct in6_addr address;
+	taskqueue_t *check_task;
+	VECTOR(struct packet) packets;
 };
 
 typedef struct {
-    struct l3ctx *l3ctx;
-    char *ifname;
-    VECTOR ( struct unknown_address ) addrs;
-    VECTOR ( struct packet ) output_queue;
-    int fd;
+	struct l3ctx *l3ctx;
+	char *ifname;
+	VECTOR(struct unknown_address) addrs;
+	VECTOR(struct packet) output_queue;
+	int fd;
 } ipmgr_ctx;
 
 struct ns_task {
-    struct in6_addr address;
-    struct timespec interval;
-    ipmgr_ctx *ctx;
-    int retries_left;
-    bool force;
+	struct in6_addr address;
+	struct timespec interval;
+	ipmgr_ctx *ctx;
+	int retries_left;
+	bool force;
 };
 
 struct ip_task {
-    struct in6_addr address;
-    ipmgr_ctx *ctx;
+	struct in6_addr address;
+	ipmgr_ctx *ctx;
 };
 
-bool ipmgr_init ( ipmgr_ctx *ctx, char *tun_name, unsigned int mtu );
-void ipmgr_route_appeared ( ipmgr_ctx *ctx, const struct in6_addr *destination );
-void ipmgr_handle_in ( ipmgr_ctx *ctx, int fd );
-void ipmgr_handle_out ( ipmgr_ctx *ctx, int fd );
-void ipmgr_seek_address ( ipmgr_ctx *ctx, struct in6_addr *addr );
-struct ns_task *create_ns_task ( struct in6_addr *dst, struct timespec tv, int retries, bool force );
-void ipmgr_ns_task ( void *d );
-
+bool ipmgr_init(ipmgr_ctx *ctx, char *tun_name, unsigned int mtu);
+void ipmgr_route_appeared(ipmgr_ctx *ctx, const struct in6_addr *destination);
+void ipmgr_handle_in(ipmgr_ctx *ctx, int fd);
+void ipmgr_handle_out(ipmgr_ctx *ctx, int fd);
+void ipmgr_seek_address(ipmgr_ctx *ctx, struct in6_addr *addr);
+struct ns_task *create_ns_task(struct in6_addr *dst, struct timespec tv,
+			       int retries, bool force);
+void ipmgr_ns_task(void *d);
