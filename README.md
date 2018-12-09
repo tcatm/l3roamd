@@ -1,6 +1,6 @@
 # l3roamd
 
-l3roamd, pronunced *ɛl θriː ɹoʊm diː*, is a core part of layer 3 mesh networks.
+l3roamd, is a core part of layer 3 mesh networks.
 At first it will be built to work with [babeld](https://github.com/jech/babeld).
 
 Integrating tightly with mac80211 and netlink, l3roamd will be doing the following things:
@@ -96,6 +96,7 @@ support using a single exit at the moment and are working on multi-exit-support 
 # Intercom Packets
 
 This documents version 1 of the packet format.
+Please refer to roaming.pu and roaming.atxt for a sequence diagram of the roaming cycle.
 
 Intercom packets are UDP-packets that can be interchanged using the node-client-IP or the multicast-address as destination.
 
