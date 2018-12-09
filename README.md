@@ -178,6 +178,9 @@ addr contains the unknown ipv6-address.
 | addr13 | addr14 | addr15 | addr16 |
 +-----------------------------------+
 ```
+
+Upon receiving a seek packet, a node will attempt to locally detect clients having the seeked IP address. When found, it is added to the routing table and distributed across the network using the mesh protocol outside of l3roamd. When the route appears on the node that triggered the seek, the packets to that destination are flushed. There is no immediate reply by l3roamd.
+
 ## CLAIM
 When a client connects to a node, this node sends a claim to the special 
 node-client IP-address via unicast. So whichever node was the previous 
