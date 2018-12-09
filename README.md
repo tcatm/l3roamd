@@ -100,13 +100,14 @@ Please refer to roaming.pu and roaming.atxt for a sequence diagram of the roamin
 
 Intercom packets are UDP-packets that can be interchanged using the node-client-IP or the multicast-address as destination.
 
-There are three packet types used by l3roamd:
+There are four packet types used by l3roamd:
 
 - SEEK,
 - CLAIM,
 - INFO
+- ACK
 
-SEEK are usually sent as multicast while CLAIM and INFO are sent as unicast.  
+SEEK are usually sent as multicast while CLAIM, INFO and ACK are sent as unicast.
 
 
 ## Addresses
