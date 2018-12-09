@@ -475,9 +475,8 @@ bool intercom_handle_claim(intercom_ctx *ctx, intercom_packet_claim *packet,
 	while (currentoffset < packet_len) {
 		packetpointer = &((uint8_t *)packet)[currentoffset];
 		type = *packetpointer;
-		if (l3ctx.debug)
-			log_debug("offset: %i %p %p\n", currentoffset, packet,
-				  packetpointer);
+		log_debug("offset: %i %p %p\n", currentoffset, packet,
+			  packetpointer);
 		switch (type) {
 			case CLAIM_MAC:
 				currentoffset +=
