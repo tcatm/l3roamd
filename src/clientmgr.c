@@ -763,10 +763,8 @@ bool clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender,
 
 	if (!old) {
 		printf(
-		    "Dropping client %02x:%02x:%02x:%02x:%02x:%02x in response "
-		    "to claim from sender %s\n",
-		    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
-		    print_ip(sender));
+		    "Dropping client %s in response to claim from sender %s\n",
+		    print_mac(mac), print_ip(sender));
 		clientmgr_delete_client(ctx, client->mac);
 	}
 	return true;
