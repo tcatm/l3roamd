@@ -281,8 +281,12 @@ bool intercom_send_packet_unicast(intercom_ctx *ctx, const struct in6_addr *reci
 	struct sockaddr_in6 addr =
 	    (struct sockaddr_in6){.sin6_family = AF_INET6, .sin6_port = htons(INTERCOM_PORT), .sin6_addr = *recipient};
 
-	// printf("fd: %i, packet %p, length: %zi\n", ctx->unicast_nodeip_fd,
-	// packet, packet_len);
+	// when sending unicast packets, always set ttl to 1 to avoid re-transmits to
+	// self on the receiver
+	((intercom_packet_info *)packet)->hdr.ttl = 1;
+
+	// log_debug("fd: %i, packet %p, length: %zi\n", ctx->unicast_nodeip_fd, packet, packet_len);
+
 	ssize_t rc = sendto(ctx->unicast_nodeip_fd, packet, packet_len, 0, (struct sockaddr *)&addr, sizeof(addr));
 	log_debug("sent intercom packet rc: %zi to %s\n", rc, print_ip(recipient));
 
@@ -683,9 +687,7 @@ bool intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct c
 	if (recipient) {
 		data->recipient = l3roamd_alloc_aligned(sizeof(struct in6_addr), 16);
 		memcpy(data->recipient, recipient, sizeof(struct in6_addr));
-		((intercom_packet_info *)data->packet)->hdr.ttl =
-		    1;  // when sending unicast, do not continue to forward this
-			// packet at the destination
+		((intercom_packet_info *)data->packet)->hdr.ttl = 1;
 	}
 
 	data->check_task = post_task(&l3ctx.taskqueue_ctx, 0, 0, info_retry_task, free_intercom_task, data);
@@ -808,9 +810,7 @@ bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct 
 	if (recipient) {
 		data->recipient = l3roamd_alloc_aligned(sizeof(struct in6_addr), 16);
 		memcpy(data->recipient, recipient, sizeof(struct in6_addr));
-		((intercom_packet_claim *)data->packet)->hdr.ttl =
-		    1;  // when sending unicast, do not continue to forward this
-			// packet at the destination
+		((intercom_packet_claim *)data->packet)->hdr.ttl = 1;
 	}
 
 	client->claimed = true;
