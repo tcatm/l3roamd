@@ -463,9 +463,9 @@ struct client *find_repeatable(void *v, client_t *k, int *elementindex) {
 			*elementindex = VECTOR_GETINDEX(vec, ret);
 			log_debug(" on index %i", *elementindex);
 		}
+		log_debug("\n");
 	}
 
-	log_debug("\n");
 	return ret;
 }
 
