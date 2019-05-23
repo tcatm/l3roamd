@@ -460,7 +460,7 @@ struct client *find_repeatable(void *v, client_t *k, int *elementindex) {
 		log_debug("match on vector for mac %s", print_mac(k->mac));
 
 		if (elementindex != NULL) {
-			*elementindex = ((void *)ret - (void *)&VECTOR_INDEX(vec, 0)) / sizeof(struct unknown_address);
+			*elementindex = VECTOR_GETINDEX(vec, ret);
 			log_debug(" on index %i", *elementindex);
 		}
 	}

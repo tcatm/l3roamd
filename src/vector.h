@@ -88,6 +88,13 @@ void _l3roamd_vector_delete(l3roamd_vector_desc_t *desc, void **data, size_t pos
 #define VECTOR_INDEX(v, i) ((v).data[i])
 
 /**
+    Given an element, return the index in the vector
+
+    \hideinitializer
+*/
+#define VECTOR_GETINDEX(v, elem) ({ (elem - v.data) / sizeof(*elem); })
+
+/**
    Returns a pointer to the vector elements of \e v
 
    \hideinitializer
