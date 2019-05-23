@@ -793,10 +793,10 @@ bool clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
 	for (int i = VECTOR_LEN(foreign_client->addresses) - 1; i >= 0; i--) {
 		struct client_ip *foreign_ip =
 		    &VECTOR_INDEX(foreign_client->addresses, i);
-		struct client_ip *ip = get_client_ip(client, &foreign_ip->addr);
+		bool is_client_ip_known =
+		    get_client_ip(client, &foreign_ip->addr);
 
-		// Skip if we already know this IP address
-		if (ip != NULL)
+		if (!is_client_ip_known)
 			continue;
 
 		clientmgr_add_address(ctx, &foreign_ip->addr,
