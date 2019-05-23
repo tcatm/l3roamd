@@ -516,8 +516,7 @@ bool intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet, int p
 	while (currentoffset < packet_len) {
 		packetpointer = &((uint8_t *)packet)[currentoffset];
 		type = *packetpointer;
-		if (l3ctx.debug)
-			printf("offset: %i %p %p\n", currentoffset, packet, packetpointer);
+		log_debug("offset: %i %p %p\n", currentoffset, packet, packetpointer);
 		switch (type) {
 			case INFO_PLAT:
 				currentoffset += parse_plat(packetpointer, &client);
