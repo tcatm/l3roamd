@@ -48,10 +48,8 @@ void socket_init(socket_ctx *ctx, char *path) {
 	unlink(path);
 
 	size_t status_socket_len = strlen(path);
-	size_t len =
-	    offsetof(struct sockaddr_un, sun_path) + status_socket_len + 1;
-	uint8_t buf[len]
-	    __attribute__((aligned(__alignof__(struct sockaddr_un))));
+	size_t len = offsetof(struct sockaddr_un, sun_path) + status_socket_len + 1;
+	uint8_t buf[len] __attribute__((aligned(__alignof__(struct sockaddr_un))));
 	memset(buf, 0, offsetof(struct sockaddr_un, sun_path));
 
 	struct sockaddr_un *sa = (struct sockaddr_un *)buf;
@@ -109,10 +107,8 @@ void socket_get_meshifs(struct json_object *obj) {
 	struct json_object *jmeshifs = json_object_new_array();
 
 	for (int i = 0; i < VECTOR_LEN(l3ctx.intercom_ctx.interfaces); i++) {
-		intercom_if_t *iface =
-		    &VECTOR_INDEX(l3ctx.intercom_ctx.interfaces, i);
-		json_object_array_add(jmeshifs,
-				      json_object_new_string(iface->ifname));
+		intercom_if_t *iface = &VECTOR_INDEX(l3ctx.intercom_ctx.interfaces, i);
+		json_object_array_add(jmeshifs, json_object_new_string(iface->ifname));
 	}
 	json_object_object_add(obj, "mesh_interfaces", jmeshifs);
 }
@@ -121,17 +117,13 @@ void socket_get_prefixes(struct json_object *obj) {
 	struct json_object *jprefixes = json_object_new_array();
 	char str_prefix[INET6_ADDRSTRLEN] = {};
 
-	inet_ntop(AF_INET6, &l3ctx.clientmgr_ctx.v4prefix.prefix, str_prefix,
-		  INET6_ADDRSTRLEN);
+	inet_ntop(AF_INET6, &l3ctx.clientmgr_ctx.v4prefix.prefix, str_prefix, INET6_ADDRSTRLEN);
 	json_object_array_add(jprefixes, json_object_new_string(str_prefix));
 
 	for (int i = 0; i < VECTOR_LEN(l3ctx.clientmgr_ctx.prefixes); i++) {
-		struct prefix *_prefix =
-		    &VECTOR_INDEX(l3ctx.clientmgr_ctx.prefixes, i);
-		inet_ntop(AF_INET6, &_prefix->prefix, str_prefix,
-			  INET6_ADDRSTRLEN);
-		json_object_array_add(jprefixes,
-				      json_object_new_string(str_prefix));
+		struct prefix *_prefix = &VECTOR_INDEX(l3ctx.clientmgr_ctx.prefixes, i);
+		inet_ntop(AF_INET6, &_prefix->prefix, str_prefix, INET6_ADDRSTRLEN);
+		json_object_array_add(jprefixes, json_object_new_string(str_prefix));
 	}
 	json_object_object_add(obj, "prefixes", jprefixes);
 }
@@ -140,33 +132,25 @@ void get_clients(struct json_object *obj) {
 	int i = 0, j = 0;
 	struct json_object *jclients = json_object_new_object();
 
-	json_object_object_add(
-	    obj, "clients",
-	    json_object_new_int(VECTOR_LEN(l3ctx.clientmgr_ctx.clients)));
+	json_object_object_add(obj, "clients", json_object_new_int(VECTOR_LEN(l3ctx.clientmgr_ctx.clients)));
 
 	for (i = 0; i < VECTOR_LEN(l3ctx.clientmgr_ctx.clients); i++) {
-		struct client *_client =
-		    &VECTOR_INDEX(l3ctx.clientmgr_ctx.clients, i);
+		struct client *_client = &VECTOR_INDEX(l3ctx.clientmgr_ctx.clients, i);
 		struct json_object *jclient = json_object_new_object();
 
 		char ifname[IFNAMSIZ] = "";
 
 		if_indextoname(_client->ifindex, ifname);
-		json_object_object_add(jclient, "interface",
-				       json_object_new_string(ifname));
+		json_object_object_add(jclient, "interface", json_object_new_string(ifname));
 
 		struct json_object *addresses = json_object_new_object();
 		for (j = 0; j < VECTOR_LEN(_client->addresses); j++) {
 			struct json_object *address = json_object_new_object();
-			struct client_ip *_client_ip =
-			    &VECTOR_INDEX(_client->addresses, j);
+			struct client_ip *_client_ip = &VECTOR_INDEX(_client->addresses, j);
 			char ip_str[INET6_ADDRSTRLEN] = "";
-			inet_ntop(AF_INET6, &_client_ip->addr, ip_str,
-				  INET6_ADDRSTRLEN);
+			inet_ntop(AF_INET6, &_client_ip->addr, ip_str, INET6_ADDRSTRLEN);
 
-			json_object_object_add(
-			    address, "state",
-			    json_object_new_int(_client_ip->state));
+			json_object_object_add(address, "state", json_object_new_int(_client_ip->state));
 			json_object_object_add(addresses, ip_str, address);
 		}
 
@@ -176,8 +160,7 @@ void get_clients(struct json_object *obj) {
 			json_object_put(addresses);
 		}
 
-		json_object_object_add(jclients, print_mac(_client->mac),
-				       jclient);
+		json_object_object_add(jclients, print_mac(_client->mac), jclient);
 	}
 
 	if (i) {
@@ -208,8 +191,7 @@ void socket_handle_in(socket_ctx *ctx) {
 
 	enum socket_command cmd;
 	if (!parse_command(line, &cmd)) {
-		fprintf(stderr, "Could not parse command on socket (%s)\n",
-			line);
+		fprintf(stderr, "Could not parse command on socket (%s)\n", line);
 		goto end;
 	}
 
@@ -225,15 +207,11 @@ void socket_handle_in(socket_ctx *ctx) {
 		case PROBE:
 			str_address = strtok(&line[ETH_ALEN], " ");
 			str_mac = strtok(NULL, " ");
-			sscanf(str_mac,
-			       "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx",
-			       &mac[0], &mac[1], &mac[2], &mac[3], &mac[4],
-			       &mac[5]);
+			sscanf(str_mac, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx", &mac[0], &mac[1], &mac[2], &mac[3],
+			       &mac[4], &mac[5]);
 			if (inet_pton(AF_INET6, str_address, &address) == 1) {
-				routemgr_probe_neighbor(
-				    &l3ctx.routemgr_ctx,
-				    l3ctx.routemgr_ctx.clientif_index, &address,
-				    mac);
+				routemgr_probe_neighbor(&l3ctx.routemgr_ctx, l3ctx.routemgr_ctx.clientif_index,
+							&address, mac);
 			}
 			break;
 		case GET_CLIENTS:
@@ -243,34 +221,26 @@ void socket_handle_in(socket_ctx *ctx) {
 		case ADD_PREFIX:
 			if (parse_prefix(&_prefix, &line[11])) {
 				add_prefix(&CTX(clientmgr)->prefixes, _prefix);
-				routemgr_insert_route(
-				    CTX(routemgr), 254,
-				    if_nametoindex(CTX(ipmgr)->ifname),
-				    (struct in6_addr *)(_prefix.prefix.s6_addr),
-				    _prefix.plen);
+				routemgr_insert_route(CTX(routemgr), 254, if_nametoindex(CTX(ipmgr)->ifname),
+						      (struct in6_addr *)(_prefix.prefix.s6_addr), _prefix.plen);
 				dprintf(fd, "Added prefix: %s", &line[11]);
 			}
 			break;
 		case ADD_ADDRESS:
 			str_address = strtok(&line[12], " ");
 			str_mac = strtok(NULL, " ");
-			sscanf(str_mac,
-			       "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx",
-			       &mac[0], &mac[1], &mac[2], &mac[3], &mac[4],
-			       &mac[5]);
+			sscanf(str_mac, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx", &mac[0], &mac[1], &mac[2], &mac[3],
+			       &mac[4], &mac[5]);
 			if (inet_pton(AF_INET6, str_address, &address) == 1) {
-				clientmgr_add_address(
-				    &l3ctx.clientmgr_ctx, &address, mac,
-				    l3ctx.routemgr_ctx.clientif_index);
+				clientmgr_add_address(&l3ctx.clientmgr_ctx, &address, mac,
+						      l3ctx.routemgr_ctx.clientif_index);
 				dprintf(fd, "OK");
 			} else {
 				struct in_addr ip4;
-				if (inet_pton(AF_INET, str_address, &ip4) ==
-				    1) {
+				if (inet_pton(AF_INET, str_address, &ip4) == 1) {
 					mapv4_v6(&ip4, &address);
-					clientmgr_add_address(
-					    &l3ctx.clientmgr_ctx, &address, mac,
-					    l3ctx.routemgr_ctx.clientif_index);
+					clientmgr_add_address(&l3ctx.clientmgr_ctx, &address, mac,
+							      l3ctx.routemgr_ctx.clientif_index);
 					dprintf(fd, "OK");
 				} else
 					dprintf(fd, "NOT OK");
@@ -278,8 +248,7 @@ void socket_handle_in(socket_ctx *ctx) {
 			break;
 		case ADD_MESHIF:
 			str_meshif = strndup(&line[11], IFNAMSIZ);
-			if (!intercom_add_interface(&l3ctx.intercom_ctx,
-						    str_meshif)) {
+			if (!intercom_add_interface(&l3ctx.intercom_ctx, str_meshif)) {
 				free(str_meshif);
 				break;
 			}
@@ -290,21 +259,17 @@ void socket_handle_in(socket_ctx *ctx) {
 			break;
 		case DEL_MESHIF:
 			str_meshif = strndup(&line[11], IFNAMSIZ);
-			if (!intercom_del_interface(&l3ctx.intercom_ctx,
-						    str_meshif))
+			if (!intercom_del_interface(&l3ctx.intercom_ctx, str_meshif))
 				free(str_meshif);
 			break;
 		case DEL_ADDRESS:
 			str_address = strtok(&line[12], " ");
 			str_mac = strtok(NULL, " ");
-			sscanf(str_mac,
-			       "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx",
-			       &mac[0], &mac[1], &mac[2], &mac[3], &mac[4],
-			       &mac[5]);
+			sscanf(str_mac, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx", &mac[0], &mac[1], &mac[2], &mac[3],
+			       &mac[4], &mac[5]);
 			struct client *client = get_client(mac);
 			if (client) {
-				if (inet_pton(AF_INET6, str_address,
-					      &address) == 1) {
+				if (inet_pton(AF_INET6, str_address, &address) == 1) {
 					rtmgr_client_remove_address(&address);
 					dprintf(fd, "OK");
 				} else {
@@ -315,10 +280,8 @@ void socket_handle_in(socket_ctx *ctx) {
 		case DEL_PREFIX:
 			if (parse_prefix(&_prefix, &line[11])) {
 				del_prefix(&CTX(clientmgr)->prefixes, _prefix);
-				routemgr_remove_route(
-				    CTX(routemgr), 254,
-				    (struct in6_addr *)(_prefix.prefix.s6_addr),
-				    _prefix.plen);
+				routemgr_remove_route(CTX(routemgr), 254, (struct in6_addr *)(_prefix.prefix.s6_addr),
+						      _prefix.plen);
 				dprintf(fd, "Deleted prefix: %s", &line[11]);
 			}
 			break;

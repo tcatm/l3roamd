@@ -22,21 +22,16 @@
 static void seek_task(void *d);
 static void ipmgr_purge_task(void *d);
 
-static int entry_compare_by_address(const struct unknown_address *a,
-				    const struct unknown_address *b) {
+static int entry_compare_by_address(const struct unknown_address *a, const struct unknown_address *b) {
 	return memcmp(&a->address, &b->address, sizeof(struct in6_addr));
 }
 
 /* find an entry in the ipmgr's unknown-clients list*/
-struct unknown_address *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k,
-				   int *elementindex) {
+struct unknown_address *find_entry(ipmgr_ctx *ctx, const struct in6_addr *k, int *elementindex) {
 	struct unknown_address key = {.address = *k};
-	struct unknown_address *ret =
-	    VECTOR_LSEARCH(&key, ctx->addrs, entry_compare_by_address);
+	struct unknown_address *ret = VECTOR_LSEARCH(&key, ctx->addrs, entry_compare_by_address);
 	if (ret != NULL && elementindex != NULL)
-		*elementindex =
-		    ((void *)ret - (void *)&VECTOR_INDEX(ctx->addrs, 0)) /
-		    sizeof(struct unknown_address);
+		*elementindex = ((void *)ret - (void *)&VECTOR_INDEX(ctx->addrs, 0)) / sizeof(struct unknown_address);
 	log_debug("%s is on the unknown-clients list", print_ip(k));
 	if (elementindex)
 		log_debug(" on index %i", *elementindex);
@@ -57,10 +52,8 @@ void delete_entry(const struct in6_addr *k) {
 	VECTOR_DELETE((&l3ctx.ipmgr_ctx)->addrs, i);
 }
 
-struct ns_task *create_ns_task(struct in6_addr *dst, struct timespec tv,
-			       int retries, bool force) {
-	struct ns_task *task =
-	    l3roamd_alloc(sizeof(struct ns_task));  // should this be aligned?
+struct ns_task *create_ns_task(struct in6_addr *dst, struct timespec tv, int retries, bool force) {
+	struct ns_task *task = l3roamd_alloc(sizeof(struct ns_task));  // should this be aligned?
 
 	if (retries < 0)
 		retries = -1;
@@ -74,8 +67,7 @@ struct ns_task *create_ns_task(struct in6_addr *dst, struct timespec tv,
 }
 
 struct ip_task *create_task(struct in6_addr *dst) {
-	struct ip_task *task =
-	    l3roamd_alloc(sizeof(struct ip_task));  // should this be aligned?
+	struct ip_task *task = l3roamd_alloc(sizeof(struct ip_task));  // should this be aligned?
 
 	task->ctx = &l3ctx.ipmgr_ctx;
 	memcpy(&task->address, dst, sizeof(struct in6_addr));
@@ -84,8 +76,7 @@ struct ip_task *create_task(struct in6_addr *dst) {
 
 taskqueue_t *schedule_purge_task(struct in6_addr *destination, int timeout) {
 	struct ip_task *purge_data = create_task(destination);
-	return post_task(&l3ctx.taskqueue_ctx, timeout, 0, ipmgr_purge_task,
-			 free, purge_data);
+	return post_task(&l3ctx.taskqueue_ctx, timeout, 0, ipmgr_purge_task, free, purge_data);
 }
 
 /** This will seek an address by checking locally and if needed querying the
@@ -114,8 +105,7 @@ static bool ismulticast(const struct in6_addr *addr) {
 	return false;
 }
 
-static void handle_packet(ipmgr_ctx *ctx, uint8_t packet[],
-			  ssize_t packet_len) {
+static void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) {
 	struct in6_addr dst = packet_get_dst(packet);
 
 	if (ismulticast(&dst))
@@ -130,8 +120,7 @@ static void handle_packet(ipmgr_ctx *ctx, uint8_t packet[],
 	}
 
 	struct in6_addr src = packet_get_src(packet);
-	log_verbose("Got packet from %s destined to %s\n", print_ip(&src),
-		    print_ip(&dst));
+	log_verbose("Got packet from %s destined to %s\n", print_ip(&src), print_ip(&dst));
 
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
@@ -162,8 +151,7 @@ static void handle_packet(ipmgr_ctx *ctx, uint8_t packet[],
 
 static bool should_we_really_seek(struct in6_addr *destination, bool force) {
 	struct client *client = NULL;
-	struct unknown_address *e =
-	    find_entry(&l3ctx.ipmgr_ctx, destination, NULL);
+	struct unknown_address *e = find_entry(&l3ctx.ipmgr_ctx, destination, NULL);
 	// if a route to this client appeared, the queue will be emptied -- no
 	// seek necessary
 	if (!e) {
@@ -171,20 +159,15 @@ static bool should_we_really_seek(struct in6_addr *destination, bool force) {
 		    "seek task was scheduled but no packets to be delivered to "
 		    "host: %s\n",
 		    print_ip(destination));
-		if (force && (!clientmgr_is_known_address(
-				 &l3ctx.clientmgr_ctx, destination, &client))) {
-			log_debug(
-			    "seeking because we do not know this IP yet: %s\n",
-			    print_ip(destination));
+		if (force && (!clientmgr_is_known_address(&l3ctx.clientmgr_ctx, destination, &client))) {
+			log_debug("seeking because we do not know this IP yet: %s\n", print_ip(destination));
 			return true;
 		} else {
 			return false;
 		}
 	}
 
-	if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, destination,
-				       &client) &&
-	    client_is_active(client)) {
+	if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, destination, &client) && client_is_active(client)) {
 		log_error(
 		    "ERROR: seek task was scheduled, there are packets to be "
 		    "delivered to the host: %s, which is a known client. This "
@@ -199,8 +182,7 @@ static bool should_we_really_seek(struct in6_addr *destination, bool force) {
 	return true;
 }
 
-static void remove_packet_from_vector(struct unknown_address *entry,
-				      int element) {
+static void remove_packet_from_vector(struct unknown_address *entry, int element) {
 	struct packet p = VECTOR_INDEX(entry->packets, element);
 
 	free(p.data);
@@ -210,8 +192,7 @@ static void remove_packet_from_vector(struct unknown_address *entry,
 
 static int purge_old_packets(struct in6_addr *destination) {
 	int elementindex = 0;
-	struct unknown_address *e =
-	    find_entry(&l3ctx.ipmgr_ctx, destination, &elementindex);
+	struct unknown_address *e = find_entry(&l3ctx.ipmgr_ctx, destination, &elementindex);
 
 	if (!e)
 		return 0;
@@ -222,14 +203,12 @@ static int purge_old_packets(struct in6_addr *destination) {
 		return -1;  // skip this purging-cycle
 	}
 
-	struct timespec then = {.tv_sec = now.tv_sec - PACKET_TIMEOUT,
-				.tv_nsec = now.tv_nsec};
+	struct timespec then = {.tv_sec = now.tv_sec - PACKET_TIMEOUT, .tv_nsec = now.tv_nsec};
 
 	for (int i = VECTOR_LEN(e->packets) - 1; i >= 0; i--) {
 		struct packet p = VECTOR_INDEX(e->packets, i);
 		if (timespec_cmp(p.timestamp, then) <= 0) {
-			log_debug("deleting old packet with destination %s\n",
-				  print_ip(&e->address));
+			log_debug("deleting old packet with destination %s\n", print_ip(&e->address));
 
 			struct in6_addr src = packet_get_src(p.data);
 			if (!address_is_ipv4(&src))
@@ -252,8 +231,7 @@ static int purge_old_packets(struct in6_addr *destination) {
 
 void ipmgr_purge_task(void *d) {
 	struct ip_task *data = d;
-	struct unknown_address *e =
-	    find_entry(&l3ctx.ipmgr_ctx, &data->address, NULL);
+	struct unknown_address *e = find_entry(&l3ctx.ipmgr_ctx, &data->address, NULL);
 	if (purge_old_packets(&data->address))
 		e->check_task = schedule_purge_task(&data->address, 1);
 }
@@ -267,8 +245,7 @@ void ipmgr_ns_task(void *d) {
 	if (!should_we_really_seek(&data->address, data->force))
 		return;
 
-	log_error("\x1b[36mLooking for %s locally\x1b[0m\n",
-		  print_ip(&data->address));
+	log_error("\x1b[36mLooking for %s locally\x1b[0m\n", print_ip(&data->address));
 	log_debug("ns_task: force = %i\n", data->force);
 
 	if (address_is_ipv4(&data->address))
@@ -278,10 +255,9 @@ void ipmgr_ns_task(void *d) {
 
 	if (!!data->retries_left) {
 		struct ns_task *ns_data =
-		    create_ns_task(&data->address, data->interval,
-				   data->retries_left - 1, data->force);
-		post_task(&l3ctx.taskqueue_ctx, data->interval.tv_sec,
-			  data->interval.tv_nsec, ipmgr_ns_task, free, ns_data);
+		    create_ns_task(&data->address, data->interval, data->retries_left - 1, data->force);
+		post_task(&l3ctx.taskqueue_ctx, data->interval.tv_sec, data->interval.tv_nsec, ipmgr_ns_task, free,
+			  ns_data);
 	}
 }
 
@@ -294,12 +270,10 @@ void seek_task(void *d) {
 		    "%s\x1b[0m\n",
 		    print_ip(&data->address));
 
-		intercom_seek(&l3ctx.intercom_ctx,
-			      (const struct in6_addr *)&(data->address));
+		intercom_seek(&l3ctx.intercom_ctx, (const struct in6_addr *)&(data->address));
 
 		struct ip_task *_data = create_task(&data->address);
-		post_task(&l3ctx.taskqueue_ctx, SEEK_INTERVAL, 0, seek_task,
-			  free, _data);
+		post_task(&l3ctx.taskqueue_ctx, SEEK_INTERVAL, 0, seek_task, free, _data);
 	}
 }
 
@@ -345,8 +319,7 @@ void ipmgr_handle_out(ipmgr_ctx *ctx, int fd) {
 				perror(
 				    "Could not send packet to newly visible "
 				    "client.");
-				if (timespec_cmp(packet->timestamp, then) <=
-				    0) {
+				if (timespec_cmp(packet->timestamp, then) <= 0) {
 					log_error(
 					    "could not send packet - packet is "
 					    "still young enough, requeueing\n");
@@ -394,8 +367,7 @@ void ipmgr_route_appeared(ipmgr_ctx *ctx, const struct in6_addr *destination) {
 
 /* open l3roamd's tun device that is used to obtain packets for unknown clients
  */
-static bool tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu,
-		     const char *dev_name) {
+static bool tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu, const char *dev_name) {
 	int ctl_sock = -1;
 	struct ifreq ifr = {};
 
@@ -409,8 +381,7 @@ static bool tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu,
 	ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
 
 	if (ioctl(ctx->fd, TUNSETIFF, &ifr) < 0) {
-		puts(
-		    "unable to open TUN/TAP interface: TUNSETIFF ioctl failed");
+		puts("unable to open TUN/TAP interface: TUNSETIFF ioctl failed");
 		goto error;
 	}
 
@@ -433,8 +404,7 @@ static bool tun_open(ipmgr_ctx *ctx, const char *ifname, uint16_t mtu,
 		}
 	}
 
-	ifr.ifr_flags =
-	    IFF_UP | IFF_RUNNING | IFF_MULTICAST | IFF_NOARP | IFF_POINTOPOINT;
+	ifr.ifr_flags = IFF_UP | IFF_RUNNING | IFF_MULTICAST | IFF_NOARP | IFF_POINTOPOINT;
 	if (ioctl(ctl_sock, SIOCSIFFLAGS, &ifr) < 0)
 		exit_errno(
 		    "unable to set TUN/TAP interface UP: SIOCSIFFLAGS ioctl "

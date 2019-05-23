@@ -37,8 +37,7 @@ void arp_handle_in(arp_ctx *ctx, int fd) {
 	if (packet.op != htons(ARP_REPLY))
 		return;
 
-	if (memcmp(packet.spa, "\x00\x00\x00\x00", 4) ==
-	    0)  // IP is 0.0.0.0 - not sensible to add that.
+	if (memcmp(packet.spa, "\x00\x00\x00\x00", 4) == 0)  // IP is 0.0.0.0 - not sensible to add that.
 		return;
 
 	uint8_t *mac = lladdr.sll_addr;
@@ -49,20 +48,14 @@ void arp_handle_in(arp_ctx *ctx, int fd) {
 
 	char str[INET6_ADDRSTRLEN];
 	inet_ntop(AF_INET6, &address, str, INET6_ADDRSTRLEN);
-	log_verbose(
-	    "ARP Response from %s (MAC %02x:%02x:%02x:%02x:%02x:%02x)\n", str,
-	    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+	log_verbose("ARP Response from %s (MAC %02x:%02x:%02x:%02x:%02x:%02x)\n", str, mac[0], mac[1], mac[2], mac[3],
+		    mac[4], mac[5]);
 
-	clientmgr_add_address(CTX(clientmgr), &address, packet.sha,
-			      ctx->ifindex);
+	clientmgr_add_address(CTX(clientmgr), &address, packet.sha, ctx->ifindex);
 }
 
 void arp_send_request(arp_ctx *ctx, const struct in6_addr *addr) {
-	struct arp_packet packet = {.hd = htons(1),
-				    .pr = htons(0x800),
-				    .hdl = 6,
-				    .prl = 4,
-				    .op = htons(ARP_REQUEST)};
+	struct arp_packet packet = {.hd = htons(1), .pr = htons(0x800), .hdl = 6, .prl = 4, .op = htons(ARP_REQUEST)};
 
 	memcpy(&packet.sha, ctx->mac, 6);
 	memcpy(&packet.spa, "\x00\x00\x00\x00", 4);
@@ -72,16 +65,12 @@ void arp_send_request(arp_ctx *ctx, const struct in6_addr *addr) {
 	log_verbose("Send ARP to %s\n", print_ip(addr));
 
 	struct sockaddr_ll dst = {
-	    .sll_ifindex = ctx->ifindex,
-	    .sll_protocol = htons(ETH_P_ARP),
-	    .sll_family = PF_PACKET,
-	    .sll_halen = 6,
+	    .sll_ifindex = ctx->ifindex, .sll_protocol = htons(ETH_P_ARP), .sll_family = PF_PACKET, .sll_halen = 6,
 	};
 
 	memcpy(&dst.sll_addr, "\xff\xff\xff\xff\xff\xff", 6);
 
-	sendto(ctx->fd, &packet, sizeof(packet), 0, (struct sockaddr *)&dst,
-	       sizeof(dst));
+	sendto(ctx->fd, &packet, sizeof(packet), 0, (struct sockaddr *)&dst, sizeof(dst));
 }
 
 void arp_init(arp_ctx *ctx) {
@@ -115,12 +104,10 @@ void arp_setup_interface(arp_ctx *ctx) {
 	}
 
 	ctx->ifindex = req.ifr_ifindex;
-	log_verbose("initialized arp-fd (%i) on interface with index: %i\n",
-		    ctx->fd, ctx->ifindex);
+	log_verbose("initialized arp-fd (%i) on interface with index: %i\n", ctx->fd, ctx->ifindex);
 }
 
-void arp_interface_changed(arp_ctx *ctx, int type,
-			   const struct ifinfomsg *msg) {
+void arp_interface_changed(arp_ctx *ctx, int type, const struct ifinfomsg *msg) {
 	char ifname[IFNAMSIZ];
 
 	if (if_indextoname(msg->ifi_index, ifname) == NULL)
@@ -136,9 +123,7 @@ void arp_interface_changed(arp_ctx *ctx, int type,
 		case RTM_SETLINK:
 			log_verbose("arp interface changed - NEW or SET\n");
 			if (ctx->ifindex != msg->ifi_index) {
-				log_verbose(
-				    "re-initializing arp interface %s\n",
-				    ifname);
+				log_verbose("re-initializing arp interface %s\n", ifname);
 				arp_setup_interface(ctx);
 			}
 			break;

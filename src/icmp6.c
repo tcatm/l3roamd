@@ -23,11 +23,9 @@ int icmp6_init_packet() {
 	int sock, err;
 	struct sock_fprog fprog;
 	static const struct sock_filter filter[] = {
-	    BPF_STMT(BPF_LD | BPF_B | BPF_ABS,
-		     sizeof(struct ip6_hdr) +
-			 offsetof(struct icmp6_hdr, icmp6_type)),
-	    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, ND_NEIGHBOR_SOLICIT, 1, 0),
-	    BPF_STMT(BPF_RET | BPF_K, 0), BPF_STMT(BPF_RET | BPF_K, 0xffffffff),
+	    BPF_STMT(BPF_LD | BPF_B | BPF_ABS, sizeof(struct ip6_hdr) + offsetof(struct icmp6_hdr, icmp6_type)),
+	    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, ND_NEIGHBOR_SOLICIT, 1, 0), BPF_STMT(BPF_RET | BPF_K, 0),
+	    BPF_STMT(BPF_RET | BPF_K, 0xffffffff),
 	};
 
 	fprog.filter = (struct sock_filter *)filter;
@@ -39,8 +37,7 @@ int icmp6_init_packet() {
 	}
 
 	// Tie the BSD-PF filter to the socket
-	err = setsockopt(sock, SOL_SOCKET, SO_ATTACH_FILTER, &fprog,
-			 sizeof(fprog));
+	err = setsockopt(sock, SOL_SOCKET, SO_ATTACH_FILTER, &fprog, sizeof(fprog));
 	if (err < 0) {
 		perror("setsockopt(SO_ATTACH_FILTER)");
 	}
@@ -54,8 +51,7 @@ static inline int setsockopt_int(int socket, int level, int option, int value) {
 
 void icmp6_init(icmp6_ctx *ctx) {
 	if (l3ctx.clientif_set) {
-		int fd =
-		    socket(PF_INET6, SOCK_RAW | SOCK_NONBLOCK, IPPROTO_ICMPV6);
+		int fd = socket(PF_INET6, SOCK_RAW | SOCK_NONBLOCK, IPPROTO_ICMPV6);
 		setsockopt_int(fd, IPPROTO_RAW, IPV6_CHECKSUM, 2);
 		setsockopt_int(fd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, 255);
 		setsockopt_int(fd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, 1);
@@ -66,30 +62,25 @@ void icmp6_init(icmp6_ctx *ctx) {
 		struct icmp6_filter filter;
 		ICMP6_FILTER_SETBLOCKALL(&filter);
 		ICMP6_FILTER_SETPASS(ND_NEIGHBOR_ADVERT, &filter);
-		setsockopt(fd, IPPROTO_ICMPV6, ICMP6_FILTER, &filter,
-			   sizeof(filter));
+		setsockopt(fd, IPPROTO_ICMPV6, ICMP6_FILTER, &filter, sizeof(filter));
 		ctx->fd = fd;
 		ctx->nsfd = icmp6_init_packet();
 	}
 
 	// send icmp6 unreachable on unreachfd6
-	int unreachfd6 =
-	    socket(AF_INET6, SOCK_RAW | SOCK_NONBLOCK, IPPROTO_ICMPV6);
+	int unreachfd6 = socket(AF_INET6, SOCK_RAW | SOCK_NONBLOCK, IPPROTO_ICMPV6);
 	struct icmp6_filter filterv6 = {};
 
 	ICMP6_FILTER_SETBLOCKALL(&filterv6);
 	// shutdown(unreachfd6, SHUT_RD);
 	ICMP6_FILTER_SETPASS(ICMP6_DST_UNREACH, &filterv6);
-	setsockopt(unreachfd6, IPPROTO_ICMPV6, ICMP6_FILTER, &filterv6,
-		   sizeof(filterv6));
+	setsockopt(unreachfd6, IPPROTO_ICMPV6, ICMP6_FILTER, &filterv6, sizeof(filterv6));
 	ctx->unreachfd6 = unreachfd6;
 
 	struct icmp_filter filterv4 = {};
 	filterv4.data |= 1 << ICMP_DEST_UNREACH;
-	int unreachfd4 =
-	    socket(AF_INET, SOCK_RAW | SOCK_NONBLOCK, IPPROTO_ICMP);
-	setsockopt(unreachfd4, IPPROTO_ICMP, ICMP_FILTER, &filterv4,
-		   sizeof(filterv4));
+	int unreachfd4 = socket(AF_INET, SOCK_RAW | SOCK_NONBLOCK, IPPROTO_ICMP);
+	setsockopt(unreachfd4, IPPROTO_ICMP, ICMP_FILTER, &filterv4, sizeof(filterv4));
 	ctx->unreachfd4 = unreachfd4;
 
 	icmp6_setup_interface(ctx);
@@ -101,8 +92,7 @@ void icmp6_setup_interface(icmp6_ctx *ctx) {
 	if (!l3ctx.clientif_set)
 		return;
 
-	int rc = setsockopt(ctx->fd, SOL_SOCKET, SO_BINDTODEVICE, ctx->clientif,
-			    strnlen(ctx->clientif, IFNAMSIZ - 1));
+	int rc = setsockopt(ctx->fd, SOL_SOCKET, SO_BINDTODEVICE, ctx->clientif, strnlen(ctx->clientif, IFNAMSIZ - 1));
 	log_verbose("Setting up icmp6 interface: %i\n", rc);
 
 	if (rc < 0) {
@@ -129,8 +119,7 @@ void icmp6_setup_interface(icmp6_ctx *ctx) {
 	lladdr.sll_pkttype = 0;
 	lladdr.sll_halen = ETH_ALEN;
 
-	while (bind(ctx->nsfd, (struct sockaddr *)&lladdr, sizeof(lladdr)) <
-	       0) {
+	while (bind(ctx->nsfd, (struct sockaddr *)&lladdr, sizeof(lladdr)) < 0) {
 		perror("bind on icmp6 ns fd failed, retrying");
 	}
 
@@ -139,8 +128,7 @@ void icmp6_setup_interface(icmp6_ctx *ctx) {
 	ctx->ok = true;
 }
 
-void icmp6_interface_changed(icmp6_ctx *ctx, int type,
-			     const struct ifinfomsg *msg) {
+void icmp6_interface_changed(icmp6_ctx *ctx, int type, const struct ifinfomsg *msg) {
 	char ifname[IFNAMSIZ];
 
 	if (if_indextoname(msg->ifi_index, ifname) == NULL)
@@ -218,8 +206,7 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 
 		uint8_t *mac = lladdr.sll_addr;
 
-		if (packet.sol.hdr.nd_ns_hdr.icmp6_type ==
-		    ND_NEIGHBOR_SOLICIT) {
+		if (packet.sol.hdr.nd_ns_hdr.icmp6_type == ND_NEIGHBOR_SOLICIT) {
 			if (memcmp(&packet.hdr.ip6_src,
 				   "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 				   "\x00\x00\x00\x00\x00\x00",
@@ -233,28 +220,22 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 				    "triggering local NS cycle after DAD for "
 				    "address %s\n",
 				    print_ip(&packet.sol.hdr.nd_ns_target));
-				struct ns_task *ns_data = create_ns_task(
-				    &packet.sol.hdr.nd_ns_target,
-				    (struct timespec){
-					.tv_sec = 0, .tv_nsec = 300000000,
-				    },
-				    15, true);
-				post_task(CTX(taskqueue), 0, 0, ipmgr_ns_task,
-					  free, ns_data);
+				struct ns_task *ns_data = create_ns_task(&packet.sol.hdr.nd_ns_target,
+									 (struct timespec){
+									     .tv_sec = 0, .tv_nsec = 300000000,
+									 },
+									 15, true);
+				post_task(CTX(taskqueue), 0, 0, ipmgr_ns_task, free, ns_data);
 			} else {
 				log_debug(
 				    "Received Neighbor Solicitation from %s "
 				    "[%s] for IP %s. Learning source-IP for "
 				    "client.\n",
-				    print_ip(&packet.hdr.ip6_src),
-				    print_mac(mac),
+				    print_ip(&packet.hdr.ip6_src), print_mac(mac),
 				    print_ip(&packet.sol.hdr.nd_ns_target));
 
-				clientmgr_notify_mac(CTX(clientmgr), mac,
-						     ctx->ifindex);
-				clientmgr_add_address(CTX(clientmgr),
-						      &packet.hdr.ip6_src, mac,
-						      ctx->ifindex);
+				clientmgr_notify_mac(CTX(clientmgr), mac, ctx->ifindex);
+				clientmgr_add_address(CTX(clientmgr), &packet.hdr.ip6_src, mac, ctx->ifindex);
 			}
 		}
 	}
@@ -301,20 +282,17 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 		log_debug(
 		    "Learning from Neighbour Advertisement that Client "
 		    "[%02x:%02x:%02x:%02x:%02x:%02x] is active on ip %s\n",
-		    packet.hw_addr[0], packet.hw_addr[1], packet.hw_addr[2],
-		    packet.hw_addr[3], packet.hw_addr[4], packet.hw_addr[5],
-		    print_ip(&packet.hdr.nd_na_target));
+		    packet.hw_addr[0], packet.hw_addr[1], packet.hw_addr[2], packet.hw_addr[3], packet.hw_addr[4],
+		    packet.hw_addr[5], print_ip(&packet.hdr.nd_na_target));
 
 		// TODO: make sure to stop possibly previously started NS-cycles
 		// due to DAD,
 
-		clientmgr_add_address(CTX(clientmgr), &packet.hdr.nd_na_target,
-				      packet.hw_addr, ctx->ifindex);
+		clientmgr_add_address(CTX(clientmgr), &packet.hdr.nd_na_target, packet.hw_addr, ctx->ifindex);
 	}
 }
 
-int icmp_send_dest_unreachable(const struct in6_addr *addr,
-			       const struct packet *data) {
+int icmp_send_dest_unreachable(const struct in6_addr *addr, const struct packet *data) {
 	int len = 0, retries = 3;
 	struct dest_unreach_packet packet = {};
 
@@ -336,14 +314,12 @@ int icmp_send_dest_unreachable(const struct in6_addr *addr,
 	struct in_addr sin = extractv4_v6(addr);
 	memcpy(&dst.sin_addr, &sin, sizeof(struct in_addr));
 
-	packet.hdr.checksum = csum(
-	    (unsigned short *)&packet,
-	    sizeof(struct icmphdr) +
-		dlen);  // icmp dest unreachbyte is 8 Bytes according to RFC 792
+	packet.hdr.checksum =
+	    csum((unsigned short *)&packet,
+		 sizeof(struct icmphdr) + dlen);  // icmp dest unreachbyte is 8 Bytes according to RFC 792
 
 	while (len <= 0 && retries > 0) {
-		len = sendto(l3ctx.icmp6_ctx.unreachfd4, &packet,
-			     sizeof(struct icmphdr) + dlen, 0,
+		len = sendto(l3ctx.icmp6_ctx.unreachfd4, &packet, sizeof(struct icmphdr) + dlen, 0,
 			     (struct sockaddr *)&dst, sizeof(dst));
 
 		if (len > 0) {
@@ -364,8 +340,7 @@ int icmp_send_dest_unreachable(const struct in6_addr *addr,
 	return 1;
 }
 
-int icmp6_send_dest_unreachable(const struct in6_addr *addr,
-				const struct packet *data) {
+int icmp6_send_dest_unreachable(const struct in6_addr *addr, const struct packet *data) {
 	struct dest_unreach_packet6 packet = {};
 	memset(&packet, 0, sizeof(packet));
 	memset(&packet.hdr, 0, sizeof(packet.hdr));
@@ -388,9 +363,8 @@ int icmp6_send_dest_unreachable(const struct in6_addr *addr,
 	int retries = 3;
 
 	while (len <= 0 && retries > 0) {
-		len = sendto(l3ctx.icmp6_ctx.unreachfd6, &packet,
-			     sizeof(packet.hdr) + dlen, 0,
-			     (struct sockaddr *)&dst, sizeof(dst));
+		len = sendto(l3ctx.icmp6_ctx.unreachfd6, &packet, sizeof(packet.hdr) + dlen, 0, (struct sockaddr *)&dst,
+			     sizeof(dst));
 
 		if (len > 0) {
 			log_debug(
@@ -439,8 +413,7 @@ void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 	// address and unicast when the node seeks to verify the existence of a
 	// neighbor
 	memcpy(&dst.sin6_addr, addr, 16);
-	memcpy(&dst.sin6_addr,
-	       "\xff\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\xff", 13);
+	memcpy(&dst.sin6_addr, "\xff\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\xff", 13);
 
 	struct client *_client = NULL;
 	if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, addr, &_client)) {
@@ -451,8 +424,7 @@ void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 		parse_prefix(&_prefix, "fe80::/64");
 		lladdr = mac2ipv6(_client->mac, &_prefix);
 
-		if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &lladdr,
-					       &_client)) {
+		if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, &lladdr, &_client)) {
 			memcpy(&dst.sin6_addr, &lladdr, 16);
 		}
 	}
@@ -463,8 +435,7 @@ void icmp6_send_solicitation(icmp6_ctx *ctx, const struct in6_addr *addr) {
 	int len = 0;
 	int retries = 3;
 	while (len <= 0 && retries > 0) {
-		len = sendto(ctx->fd, &packet, sizeof(packet), 0,
-			     (struct sockaddr *)&dst, sizeof(dst));
+		len = sendto(ctx->fd, &packet, sizeof(packet), 0, (struct sockaddr *)&dst, sizeof(dst));
 		log_debug("sent NS with length %i to %s %i\n", len, str);
 		if (len < 0)
 			perror("Error while sending NS, retrying");

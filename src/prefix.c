@@ -86,8 +86,7 @@ bool add_prefix(void *prefixes, struct prefix _prefix) {
 bool del_prefix(void *prefixes, struct prefix _prefix) {
 	VECTOR(struct prefix) *_prefixes = prefixes;
 	for (int i = 0; i < VECTOR_LEN(*_prefixes); i++) {
-		if (!memcmp(&VECTOR_INDEX(*_prefixes, i), &_prefix,
-			    sizeof(_prefix))) {
+		if (!memcmp(&VECTOR_INDEX(*_prefixes, i), &_prefix, sizeof(_prefix))) {
 			VECTOR_DELETE(*_prefixes, i);
 			return true;
 		}
@@ -97,12 +96,10 @@ bool del_prefix(void *prefixes, struct prefix _prefix) {
 }
 
 bool prefix_contains(const struct prefix *prefix, const struct in6_addr *addr) {
-	log_debug("checking if prefix %s contains address %s\n",
-		  print_ip(&prefix->prefix), print_ip(addr));
+	log_debug("checking if prefix %s contains address %s\n", print_ip(&prefix->prefix), print_ip(addr));
 
 	int mask = 0xff;
-	for (int remaining_plen = prefix->plen, i = 0; remaining_plen > 0;
-	     remaining_plen -= 8) {
+	for (int remaining_plen = prefix->plen, i = 0; remaining_plen > 0; remaining_plen -= 8) {
 		if (remaining_plen < 8)
 			mask = 0xff & (0xff00 >> remaining_plen);
 
