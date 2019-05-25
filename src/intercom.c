@@ -361,7 +361,7 @@ int parse_basic(const uint8_t *packet, struct client *client) {
 	int num_addresses = (length - 2 - 6) / 16;
 
 	if (l3ctx.debug) {
-		log_verbose("handling info segment with %i addresses for client ", num_addresses);
+		log_debug("handling info segment with %i addresses for client ", num_addresses);
 		print_client(client);
 	}
 
@@ -473,6 +473,12 @@ struct client *find_repeatable(void *v, client_t *k, int *elementindex) {
 	return ret;
 }
 
+void intercom_remove_claim(intercom_ctx *ctx, struct client *client ) {
+	int i = -1;
+	if (find_repeatable(&ctx->repeatable_claims, client, &i))
+		VECTOR_DELETE(ctx->repeatable_claims, i);
+}
+
 bool intercom_handle_ack(intercom_ctx *ctx, intercom_packet_ack *packet, int packet_len) {
 	mac client_mac = {};
 	uint8_t type, *packetpointer;
@@ -537,9 +543,7 @@ bool intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet, int p
 		}
 	}
 
-	int i = -1;
-	if (find_repeatable(&ctx->repeatable_claims, &client, &i))
-		VECTOR_DELETE(ctx->repeatable_claims, i);
+	intercom_remove_claim(ctx, &client);
 
 	bool acted_on_local_client = clientmgr_handle_info(CTX(clientmgr), &client);
 	intercom_ack(ctx, &sender, &client);
@@ -703,7 +707,7 @@ void claim_retry_task(void *d) {
 		log_debug(
 		    "could not find repeatable claim for client [%s]. This "
 		    "happens when an INFO packet was received before all claim "
-		    "retry-cycles are spent. Returning.\n",
+		    "retry-cycles are spent OR when deleting the client. Returning.\n",
 		    print_mac(data->client->mac));
 		return;
 	}

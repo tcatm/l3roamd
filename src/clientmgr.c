@@ -429,6 +429,8 @@ void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[ETH_ALEN]) {
 	    print_mac(mac));
 	print_client(client);
 
+	intercom_remove_claim(&l3ctx.intercom_ctx, client);
+
 	client_copy_to_old(client);
 
 	remove_special_ip(ctx, client);

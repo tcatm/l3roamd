@@ -119,6 +119,7 @@ void intercom_handle_in(intercom_ctx *ctx, int fd);
 bool intercom_add_interface(intercom_ctx *ctx, char *ifname);
 bool intercom_del_interface(intercom_ctx *ctx, char *ifname);
 void intercom_update_interfaces(intercom_ctx *ctx);
+void intercom_remove_claim(intercom_ctx *ctx, struct client *client);
 bool intercom_info(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client, bool relinquished);
 bool intercom_claim(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client);
 bool intercom_ack(intercom_ctx *ctx, const struct in6_addr *recipient, struct client *client);
