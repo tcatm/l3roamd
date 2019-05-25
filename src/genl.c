@@ -12,8 +12,7 @@
 
 #include "genl.h"
 
-static int error_handler(struct sockaddr_nl *nla, struct nlmsgerr *err,
-			 void *arg) {
+static int error_handler(struct sockaddr_nl *nla, struct nlmsgerr *err, void *arg) {
 	int *ret = arg;
 	*ret = err->error;
 	return NL_STOP;
@@ -37,8 +36,7 @@ static int family_handler(struct nl_msg *msg, void *arg) {
 	struct nlattr *mcgrp;
 	int rem_mcgrp;
 
-	nla_parse(tb, CTRL_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
-		  genlmsg_attrlen(gnlh, 0), NULL);
+	nla_parse(tb, CTRL_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
 
 	if (!tb[CTRL_ATTR_MCAST_GROUPS])
 		return NL_SKIP;
@@ -46,14 +44,11 @@ static int family_handler(struct nl_msg *msg, void *arg) {
 	nla_for_each_nested(mcgrp, tb[CTRL_ATTR_MCAST_GROUPS], rem_mcgrp) {
 		struct nlattr *tb_mcgrp[CTRL_ATTR_MCAST_GRP_MAX + 1];
 
-		nla_parse(tb_mcgrp, CTRL_ATTR_MCAST_GRP_MAX, nla_data(mcgrp),
-			  nla_len(mcgrp), NULL);
+		nla_parse(tb_mcgrp, CTRL_ATTR_MCAST_GRP_MAX, nla_data(mcgrp), nla_len(mcgrp), NULL);
 
-		if (!tb_mcgrp[CTRL_ATTR_MCAST_GRP_NAME] ||
-		    !tb_mcgrp[CTRL_ATTR_MCAST_GRP_ID])
+		if (!tb_mcgrp[CTRL_ATTR_MCAST_GRP_NAME] || !tb_mcgrp[CTRL_ATTR_MCAST_GRP_ID])
 			continue;
-		if (strncmp(nla_data(tb_mcgrp[CTRL_ATTR_MCAST_GRP_NAME]),
-			    grp->group,
+		if (strncmp(nla_data(tb_mcgrp[CTRL_ATTR_MCAST_GRP_NAME]), grp->group,
 			    nla_len(tb_mcgrp[CTRL_ATTR_MCAST_GRP_NAME])))
 			continue;
 		grp->id = nla_get_u32(tb_mcgrp[CTRL_ATTR_MCAST_GRP_ID]);
@@ -63,8 +58,7 @@ static int family_handler(struct nl_msg *msg, void *arg) {
 	return NL_SKIP;
 }
 
-int nl_get_multicast_id(struct nl_sock *sock, const char *family,
-			const char *group) {
+int nl_get_multicast_id(struct nl_sock *sock, const char *family, const char *group) {
 	struct nl_msg *msg;
 	struct nl_cb *cb;
 	int ret, ctrlid;

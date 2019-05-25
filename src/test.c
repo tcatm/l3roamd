@@ -111,9 +111,8 @@ int test_mac() {
 	uint8_t mac2[ETH_ALEN] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05};
 	uint8_t mac3[ETH_ALEN] = {0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5};
 	char str[120];
-	snprintf(str, 120,
-		 "testing mac address to string conversion for: %s, %s, %s",
-		 print_mac(mac1), print_mac(mac2), print_mac(mac3));
+	snprintf(str, 120, "testing mac address to string conversion for: %s, %s, %s", print_mac(mac1), print_mac(mac2),
+		 print_mac(mac3));
 	printf("%s\n", str);
 	_assert(strncmp(str,
 			"testing mac address to string conversion for: "
