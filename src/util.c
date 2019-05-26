@@ -97,7 +97,7 @@ void del_fd(int efd, int fd) {
 }
 
 void interfaces_changed(int type, const struct ifinfomsg *msg) {
-	printf("interfaces changed\n");
+	log_verbose("interfaces changed\n");
 	intercom_update_interfaces(&l3ctx.intercom_ctx);
 	icmp6_interface_changed(&l3ctx.icmp6_ctx, type, msg);
 	arp_interface_changed(&l3ctx.arp_ctx, type, msg);

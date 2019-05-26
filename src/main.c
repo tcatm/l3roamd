@@ -383,7 +383,6 @@ int main(int argc, char *argv[]) {
 	bool v4_initialized = false;
 	bool a_initialized = false;
 	bool p_initialized = false;
-	bool m_initialized = false;
 	l3ctx.clientif_set = false;
 	l3ctx.routemgr_ctx.nl_disabled = false;
 	l3ctx.wifistations_ctx.nl80211_disabled = false;
@@ -501,7 +500,6 @@ int main(int argc, char *argv[]) {
 				break;
 			case 'm':
 				intercom_add_interface(&l3ctx.intercom_ctx, strdup(optarg));
-				m_initialized = true;
 				break;
 			case 't':
 				l3ctx.clientmgr_ctx.export_table = atoi(optarg);
@@ -551,8 +549,6 @@ int main(int argc, char *argv[]) {
 		exit_error("specifying -a is mandatory");
 	if (!p_initialized)
 		exit_error("specifying -p is mandatory");
-	if (!m_initialized)
-		exit_error("specifying -m is mandatory");
 
 	catch_sigterm();
 

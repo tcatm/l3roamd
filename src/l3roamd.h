@@ -39,7 +39,6 @@ struct l3ctx {
 
 extern l3ctx_t l3ctx;
 
-void interfaces_changed(int type, const struct ifinfomsg *msg);
 void add_fd(int efd, int fd, uint32_t events);
 void del_fd(int efd, int fd);
 
