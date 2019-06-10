@@ -173,8 +173,7 @@ void client_bridge_changed(const struct nlmsghdr *nh, const struct ifinfomsg *ms
 
 			case RTM_DELLINK:
 				log_verbose(
-				    "del link on %i, fdb-entry was removed for "
-				    "[%s].\n",
+				    "del link on %i, fdb-entry was removed for [%s].\n",
 				    msg->ifi_index, print_mac(RTA_DATA(tb[IFLA_ADDRESS])));
 				clientmgr_delete_client(&l3ctx.clientmgr_ctx, RTA_DATA(tb[IFLA_ADDRESS]));
 				break;

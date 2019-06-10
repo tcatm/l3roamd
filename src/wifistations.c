@@ -28,8 +28,7 @@ static int no_seq_check(struct nl_msg *msg, void *arg) { return NL_OK; }
 void wifistations_handle_in(wifistations_ctx *ctx) { nl_recvmsgs(ctx->nl_sock, ctx->cb); }
 
 int wifistations_handle_event(struct nl_msg *msg, void *arg) {
-	if (l3ctx.debug)
-		printf("handling wifistations event\n");
+	log_debug("handling wifistations event\n");
 	wifistations_ctx *ctx = arg;
 	if (ctx->nl80211_disabled)
 		return 0;
