@@ -584,8 +584,8 @@ void clientmgr_add_address(clientmgr_ctx *ctx, const struct in6_addr *address, c
 
 	struct client *client = get_or_create_client(mac, ifindex);
 	struct client_ip *ip = get_client_ip(client, address);
-	client->ifindex = ifindex;  // client might have roamed to different
-	// interface on the same node
+
+	client->ifindex = ifindex;  // client might have roamed to different interface on the same node
 
 	bool ip_is_new = ip == NULL;
 
@@ -595,12 +595,12 @@ void clientmgr_add_address(clientmgr_ctx *ctx, const struct in6_addr *address, c
 		ip = VECTOR_ADD(client->addresses, _ip);
 		print_client(client);
 	}
+
 	client_ip_set_state(ctx, client, ip, IP_ACTIVE);
 
 	if (!client->claimed) {
 		struct in6_addr address = mac2ipv6(client->mac, &ctx->node_client_prefix);
-		intercom_claim(CTX(intercom), &address, client);  // this will set the special_ip after
-								  // the claiming cycle
+		intercom_claim(CTX(intercom), &address, client);  // this will set the special_ip after claiming
 	}
 }
 
