@@ -71,6 +71,15 @@ taskqueue_t *post_task(taskqueue_ctx *ctx, unsigned int timeout, unsigned int mi
 	return task;
 }
 
+void drop_task(taskqueue_t *task) {
+	taskqueue_remove(task);
+
+	if (task->cleanup != NULL)
+		task->cleanup(task->data);
+
+	free(task);
+}
+
 /** Changes the timeout of a task.
   */
 bool reschedule_task(taskqueue_ctx *ctx, taskqueue_t *task, unsigned int timeout, unsigned int millisecs) {
