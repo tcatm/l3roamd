@@ -365,7 +365,7 @@ int parse_basic(const uint8_t *packet, struct client *client) {
 		print_client(client);
 	}
 
-	struct client_ip ip = {0};
+	struct client_ip ip = {};
 	ip.state = IP_INACTIVE;
 
 	intercom_packet_info_entry *entry = (intercom_packet_info_entry *)(packet + 8);
@@ -515,7 +515,7 @@ bool intercom_handle_ack(intercom_ctx *ctx, intercom_packet_ack *packet, int pac
 
 bool intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet, int packet_len) {
 	uint8_t type, *packetpointer;
-	struct client client = {0};
+	struct client client = {};
 	int currentoffset = sizeof(intercom_packet_info);
 	struct in6_addr sender;
 
