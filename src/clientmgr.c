@@ -747,9 +747,9 @@ bool clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
 
 	add_special_ip(ctx, client);
 
-	printf("Client information merged into local client ");
+	log_verbose("Client information merged into local client ");
 	print_client(client);
-	printf("\n");
+	log_verbose("\n");
 	return true;
 }
 
