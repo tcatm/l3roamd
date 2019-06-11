@@ -7,6 +7,7 @@
 #include "common.h"
 #include "prefix.h"
 #include "vector.h"
+#include "taskqueue.h"
 
 #define OLDCLIENTS_KEEP_SECONDS 5 * 60
 
@@ -24,6 +25,7 @@ struct client_ip {
 	struct timespec timestamp;
 	uint8_t tentative_retries_left;
 	enum ip_state state;
+	taskqueue_t *removal_task;
 };
 
 typedef struct client {

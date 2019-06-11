@@ -561,6 +561,13 @@ void clientmgr_remove_address(clientmgr_ctx *ctx, struct client *client, struct 
 	}
 }
 
+void cancel_client_neigh_removal(struct client_ip *ip) {
+	if (ip->removal_task) {
+		drop_task(ip->removal_task);
+		ip->removal_task = NULL;
+	}
+}
+
 /** Add a new address to a client identified by its MAC.
 */
 void clientmgr_add_address(clientmgr_ctx *ctx, const struct in6_addr *address, const uint8_t *mac,
@@ -594,6 +601,8 @@ void clientmgr_add_address(clientmgr_ctx *ctx, const struct in6_addr *address, c
 		memcpy(&_ip.addr, address, sizeof(struct in6_addr));
 		ip = VECTOR_ADD(client->addresses, _ip);
 		print_client(client);
+	} else {
+		cancel_client_neigh_removal(ip);
 	}
 
 	client_ip_set_state(ctx, client, ip, IP_ACTIVE);
