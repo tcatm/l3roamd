@@ -79,6 +79,8 @@ void socket_init(socket_ctx *ctx, char *path) {
 bool parse_command(char *cmd, enum socket_command *scmd) {
 	if (!strncmp(cmd, "get_clients", 11))
 		*scmd = GET_CLIENTS;
+	else if (!strncmp(cmd, "verbosity ", 10))
+		*scmd = SET_VERBOSITY;
 	else if (!strncmp(cmd, "del_meshif ", 11))
 		*scmd = DEL_MESHIF;
 	else if (!strncmp(cmd, "get_meshifs", 11))
@@ -202,6 +204,7 @@ void socket_handle_in(socket_ctx *ctx) {
 	char *str_address = NULL;
 	char *str_mac = NULL;
 	char *str_meshif = NULL;
+	char *verbosity = NULL;
 
 	switch (cmd) {
 		case PROBE:
@@ -225,6 +228,21 @@ void socket_handle_in(socket_ctx *ctx) {
 						      (struct in6_addr *)(_prefix.prefix.s6_addr), _prefix.plen);
 				dprintf(fd, "Added prefix: %s", &line[11]);
 			}
+			break;
+		case SET_VERBOSITY:
+			verbosity = strtok(&line[10], " ");
+
+			if (!strncmp(verbosity, "none", 4)) {
+				l3ctx.verbose = false;
+				l3ctx.debug = false;
+			} else if (!strncmp(verbosity, "verbose", 7)) {
+				l3ctx.verbose = true;
+				l3ctx.debug = false;
+			} else if (!strncmp(verbosity, "debug", 5)) {
+				l3ctx.verbose = true;
+				l3ctx.debug = true;
+			}
+
 			break;
 		case ADD_ADDRESS:
 			str_address = strtok(&line[12], " ");

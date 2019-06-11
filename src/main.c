@@ -345,6 +345,7 @@ void usage() {
 	puts(
 	    "probe <addr> <mac>       This will start a neighbour discovery "
 	    "for a neighbour <mac> with address <addr>");
+	puts("verbosity <none|verbose|debug>	This will set the verbosity of the l3roamd process");
 }
 
 void catch_sigterm() {
