@@ -705,27 +705,19 @@ void claim_retry_task(void *d) {
 	int repeatable_claim_index;
 	if (!find_repeatable(&l3ctx.intercom_ctx.repeatable_claims, data->client, &repeatable_claim_index)) {
 		log_debug(
-		    "could not find repeatable claim for client [%s]. This "
-		    "happens when an INFO packet was received before all claim "
-		    "retry-cycles are spent OR when deleting the client. Returning.\n",
+		    "could not find repeatable claim for client [%s]. This happens when an INFO packet was received "
+		    "before all claim retry-cycles are spent OR when deleting the client. Returning.\n",
 		    print_mac(data->client->mac));
 		return;
 	}
 
 	if (data->recipient != NULL) {
-		log_debug(
-		    "sending unicast claim for client "
-		    "%02x:%02x:%02x:%02x:%02x:%02x to %s\n",
-		    data->client->mac[0], data->client->mac[1], data->client->mac[2], data->client->mac[3],
-		    data->client->mac[4], data->client->mac[5], print_ip(data->recipient));
+		log_debug("sending unicast claim for client %s to %s\n", print_mac(data->client->mac),
+			  print_ip(data->recipient));
 		unicast_packet_sent = intercom_send_packet_unicast(&l3ctx.intercom_ctx, data->recipient,
 								   (uint8_t *)data->packet, data->packet_len);
 	} else {
-		log_debug(
-		    "sending multicast claim for client "
-		    "%02x:%02x:%02x:%02x:%02x:%02x\n",
-		    data->client->mac[0], data->client->mac[1], data->client->mac[2], data->client->mac[3],
-		    data->client->mac[4], data->client->mac[5]);
+		log_debug("sending multicast claim for client %s\n", print_mac(data->client->mac));
 		intercom_recently_seen_add(&l3ctx.intercom_ctx, &((intercom_packet_claim *)data->packet)->hdr);
 		intercom_send_packet(&l3ctx.intercom_ctx, (uint8_t *)&data->packet, data->packet_len);
 	}
@@ -735,7 +727,7 @@ void claim_retry_task(void *d) {
 	else {
 		// we have not received an info message or sending a unicast
 		// claim was not successful
-		// the only valid business reason for this to happens is when
+		// the only valid reason for this to happen is when
 		// there is no route to the client, so it must be new to the
 		// network
 		// TODO: what about EINTR EWOULDBLOCK ENOBUFS ENOMEM

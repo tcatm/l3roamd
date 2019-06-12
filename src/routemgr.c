@@ -45,7 +45,7 @@ void rtmgr_client_probe_addresses(struct client *client) {
 
 void rtmgr_client_remove_address(struct in6_addr *dst_address) {
 	struct client *_client = NULL;
-	log_debug("attempting to remove address %s\n", print_ip(dst_address));
+	log_debug("removing address %s\n", print_ip(dst_address));
 	if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, dst_address, &_client)) {
 		log_debug("removing address %s from client [%s]\n", print_ip(dst_address), print_mac(_client->mac));
 		clientmgr_remove_address(&l3ctx.clientmgr_ctx, _client, dst_address);
@@ -252,10 +252,7 @@ void rtnl_handle_msg(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 			rtnl_handle_link(nh);
 			break;
 		default:
-			log_debug(
-			    "not handling unknown netlink message with type: "
-			    "%i\n",
-			    nh->nlmsg_type);
+			log_debug("not handling unknown netlink message with type: %i\n", nh->nlmsg_type);
 			return;
 	}
 }
@@ -389,8 +386,7 @@ int parse_kernel_route_rta(struct rtmsg *rtm, int len, struct kernel_route *rout
 }
 
 void routemgr_handle_in(routemgr_ctx *ctx, int fd) {
-	if (l3ctx.debug)
-		printf("handling routemgr_in event ");
+	log_debug("handling routemgr_in event ");
 	ssize_t count;
 	uint8_t readbuffer[8192];
 
@@ -407,11 +403,8 @@ void routemgr_handle_in(routemgr_ctx *ctx, int fd) {
 			break;  // TODO: shouldn't we re-open the fd in this
 				// case?
 
-		if (l3ctx.debug)
-			printf(
-			    "read %zi Bytes from netlink socket, "
-			    "readbuffer-size is %zi, ... parsing data now.\n",
-			    count, sizeof(readbuffer));
+		log_debug("read %zi Bytes from netlink socket, readbuffer-size is %zi, ... parsing data now.\n", count,
+			  sizeof(readbuffer));
 
 		nh = (struct nlmsghdr *)readbuffer;
 		if (NLMSG_OK(nh, count)) {

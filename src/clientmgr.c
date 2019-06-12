@@ -154,10 +154,8 @@ int bind_to_address(struct in6_addr *address) {
 	}
 
 	if (bind(fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-		fprintf(stderr,
-			"Could not bind to socket %i on special ip for "
-			"address: %s. exiting.\n",
-			fd, print_ip(address));
+		fprintf(stderr, "Could not bind to socket %i on special ip for address: %s. exiting.\n", fd,
+			print_ip(address));
 		exit_error("bind socket to node-client-IP failed.");
 	}
 
@@ -173,10 +171,8 @@ void add_special_ip(clientmgr_ctx *ctx, struct client *client) {
 		return;
 
 	if (client->node_ip_initialized) {
-		log_error(
-		    "we already initialized the special client [%s] not doing "
-		    "it again\n",
-		    print_mac(client->mac));
+		log_error("we already initialized the special client [%s] not doing it again\n",
+			  print_mac(client->mac));
 		return;
 	}
 
@@ -253,21 +249,13 @@ void delete_client_ip(struct client *client, const struct in6_addr *address, boo
 /** Adds a route and a neighbour entry
 */
 static void client_add_route(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip) {
-	log_verbose("adding neighbour and route for %s", print_ip(&ip->addr));
 	if (address_is_ipv4(&ip->addr)) {
-		log_verbose(" (IPv4)\n");
-
 		struct in_addr ip4 = extractv4_v6(&ip->addr);
-		log_verbose("Adding neighbor and route for IP: %s\n", print_ip4(&ip4));
+		log_verbose("Adding neighbor and route for IP (IPv4): %s\n", print_ip4(&ip4));
 		routemgr_insert_neighbor4(&l3ctx.routemgr_ctx, client->ifindex, &ip4, client->mac);
-
-		// 		routemgr_insert_neighbor(&l3ctx.routemgr_ctx,
-		// client->ifindex, &ip->addr, client->mac);
-		//		routemgr_insert_route(CTX(routemgr),
-		// ctx->export_table, ctx->nat46ifindex, &ip->addr, 128);
 		routemgr_insert_route4(CTX(routemgr), ctx->export_table, client->ifindex, &ip4, 32);
 	} else {
-		log_verbose(" (IPv6)\n");
+		log_verbose("Adding neighbour and route for IP (IPv6) %s\n", print_ip(&ip->addr));
 		routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr, client->mac);
 		routemgr_insert_route(CTX(routemgr), ctx->export_table, client->ifindex, &ip->addr, 128);
 	}
@@ -278,9 +266,6 @@ static void client_add_route(clientmgr_ctx *ctx, struct client *client, struct c
 static void client_remove_route(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip) {
 	if (address_is_ipv4(&ip->addr)) {
 		struct in_addr ip4 = extractv4_v6(&ip->addr);
-
-		//		routemgr_remove_route(CTX(routemgr),
-		// ctx->export_table, &ip->addr, 128);
 		routemgr_remove_route4(CTX(routemgr), ctx->export_table, &ip4, 32);
 		routemgr_remove_neighbor4(CTX(routemgr), client->ifindex, &ip4, client->mac);
 	} else {
@@ -334,7 +319,7 @@ bool clientmgr_is_known_address(clientmgr_ctx *ctx, const struct in6_addr *addre
 		}
 	}
 
-	log_debug("%s is not assigned to any of the local clients\n", print_ip(address));
+	log_debug("%s is not attached to any of the local clients\n", print_ip(address));
 
 	return false;
 }
@@ -563,6 +548,7 @@ void clientmgr_remove_address(clientmgr_ctx *ctx, struct client *client, struct 
 
 void cancel_client_neigh_removal(struct client_ip *ip) {
 	if (ip->removal_task) {
+		log_debug("cancelling ip removal for %s\n", print_ip(&ip->addr));
 		drop_task(ip->removal_task);
 		ip->removal_task = NULL;
 	}

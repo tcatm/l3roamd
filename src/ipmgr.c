@@ -309,28 +309,18 @@ void ipmgr_handle_out(ipmgr_ctx *ctx, int fd) {
 		// TODO: handle ipv4 packets correctly
 		if (write(fd, packet->data, packet->len) == -1) {
 			if (errno != EAGAIN)
-				perror(
-				    "Could not send packet to newly visible "
-				    "client, discarding this packet.");
+				perror("Could not send packet to newly visible client, discarding this packet.");
 			else {
 				clock_gettime(CLOCK_MONOTONIC, &now);
 				then = now;
 				then.tv_sec -= PACKET_TIMEOUT;
-				perror(
-				    "Could not send packet to newly visible "
-				    "client.");
+				perror("Could not send packet to newly visible client.");
 				if (timespec_cmp(packet->timestamp, then) <= 0) {
-					log_error(
-					    "could not send packet - packet is "
-					    "still young enough, requeueing\n");
-					// TODO: consider if output_queue
-					// really is the correct queue when
-					// requeueing
+					log_error("could not send packet - packet is still young enough, requeueing\n");
+					// TODO: consider if output_queue really is the correct queue when requeueing
 					VECTOR_ADD(ctx->output_queue, *packet);
 				} else {
-					log_error(
-					    "could not send packet - packet is "
-					    "too old, discarding.\n");
+					log_error("could not send packet - packet is too old, discarding.\n");
 				}
 			}
 

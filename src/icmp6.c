@@ -279,16 +279,13 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 		if (memcmp(packet.hw_addr, "\x00\x00\x00\x00\x00\x00", 6) == 0)
 			continue;
 
-		log_debug(
-		    "Learning from Neighbour Advertisement that Client "
-		    "[%02x:%02x:%02x:%02x:%02x:%02x] is active on ip %s\n",
-		    packet.hw_addr[0], packet.hw_addr[1], packet.hw_addr[2], packet.hw_addr[3], packet.hw_addr[4],
-		    packet.hw_addr[5], print_ip(&packet.hdr.nd_na_target));
+		struct in6_addr addr = packet.hdr.nd_na_target;
+		log_debug("Learning from Neighbour Advertisement that Client [%s] is active on ip %s\n",
+			  print_mac(packet.hw_addr), print_ip(&addr));
 
-		// TODO: make sure to stop possibly previously started NS-cycles
-		// due to DAD,
+		// TODO: stop possibly previously started NS-cycles due to DAD,
 
-		clientmgr_add_address(CTX(clientmgr), &packet.hdr.nd_na_target, packet.hw_addr, ctx->ifindex);
+		clientmgr_add_address(CTX(clientmgr), &addr, packet.hw_addr, ctx->ifindex);
 	}
 }
 
