@@ -48,8 +48,7 @@ void arp_handle_in(arp_ctx *ctx, int fd) {
 
 	char str[INET6_ADDRSTRLEN];
 	inet_ntop(AF_INET6, &address, str, INET6_ADDRSTRLEN);
-	log_verbose("ARP Response from %s (MAC %02x:%02x:%02x:%02x:%02x:%02x)\n", str, mac[0], mac[1], mac[2], mac[3],
-		    mac[4], mac[5]);
+	log_verbose("ARP Response from %s (MAC %s)\n", str, print_mac(mac));
 
 	clientmgr_add_address(CTX(clientmgr), &address, packet.sha, ctx->ifindex);
 }
