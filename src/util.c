@@ -8,25 +8,26 @@
 #include "l3roamd.h"
 
 #define STRBUFELEMENTS 3
+#define STRBUFLEN (INET6_ADDRSTRLEN)
 
-static char strbuffer[STRBUFELEMENTS][INET6_ADDRSTRLEN + 1];
+static char strbuffer[STRBUFELEMENTS][STRBUFLEN + 1];
 static int str_bufferoffset = 0;
 
 const char *print_ip4(const struct in_addr *addr) {
 	str_bufferoffset = (str_bufferoffset + 1) % STRBUFELEMENTS;
-	return inet_ntop(AF_INET, &(addr->s_addr), strbuffer[str_bufferoffset], INET6_ADDRSTRLEN);
+	return inet_ntop(AF_INET, &(addr->s_addr), strbuffer[str_bufferoffset], STRBUFLEN);
 }
 
 /* print a human-readable representation of an in6_addr struct to stdout
 ** */
 const char *print_ip(const struct in6_addr *addr) {
 	str_bufferoffset = (str_bufferoffset + 1) % STRBUFELEMENTS;
-	return inet_ntop(AF_INET6, &(addr->s6_addr), strbuffer[str_bufferoffset], INET6_ADDRSTRLEN);
+	return inet_ntop(AF_INET6, &(addr->s6_addr), strbuffer[str_bufferoffset], STRBUFLEN);
 }
 
 const char *print_mac(const uint8_t *mac) {
 	str_bufferoffset = (str_bufferoffset + 1) % STRBUFELEMENTS;
-	snprintf(strbuffer[str_bufferoffset], 18, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx", mac[0], mac[1], mac[2],
+	snprintf(strbuffer[str_bufferoffset], STRBUFLEN, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx", mac[0], mac[1], mac[2],
 		 mac[3], mac[4], mac[5]);
 	return strbuffer[str_bufferoffset];
 }
@@ -99,8 +100,10 @@ void del_fd(int efd, int fd) {
 void interfaces_changed(int type, const struct ifinfomsg *msg) {
 	log_verbose("interfaces changed\n");
 	intercom_update_interfaces(&l3ctx.intercom_ctx);
-	icmp6_interface_changed(&l3ctx.icmp6_ctx, type, msg);
-	arp_interface_changed(&l3ctx.arp_ctx, type, msg);
+	if (msg) {
+		icmp6_interface_changed(&l3ctx.icmp6_ctx, type, msg);
+		arp_interface_changed(&l3ctx.arp_ctx, type, msg);
+	}
 	// TODO: re-initialize routemgr-fd
 	// TODO: re-initialize ipmgr-fd
 	// TODO: re-initialize wifistations-fd
