@@ -98,10 +98,7 @@ void print_client(struct client *client) {
 					    addr->tentative_retries_left);
 				break;
 			default:
-				exit_bug(
-				    "Invalid IP state %i- exiting due to "
-				    "memory corruption",
-				    addr->state);
+				exit_bug("Invalid IP state %i- exiting due to memory corruption", addr->state);
 		}
 	}
 }
@@ -121,7 +118,6 @@ bool client_is_active(const struct client *client) {
 		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
 
 		if (ip_is_active(ip)) {
-			log_debug("client [%s] is active on ip %s\n", print_mac(client->mac), print_ip(&ip->addr));
 			return true;
 		}
 	}
@@ -531,17 +527,14 @@ bool clientmgr_valid_address(clientmgr_ctx *ctx, const struct in6_addr *address)
 /** Remove an address from a client identified by its MAC.
 **/
 void clientmgr_remove_address(clientmgr_ctx *ctx, struct client *client, struct in6_addr *address) {
-	log_debug("clientmgr_remove_address: %s is running for client %s", print_ip(address), print_mac(client->mac));
+	log_debug("clientmgr_remove_address: %s is running for client %s\n", print_ip(address), print_mac(client->mac));
 
 	if (client) {
 		delete_client_ip(client, address, true);
 	}
 
 	if (!client_is_active(client)) {
-		log_verbose(
-		    "no active IP-addresses left in client. Deleting client. "
-		    "%s\n",
-		    print_mac(client->mac));
+		log_verbose("no active IP-addresses left in client. Deleting client. %s\n", print_mac(client->mac));
 		clientmgr_delete_client(&l3ctx.clientmgr_ctx, client->mac);
 	}
 }
@@ -741,6 +734,7 @@ bool clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
 
 void clientmgr_init() {
 	VECTOR_INIT((&l3ctx.clientmgr_ctx)->clients);
+	VECTOR_INIT((&l3ctx.clientmgr_ctx)->oldclients);
 	post_task(&l3ctx.taskqueue_ctx, OLDCLIENTS_KEEP_SECONDS, 0, purge_oldclients_task, NULL, NULL);
 }
 
