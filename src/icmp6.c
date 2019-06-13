@@ -93,7 +93,7 @@ void icmp6_setup_interface(icmp6_ctx *ctx) {
 		return;
 
 	int rc = setsockopt(ctx->fd, SOL_SOCKET, SO_BINDTODEVICE, ctx->clientif, strnlen(ctx->clientif, IFNAMSIZ - 1));
-	log_verbose("Setting up icmp6 interface: %i\n", rc);
+	log_verbose("Setting up icmp6 interface: %s %i %i %i\n", ctx->clientif, strnlen(ctx->clientif, 12), IFNAMSIZ, rc);
 
 	if (rc < 0) {
 		perror("icmp6 - setsockopt fd:");
@@ -134,7 +134,7 @@ void icmp6_interface_changed(icmp6_ctx *ctx, int type, const struct ifinfomsg *m
 	if (if_indextoname(msg->ifi_index, ifname) == NULL)
 		return;
 
-	if (strcmp(ifname, ctx->clientif) != 0)
+	if (strncmp(ifname, ctx->clientif, IFNAMSIZ - 1) != 0)
 		return;
 
 	log_verbose("icmp6 interface change detected\n");
