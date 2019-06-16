@@ -119,17 +119,20 @@ void taskqueue_run(taskqueue_ctx *ctx) {
 	if (ctx->queue == NULL)
 		return;
 
-	taskqueue_t *task = ctx->queue;
+	taskqueue_t *task = NULL;
+	do {
+		task = ctx->queue;
 
-	if (timespec_cmp(task->due, now) <= 0) {
-		taskqueue_remove(task);
-		task->function(task->data);
+		if (timespec_cmp(task->due, now) <= 0) {
+			taskqueue_remove(task);
+			task->function(task->data);
 
-		if (task->cleanup != NULL)
-			task->cleanup(task->data);
+			if (task->cleanup != NULL)
+				task->cleanup(task->data);
 
-		free(task);
-	}
+			free(task);
+		}
+	} while (timespec_cmp(task->due, now) <= 0);
 
 	taskqueue_schedule(ctx);
 }
