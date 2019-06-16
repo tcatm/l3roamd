@@ -43,7 +43,7 @@ void taskqueue_init(taskqueue_ctx *ctx) {
 
 /** this will add timeout seconds and millisecs milliseconds to the current time
  * to calculate at which time a task should run given an offset */
-struct timespec settime(unsigned int timeout, unsigned int millisecs) {
+struct timespec settime(time_t timeout, long millisecs) {
 	struct timespec due;
 	clock_gettime(CLOCK_MONOTONIC, &due);
 
@@ -54,7 +54,7 @@ struct timespec settime(unsigned int timeout, unsigned int millisecs) {
 
 /** Enqueues a new task. A task with a timeout of zero is scheduled immediately.
  */
-taskqueue_t *post_task(taskqueue_ctx *ctx, unsigned int timeout, unsigned int millisecs, void (*function)(void *),
+taskqueue_t *post_task(taskqueue_ctx *ctx, time_t timeout, long millisecs, void (*function)(void *),
 		       void (*cleanup)(void *), void *data) {
 	taskqueue_t *task = l3roamd_alloc(sizeof(taskqueue_t));
 	task->children = task->next = NULL;
@@ -82,7 +82,7 @@ void drop_task(taskqueue_t *task) {
 
 /** Changes the timeout of a task.
   */
-bool reschedule_task(taskqueue_ctx *ctx, taskqueue_t *task, unsigned int timeout, unsigned int millisecs) {
+bool reschedule_task(taskqueue_ctx *ctx, taskqueue_t *task, time_t timeout, long millisecs) {
 	if (task == NULL || !taskqueue_linked(task))
 		return false;
 
