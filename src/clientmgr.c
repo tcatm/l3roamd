@@ -233,12 +233,8 @@ void delete_client_ip(struct client *client, const struct in6_addr *address, boo
 		}
 	}
 
-	char str[INET6_ADDRSTRLEN + 1];
-	inet_ntop(AF_INET6, address, str, INET6_ADDRSTRLEN);
-	printf(
-	    "\x1b[31mDeleted IP %s from client %zi addresses are still "
-	    "assigned\x1b[0m ",
-	    str, VECTOR_LEN(client->addresses));
+	log_verbose("\x1b[31mDeleted IP %s from client %zi addresses are still assigned\x1b[0m ", print_ip(address),
+		    VECTOR_LEN(client->addresses));
 	print_client(client);
 }
 
@@ -297,8 +293,6 @@ struct client *get_client_old(const uint8_t mac[ETH_ALEN]) {
  * having this IP-address and false otherwise
  */
 bool clientmgr_is_known_address(clientmgr_ctx *ctx, const struct in6_addr *address, struct client **client) {
-	// TODO: we probably should make this more efficient for large lists of
-	// clients and IP addresses at one point.
 	for (int i = VECTOR_LEN(ctx->clients) - 1; i >= 0; i--) {
 		struct client *c = &VECTOR_INDEX(ctx->clients, i);
 
