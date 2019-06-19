@@ -231,7 +231,7 @@ void handle_kernel_routes(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 }
 
 void rtnl_handle_msg(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
-	if (ctx->nl_disabled)
+	if (!nh || ctx->nl_disabled)
 		return;
 
 	switch (nh->nlmsg_type) {
@@ -335,19 +335,17 @@ int parse_kernel_route_rta(struct rtmsg *rtm, int len, struct kernel_route *rout
 	for (struct rtattr *rta = RTM_RTA(rtm); RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
 		switch (rta->rta_type) {
 			case RTA_DST:
-
 				if (rtm->rtm_family == AF_INET6) {
 					route->plen = rtm->rtm_dst_len;
 					memcpy(route->prefix.s6_addr, RTA_DATA(rta), 16);
-					log_debug("parsed route, found dst: %s\n", print_ip(&route->prefix));
 
 				} else if (rtm->rtm_family == AF_INET) {
 					struct in_addr ipv4;
 					memcpy(&ipv4.s_addr, RTA_DATA(rta), 4);
 					mapv4_v6(&ipv4, &route->prefix);
 					route->plen = rtm->rtm_dst_len + 96;
-					log_debug("parsed route, found dst: %s\n", print_ip(&route->prefix));
 				}
+				log_debug("parsed route, found dst: %s\n", print_ip(&route->prefix));
 				break;
 			case RTA_SRC:
 				if (rtm->rtm_family == AF_INET6) {
