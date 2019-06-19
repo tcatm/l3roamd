@@ -92,7 +92,7 @@ intercom_if_t *intercom_has_ifname(intercom_ctx *ctx, const char *ifname, int *e
 }
 
 bool intercom_add_interface(intercom_ctx *ctx, char *ifname) {
-	if (intercom_has_ifname(ctx, ifname, NULL))
+	if (!ifname || intercom_has_ifname(ctx, ifname, NULL))
 		return false;
 
 	int ifindex = if_nametoindex(ifname);
