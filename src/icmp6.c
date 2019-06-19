@@ -207,6 +207,7 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 		uint8_t *mac = lladdr.sll_addr;
 
 		if (packet.sol.hdr.nd_ns_hdr.icmp6_type == ND_NEIGHBOR_SOLICIT) {
+			struct  in6_addr ns_target = packet.sol.hdr.nd_ns_target;
 			if (memcmp(&packet.hdr.ip6_src,
 				   "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 				   "\x00\x00\x00\x00\x00\x00",
@@ -216,23 +217,20 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 				// in a while to learn its address instead of
 				// flooding the network. If we do this, what
 				// effects will this have on privacy extensions?
-				log_verbose(
-				    "triggering local NS cycle after DAD for "
-				    "address %s\n",
-				    print_ip(&packet.sol.hdr.nd_ns_target));
-				struct ns_task *ns_data = create_ns_task(&packet.sol.hdr.nd_ns_target,
+				log_verbose("triggering local NS cycle after DAD for address %s\n",
+					    print_ip(&ns_target));
+				struct ns_task *ns_data = create_ns_task(&ns_target,
 									 (struct timespec){
 									     .tv_sec = 0, .tv_nsec = 300000000,
 									 },
 									 15, true);
 				post_task(&l3ctx.taskqueue_ctx, 0, 0, ipmgr_ns_task, free, ns_data);
 			} else {
+				struct  in6_addr ip6_src = packet.hdr.ip6_src;
 				log_debug(
-				    "Received Neighbor Solicitation from %s "
-				    "[%s] for IP %s. Learning source-IP for "
+				    "Received Neighbor Solicitation from %s [%s] for IP %s. Learning source-IP for "
 				    "client.\n",
-				    print_ip(&packet.hdr.ip6_src), print_mac(mac),
-				    print_ip(&packet.sol.hdr.nd_ns_target));
+				    print_ip(&ip6_src), print_mac(mac), print_ip(&ns_target));
 
 				clientmgr_notify_mac(&l3ctx.clientmgr_ctx, mac, ctx->ifindex);
 				clientmgr_add_address(&l3ctx.clientmgr_ctx, &ip6_src, mac, ctx->ifindex);
