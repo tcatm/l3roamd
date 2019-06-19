@@ -254,10 +254,7 @@ uint8_t assemble_basicinfo(uint8_t *packet, struct client *client) {
 		}
 	}
 
-	if (l3ctx.debug) {
-		log_debug("added %i addresses to info packet for client ", num_addresses);
-		print_client(client);
-	}
+	log_debug("added %i addresses to info packet for client \n%s\n", num_addresses, print_client(client));
 
 	// fill length field
 	packet[1] = num_addresses * sizeof(intercom_packet_info_entry) + sizeof(client->mac) + 2;
@@ -360,10 +357,7 @@ int parse_basic(const uint8_t *packet, struct client *client) {
 	uint8_t length = packet[1];
 	int num_addresses = (length - 2 - 6) / 16;
 
-	if (l3ctx.debug) {
-		log_debug("handling info segment with %i addresses for client ", num_addresses);
-		print_client(client);
-	}
+	log_debug("handling info segment with %i addresses for client %s\n", num_addresses, print_client(client));
 
 	struct client_ip ip = {};
 	ip.state = IP_INACTIVE;

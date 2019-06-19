@@ -65,20 +65,22 @@ struct in6_addr mac2ipv6(uint8_t mac[ETH_ALEN], struct prefix *prefix) {
 	return address;
 }
 
-void print_client(struct client *client) {
-	log_verbose("Client %s", print_mac(client->mac));
+char *print_client(struct client *client) {
+	// re-using the string-buffer from util.c. I am not sure I really do like this.
+	int maxlength = STRBUFLEN;
+	char tmpbuf[maxlength];
+	int offset = 0;
+	extern union buffer strbuffer;
 
-	if (client_is_active(client))
-		log_verbose(" (active");
-	else
-		log_verbose(" (______");
+	offset += snprintf(&tmpbuf[offset], maxlength - offset, "Client %s %s", print_mac(client->mac),
+			   client_is_active(client) ? "(active)" : "(______)");
 
 	if (client->ifindex != 0) {
 		char ifname[IFNAMSIZ];
 		if_indextoname(client->ifindex, ifname);
-		log_verbose(", %s/%i)\n", ifname, client->ifindex);
+		offset += snprintf(&tmpbuf[offset], maxlength - offset, " on %s (%i)\n", ifname, client->ifindex);
 	} else {
-		log_verbose(")\n");
+		offset += snprintf(&tmpbuf[offset], maxlength - offset, "\n");
 	}
 
 	for (int i = VECTOR_LEN(client->addresses) - 1; i >= 0; i--) {
@@ -86,20 +88,26 @@ void print_client(struct client *client) {
 
 		switch (addr->state) {
 			case IP_INACTIVE:
-				log_verbose("  %s  %s\n", state_str(addr->state), print_ip(&addr->addr));
+				offset += snprintf(&tmpbuf[offset], maxlength - offset, "  %s  %s\n",
+						   state_str(addr->state), print_ip(&addr->addr));
 				break;
 			case IP_ACTIVE:
-				log_verbose("  %s    %s (%ld.%.9ld)\n", state_str(addr->state), print_ip(&addr->addr),
-					    addr->timestamp.tv_sec, addr->timestamp.tv_nsec);
+				offset += snprintf(&tmpbuf[offset], maxlength - offset, "  %s  %s (%s)\n",
+						   state_str(addr->state), print_ip(&addr->addr),
+						   print_timespec(&addr->timestamp));
 				break;
 			case IP_TENTATIVE:
-				log_verbose("  %s %s (tries left: %d)\n", state_str(addr->state), print_ip(&addr->addr),
-					    addr->tentative_retries_left);
+				offset += snprintf(&tmpbuf[offset], maxlength - offset, "  %s %s (tries left: %d)\n",
+						   state_str(addr->state), print_ip(&addr->addr),
+						   addr->tentative_retries_left);
 				break;
 			default:
 				exit_bug("Invalid IP state %i- exiting due to memory corruption", addr->state);
 		}
 	}
+
+	memcpy(strbuffer.allofit, tmpbuf, STRBUFLEN);
+	return strbuffer.allofit;
 }
 
 bool ip_is_active(const struct client_ip *ip) {
@@ -232,9 +240,8 @@ void delete_client_ip(struct client *client, const struct in6_addr *address, boo
 		}
 	}
 
-	log_verbose("\x1b[31mDeleted IP %s from client %zi addresses are still assigned\x1b[0m ", print_ip(address),
+	log_verbose("\x1b[31mDeleted IP %s from client, %zi addresses are still assigned\x1b[0m ", print_ip(address),
 		    VECTOR_LEN(client->addresses));
-	print_client(client);
 }
 
 /** Adds a route and a neighbour entry
@@ -365,10 +372,7 @@ void client_copy_to_old(struct client *client) {
 		VECTOR_ADD(_client->addresses, VECTOR_INDEX(client->addresses, i));
 	}
 
-	if (l3ctx.debug) {
-		log_debug("copied client[%s] to old-queue:\n", print_mac(client->mac));
-		print_client(_client);
-	}
+	log_debug("copied client[%s] to old-queue:\n", print_client(client));
 }
 
 /** This will set all IP addresses of the client to IP_INACTIVE and remove the
@@ -392,16 +396,12 @@ void client_deactivate(struct client *client) {
 void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[ETH_ALEN]) {
 	struct client *client = get_client(mac);
 
-	if (client == NULL) {
+	if (!client) {
 		log_debug("Client [%s] unknown: cannot delete\n", print_mac(mac));
 		return;
 	}
 
-	log_verbose(
-	    "\033[34mREMOVING client %s and invalidating its "
-	    "IP-addresses\033[0m\n",
-	    print_mac(mac));
-	print_client(client);
+	log_verbose("\033[34mREMOVING client %s and invalidating its IP-addresses\033[0m\n", print_client(client));
 
 	intercom_remove_claim(&l3ctx.intercom_ctx, client);
 
@@ -572,7 +572,7 @@ void clientmgr_add_address(clientmgr_ctx *ctx, const struct in6_addr *address, c
 		struct client_ip _ip = {};
 		memcpy(&_ip.addr, address, sizeof(struct in6_addr));
 		ip = VECTOR_ADD(client->addresses, _ip);
-		print_client(client);
+		log_verbose("created new client: %s\n", print_client(client));
 	} else {
 		cancel_client_neigh_removal(ip);
 	}
@@ -641,10 +641,7 @@ void purge_oldclientlist_from_old_clients() {
 		_client = &VECTOR_INDEX(l3ctx.clientmgr_ctx.oldclients, i);
 
 		if (timespec_cmp(_client->timeout, now) <= 0) {
-			if (l3ctx.debug) {
-				printf("removing client from old-queue\n");
-				print_client(_client);
-			}
+			log_debug("removing client from old-queue: %s\n", print_client(_client));
 
 			free_client_addresses(_client);
 			VECTOR_DELETE(l3ctx.clientmgr_ctx.oldclients, i);
@@ -669,21 +666,15 @@ bool clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 		old = true;
 	}
 
-	if (l3ctx.debug) {
-		printf("handle claim for client: ");
-		if (client)
-			print_client(client);
-		else
-			printf("unknown\n");
-	}
+	log_debug("handling claim for %sclient %s\n", old ? "old " : " ", client ? print_client(client) :  "unknown"); 
 
-	if (client == NULL)
+	if (!client)
 		return false;
 
 	intercom_info(&l3ctx.intercom_ctx, sender, client, true);
 
 	if (!old) {
-		printf("Dropping client %s in response to claim from sender %s\n", print_mac(mac), print_ip(sender));
+		log_verbose("Dropping client %s in response to claim from sender %s\n", print_mac(mac), print_ip(sender));
 		clientmgr_delete_client(ctx, client->mac);
 	}
 	return true;
@@ -702,10 +693,8 @@ bool clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
 		return false;
 	}
 
-	if (l3ctx.debug) {
-		log_debug("handling info message in clientmgr_handle_info() for foreign_client ");
-		print_client(foreign_client);
-	}
+	log_debug("handling info message in clientmgr_handle_info() for foreign_client %s\n",
+		  print_client(foreign_client));
 
 	for (int i = VECTOR_LEN(foreign_client->addresses) - 1; i >= 0; i--) {
 		struct client_ip *foreign_ip = &VECTOR_INDEX(foreign_client->addresses, i);
@@ -719,9 +708,7 @@ bool clientmgr_handle_info(clientmgr_ctx *ctx, struct client *foreign_client) {
 
 	add_special_ip(ctx, client);
 
-	log_verbose("Client information merged into local client ");
-	print_client(client);
-	log_verbose("\n");
+	log_verbose("Client information merged into local client %s\n", print_client(client));
 	return true;
 }
 
