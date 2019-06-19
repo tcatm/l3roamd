@@ -99,40 +99,47 @@ bool reschedule_task(taskqueue_ctx *ctx, taskqueue_t *task, time_t timeout, long
 }
 
 void taskqueue_schedule(taskqueue_ctx *ctx) {
-	if (ctx->queue == NULL)
+	if (ctx->queue == NULL) {
+		log_debug("Taskqueue is empty, not scheduling another task\n");
 		return;
+	}
 
 	struct itimerspec t = {.it_value = ctx->queue->due};
+	struct timespec now;
+	clock_gettime(CLOCK_MONOTONIC, &now);
 
-	timerfd_settime(ctx->fd, TFD_TIMER_ABSTIME, &t, NULL);
+	if (timespec_cmp(ctx->queue->due, now) <= 0)
+		taskqueue_run(ctx);
+	else {
+		log_debug("It is now: %s, scheduling next task for %s\n", print_timespec(&now), print_timespec(&ctx->queue->due));
+		timerfd_settime(ctx->fd, TFD_TIMER_ABSTIME, &t, NULL);
+	}
 }
 
 void taskqueue_run(taskqueue_ctx *ctx) {
-	log_debug("handling taskqueue event\n");
 	unsigned long long nEvents;
 
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
 
-	read(ctx->fd, &nEvents, sizeof(nEvents));
+	size_t rsize = read(ctx->fd, &nEvents, sizeof(nEvents));
+	if ( ! rsize)
+		log_error("could not read from taskqueue fd\n");
 
 	if (ctx->queue == NULL)
 		return;
 
-	taskqueue_t *task = NULL;
-	do {
-		task = ctx->queue;
+	while (ctx->queue && timespec_cmp(ctx->queue->due, now) <= 0) {
+		taskqueue_t *task = ctx->queue;
+		log_debug("The time is now: %s, running task that was due at %s\n", print_timespec(&now), print_timespec(&task->due));
+		taskqueue_remove(task);
+		task->function(task->data);
 
-		if (timespec_cmp(task->due, now) <= 0) {
-			taskqueue_remove(task);
-			task->function(task->data);
+		if (task->cleanup)
+			task->cleanup(task->data);
 
-			if (task->cleanup != NULL)
-				task->cleanup(task->data);
-
-			free(task);
-		}
-	} while (timespec_cmp(task->due, now) <= 0);
+		free(task);
+	}
 
 	taskqueue_schedule(ctx);
 }
