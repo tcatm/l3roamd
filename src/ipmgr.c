@@ -86,12 +86,12 @@ void ipmgr_seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
 	    .tv_sec = SEEK_INTERVAL, .tv_nsec = 0,
 	};
 	struct ns_task *ns_data = create_ns_task(addr, interval, -1, false);
-	post_task(CTX(taskqueue), 0, 0, ipmgr_ns_task, free, ns_data);
+	post_task(&l3ctx.taskqueue_ctx, 0, 0, ipmgr_ns_task, free, ns_data);
 
 	// schedule an intercom-seek operation that in turn will only be
 	// executed if there is no local client known
 	struct ip_task *data = create_task(addr);
-	post_task(CTX(taskqueue), 0, 300, seek_task, free, data);
+	post_task(&l3ctx.taskqueue_ctx, 0, 300, seek_task, free, data);
 }
 
 static bool ismulticast(const struct in6_addr *addr) {
@@ -111,7 +111,7 @@ static void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) 
 	if (ismulticast(&dst))
 		return;
 
-	if (!clientmgr_valid_address(CTX(clientmgr), &dst)) {
+	if (!clientmgr_valid_address(&l3ctx.clientmgr_ctx, &dst)) {
 		log_verbose(
 		    "The destination of the packet (%s) is not within the "
 		    "client prefixes. Ignoring packet\n",

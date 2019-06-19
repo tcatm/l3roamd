@@ -10,7 +10,6 @@ typedef struct {
 } wifistations_if;
 
 typedef struct {
-	struct l3ctx *l3ctx;
 	struct nl_sock *nl_sock;
 	struct nl_cb *cb;
 	VECTOR(wifistations_if) interfaces;

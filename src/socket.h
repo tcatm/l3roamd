@@ -24,7 +24,6 @@ enum socket_command {
 };
 
 typedef struct {
-	struct l3ctx *l3ctx;
 	int fd;
 } socket_ctx;
 

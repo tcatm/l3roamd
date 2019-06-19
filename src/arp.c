@@ -50,7 +50,7 @@ void arp_handle_in(arp_ctx *ctx, int fd) {
 	inet_ntop(AF_INET6, &address, str, INET6_ADDRSTRLEN);
 	log_verbose("ARP Response from %s (MAC %s)\n", str, print_mac(mac));
 
-	clientmgr_add_address(CTX(clientmgr), &address, packet.sha, ctx->ifindex);
+	clientmgr_add_address(&l3ctx.clientmgr_ctx, &address, packet.sha, ctx->ifindex);
 }
 
 void arp_send_request(arp_ctx *ctx, const struct in6_addr *addr) {

@@ -8,7 +8,6 @@
 #include "ipmgr.h"
 
 typedef struct {
-	struct l3ctx *l3ctx;
 	char *clientif;
 	int fd;  // used to learn addresses from NA and send solicitations
 	int unreachfd6;  // used to send ICMP6 destination unreachable

@@ -40,7 +40,6 @@ typedef struct client {
 } client_t;
 
 typedef struct {
-	struct l3ctx *l3ctx;
 	struct prefix node_client_prefix;
 	struct prefix v4prefix;
 	struct in6_addr platprefix;

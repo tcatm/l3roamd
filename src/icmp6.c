@@ -225,7 +225,7 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 									     .tv_sec = 0, .tv_nsec = 300000000,
 									 },
 									 15, true);
-				post_task(CTX(taskqueue), 0, 0, ipmgr_ns_task, free, ns_data);
+				post_task(&l3ctx.taskqueue_ctx, 0, 0, ipmgr_ns_task, free, ns_data);
 			} else {
 				log_debug(
 				    "Received Neighbor Solicitation from %s "
@@ -234,8 +234,8 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 				    print_ip(&packet.hdr.ip6_src), print_mac(mac),
 				    print_ip(&packet.sol.hdr.nd_ns_target));
 
-				clientmgr_notify_mac(CTX(clientmgr), mac, ctx->ifindex);
-				clientmgr_add_address(CTX(clientmgr), &packet.hdr.ip6_src, mac, ctx->ifindex);
+				clientmgr_notify_mac(&l3ctx.clientmgr_ctx, mac, ctx->ifindex);
+				clientmgr_add_address(&l3ctx.clientmgr_ctx, &ip6_src, mac, ctx->ifindex);
 			}
 		}
 	}
@@ -285,7 +285,7 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 
 		// TODO: stop possibly previously started NS-cycles due to DAD,
 
-		clientmgr_add_address(CTX(clientmgr), &addr, packet.hw_addr, ctx->ifindex);
+		clientmgr_add_address(&l3ctx.clientmgr_ctx, &addr, packet.hw_addr, ctx->ifindex);
 	}
 }
 

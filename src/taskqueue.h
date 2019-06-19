@@ -6,7 +6,6 @@
 typedef struct taskqueue taskqueue_t;
 
 typedef struct {
-	struct l3ctx *l3ctx;
 	taskqueue_t *queue;
 	int fd;
 } taskqueue_ctx;

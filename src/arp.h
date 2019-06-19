@@ -23,7 +23,6 @@ struct __attribute__((packed)) arp_packet {
 
 typedef struct {
 	struct in6_addr prefix;
-	struct l3ctx *l3ctx;
 	char *clientif;
 	unsigned int ifindex;
 	int fd;

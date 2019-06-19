@@ -41,7 +41,6 @@
 #include <time.h>
 #include <unistd.h>
 
-/* Static functions used only in this file. */
 static const char *state_str(enum ip_state state);
 
 // struct in6_addr node_client_mcast_ip_from_mac(uint8_t mac[ETH_ALEN]) {
@@ -199,8 +198,8 @@ void remove_special_ip(clientmgr_ctx *ctx, struct client *client) {
 	struct in6_addr address = mac2ipv6(client->mac, &ctx->node_client_prefix);
 	printf("Removing special address: %s\n", print_ip(&address));
 	close_client_fd(&client->fd);
-	routemgr_remove_route(CTX(routemgr), ctx->export_table, &address, 128);
-	rtnl_remove_address(CTX(routemgr), &address);
+	routemgr_remove_route(&l3ctx.routemgr_ctx, ctx->export_table, &address, 128);
+	rtnl_remove_address(&l3ctx.routemgr_ctx, &address);
 	// remove route
 	client->node_ip_initialized = false;
 }
@@ -245,11 +244,11 @@ static void client_add_route(clientmgr_ctx *ctx, struct client *client, struct c
 		struct in_addr ip4 = extractv4_v6(&ip->addr);
 		log_verbose("Adding neighbor and route for IP (IPv4): %s\n", print_ip4(&ip4));
 		routemgr_insert_neighbor4(&l3ctx.routemgr_ctx, client->ifindex, &ip4, client->mac);
-		routemgr_insert_route4(CTX(routemgr), ctx->export_table, client->ifindex, &ip4, 32);
+		routemgr_insert_route4(&l3ctx.routemgr_ctx, ctx->export_table, client->ifindex, &ip4, 32);
 	} else {
 		log_verbose("Adding neighbour and route for IP (IPv6) %s\n", print_ip(&ip->addr));
 		routemgr_insert_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr, client->mac);
-		routemgr_insert_route(CTX(routemgr), ctx->export_table, client->ifindex, &ip->addr, 128);
+		routemgr_insert_route(&l3ctx.routemgr_ctx, ctx->export_table, client->ifindex, &ip->addr, 128);
 	}
 }
 
@@ -258,11 +257,11 @@ static void client_add_route(clientmgr_ctx *ctx, struct client *client, struct c
 static void client_remove_route(clientmgr_ctx *ctx, struct client *client, struct client_ip *ip) {
 	if (address_is_ipv4(&ip->addr)) {
 		struct in_addr ip4 = extractv4_v6(&ip->addr);
-		routemgr_remove_route4(CTX(routemgr), ctx->export_table, &ip4, 32);
-		routemgr_remove_neighbor4(CTX(routemgr), client->ifindex, &ip4, client->mac);
+		routemgr_remove_route4(&l3ctx.routemgr_ctx, ctx->export_table, &ip4, 32);
+		routemgr_remove_neighbor4(&l3ctx.routemgr_ctx, client->ifindex, &ip4, client->mac);
 	} else {
-		routemgr_remove_route(CTX(routemgr), ctx->export_table, &ip->addr, 128);
-		routemgr_remove_neighbor(CTX(routemgr), client->ifindex, &ip->addr, client->mac);
+		routemgr_remove_route(&l3ctx.routemgr_ctx, ctx->export_table, &ip->addr, 128);
+		routemgr_remove_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &ip->addr, client->mac);
 	}
 }
 
@@ -413,7 +412,7 @@ void clientmgr_delete_client(clientmgr_ctx *ctx, uint8_t mac[ETH_ALEN]) {
 	if (VECTOR_LEN(client->addresses) > 0) {
 		for (int i = VECTOR_LEN(client->addresses) - 1; i >= 0; i--) {
 			struct client_ip *e = &VECTOR_INDEX(client->addresses, i);
-			client_ip_set_state(CTX(clientmgr), client, e, IP_INACTIVE);
+			client_ip_set_state(&l3ctx.clientmgr_ctx, client, e, IP_INACTIVE);
 			delete_client_ip(client, &e->addr, true);
 		}
 	}
@@ -582,7 +581,7 @@ void clientmgr_add_address(clientmgr_ctx *ctx, const struct in6_addr *address, c
 
 	if (!client->claimed) {
 		struct in6_addr address = mac2ipv6(client->mac, &ctx->node_client_prefix);
-		intercom_claim(CTX(intercom), &address, client);  // this will set the special_ip after claiming
+		intercom_claim(&l3ctx.intercom_ctx, &address, client);  // this will set the special_ip after claiming
 	}
 }
 
@@ -609,7 +608,7 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 	struct in6_addr address = mac2ipv6(client->mac, &ctx->node_client_prefix);
 
 	if (!client->claimed)
-		intercom_claim(CTX(intercom), &address, client);
+		intercom_claim(&l3ctx.intercom_ctx, &address, client);
 
 	for (int i = VECTOR_LEN(client->addresses) - 1; i >= 0; i--) {
 		struct client_ip *ip = &VECTOR_INDEX(client->addresses, i);
@@ -620,7 +619,7 @@ void clientmgr_notify_mac(clientmgr_ctx *ctx, uint8_t *mac, unsigned int ifindex
 
 	// prefix does not matter here, icmp6_send_solicitation will overwrite
 	// the first 13 bytes of the address.
-	icmp6_send_solicitation(CTX(icmp6), &address);
+	icmp6_send_solicitation(&l3ctx.icmp6_ctx, &address);
 }
 
 void free_client_addresses(struct client *client) {
@@ -681,7 +680,7 @@ bool clientmgr_handle_claim(clientmgr_ctx *ctx, const struct in6_addr *sender, u
 	if (client == NULL)
 		return false;
 
-	intercom_info(CTX(intercom), sender, client, true);
+	intercom_info(&l3ctx.intercom_ctx, sender, client, true);
 
 	if (!old) {
 		printf("Dropping client %s in response to claim from sender %s\n", print_mac(mac), print_ip(sender));

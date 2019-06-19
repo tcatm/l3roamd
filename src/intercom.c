@@ -398,9 +398,9 @@ bool intercom_handle_seek(intercom_ctx *ctx, intercom_packet_seek *packet, int p
 				printf("\x1b[36mSEEK: Looking for %s\x1b[0m\n", print_ip(&address));
 
 				if (address_is_ipv4(&address))
-					arp_send_request(CTX(arp), &address);
+					arp_send_request(&l3ctx.arp_ctx, &address);
 				else
-					icmp6_send_solicitation(CTX(icmp6), &address);
+					icmp6_send_solicitation(&l3ctx.icmp6_ctx, &address);
 				break;
 			default:
 				log_error(
@@ -447,7 +447,7 @@ bool intercom_handle_claim(intercom_ctx *ctx, intercom_packet_claim *packet, int
 		}
 	}
 
-	return !clientmgr_handle_claim(CTX(clientmgr), &sender, claim.mac);
+	return !clientmgr_handle_claim(&l3ctx.clientmgr_ctx, &sender, claim.mac);
 }
 
 /* find an entry in a vector containing elements of type client_t */
@@ -545,7 +545,7 @@ bool intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet, int p
 
 	intercom_remove_claim(ctx, &client);
 
-	bool acted_on_local_client = clientmgr_handle_info(CTX(clientmgr), &client);
+	bool acted_on_local_client = clientmgr_handle_info(&l3ctx.clientmgr_ctx, &client);
 	intercom_ack(ctx, &sender, &client);
 	VECTOR_FREE(client.addresses);
 	return !acted_on_local_client;

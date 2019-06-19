@@ -363,16 +363,6 @@ int main(int argc, char *argv[]) {
 
 	signal(SIGPIPE, SIG_IGN);
 
-	l3ctx.wifistations_ctx.l3ctx = &l3ctx;
-	l3ctx.clientmgr_ctx.l3ctx = &l3ctx;
-	l3ctx.intercom_ctx.l3ctx = &l3ctx;
-	l3ctx.ipmgr_ctx.l3ctx = &l3ctx;
-	l3ctx.routemgr_ctx.l3ctx = &l3ctx;
-	l3ctx.socket_ctx.l3ctx = &l3ctx;
-	l3ctx.taskqueue_ctx.l3ctx = &l3ctx;
-	l3ctx.icmp6_ctx.l3ctx = &l3ctx;
-	l3ctx.arp_ctx.l3ctx = &l3ctx;
-
 	l3ctx.client_mtu = 1500;
 	l3ctx.intercom_ctx.mtu = 1500;
 

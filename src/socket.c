@@ -223,8 +223,8 @@ void socket_handle_in(socket_ctx *ctx) {
 			break;
 		case ADD_PREFIX:
 			if (parse_prefix(&_prefix, &line[11])) {
-				add_prefix(&CTX(clientmgr)->prefixes, _prefix);
-				routemgr_insert_route(CTX(routemgr), 254, if_nametoindex(CTX(ipmgr)->ifname),
+				add_prefix(&l3ctx.clientmgr_ctx.prefixes, _prefix);
+				routemgr_insert_route(&l3ctx.routemgr_ctx, 254, if_nametoindex(l3ctx.ipmgr_ctx.ifname),
 						      (struct in6_addr *)(_prefix.prefix.s6_addr), _prefix.plen);
 				dprintf(fd, "Added prefix: %s", &line[11]);
 			}
@@ -297,8 +297,8 @@ void socket_handle_in(socket_ctx *ctx) {
 			break;
 		case DEL_PREFIX:
 			if (parse_prefix(&_prefix, &line[11])) {
-				del_prefix(&CTX(clientmgr)->prefixes, _prefix);
-				routemgr_remove_route(CTX(routemgr), 254, (struct in6_addr *)(_prefix.prefix.s6_addr),
+				del_prefix(&l3ctx.clientmgr_ctx.prefixes, _prefix);
+				routemgr_remove_route(&l3ctx.routemgr_ctx, 254, (struct in6_addr *)(_prefix.prefix.s6_addr),
 						      _prefix.plen);
 				dprintf(fd, "Deleted prefix: %s", &line[11]);
 			}

@@ -115,10 +115,10 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 
 	if ((nh->nlmsg_type == RTM_NEWNEIGH) && (msg->ndm_state & NUD_REACHABLE)) {
 		log_debug("Status-Change to NUD_REACHABLE, notifying change for client-mac [%s]\n", mac_str);
-		clientmgr_notify_mac(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
+		clientmgr_notify_mac(&l3ctx.clientmgr_ctx, RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
 		if (tb[NDA_DST]) {
 			log_debug("Status-Change to NUD_REACHABLE, ADDING address %s [%s]\n", ip_str, mac_str);
-			clientmgr_add_address(CTX(clientmgr), &dst_address, RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
+			clientmgr_add_address(&l3ctx.clientmgr_ctx, &dst_address, RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
 		}
 	} else if ((nh->nlmsg_type == RTM_NEWNEIGH) && (msg->ndm_state & NUD_FAILED)) {
 		// TODO: re-try sending NS if no NA is received
@@ -130,9 +130,9 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 			// TODO: let the kernel do the probing and remember how often we were in this state
 			// for each client. If that was >3 times, remove client.
 			if (msg->ndm_family == AF_INET) {
-				arp_send_request(CTX(arp), &dst_address);
+				arp_send_request(&l3ctx.arp_ctx, &dst_address);
 			} else {
-				icmp6_send_solicitation(CTX(icmp6), &dst_address);
+				icmp6_send_solicitation(&l3ctx.icmp6_ctx, &dst_address);
 			}
 		}
 	} else if (nh->nlmsg_type == RTM_DELNEIGH) {
@@ -226,7 +226,7 @@ void handle_kernel_routes(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 		return;
 
 	if (clientmgr_valid_address(&l3ctx.clientmgr_ctx, &route.prefix)) {
-		ipmgr_route_appeared(CTX(ipmgr), &route.prefix);
+		ipmgr_route_appeared(&l3ctx.ipmgr_ctx, &route.prefix);
 	}
 }
 
@@ -291,18 +291,18 @@ void routemgr_init(routemgr_ctx *ctx) {
 	if (bind(ctx->fd, (struct sockaddr *)&snl, sizeof(snl)) < 0)
 		exit_error("can't bind RTNL socket");
 
-	for (int i = 0; i < VECTOR_LEN(CTX(clientmgr)->prefixes); i++) {
-		struct prefix *prefix = &(VECTOR_INDEX(CTX(clientmgr)->prefixes, i));
+	for (int i = 0; i < VECTOR_LEN(l3ctx.clientmgr_ctx.prefixes); i++) {
+		struct prefix *prefix = &(VECTOR_INDEX(l3ctx.clientmgr_ctx.prefixes, i));
 		log_verbose("Activating route for prefix %s/%i on device %s(%i) in main routing-table\n",
-			    print_ip(&prefix->prefix), prefix->plen, CTX(ipmgr)->ifname,
-			    if_nametoindex(CTX(ipmgr)->ifname));
+			    print_ip(&prefix->prefix), prefix->plen, l3ctx.ipmgr_ctx.ifname,
+			    if_nametoindex(l3ctx.ipmgr_ctx.ifname));
 
 		if (prefix->isv4) {
 			struct in_addr ip4 = extractv4_v6(&prefix->prefix);
 			log_verbose("ipv4: %s\n", print_ip4(&ip4));
-			routemgr_insert_route4(ctx, 254, if_nametoindex(CTX(ipmgr)->ifname), &ip4, prefix->plen - 96);
+			routemgr_insert_route4(ctx, 254, if_nametoindex(l3ctx.ipmgr_ctx.ifname), &ip4, prefix->plen - 96);
 		} else
-			routemgr_insert_route(ctx, 254, if_nametoindex(CTX(ipmgr)->ifname),
+			routemgr_insert_route(ctx, 254, if_nametoindex(l3ctx.ipmgr_ctx.ifname),
 					      (struct in6_addr *)(prefix->prefix.s6_addr), prefix->plen);
 	}
 
