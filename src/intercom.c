@@ -25,7 +25,7 @@
 
 void schedule_retries(struct intercom_task *data, int ms_timeout, void (*processor)(void *data));
 
-bool join_mcast(const int sock, const struct in6_addr addr, intercom_if_t *iface) {
+bool join_mcast(const struct in6_addr addr, intercom_if_t *iface) {
 	struct ipv6_mreq mreq;
 
 	mreq.ipv6mr_multiaddr = addr;
@@ -34,16 +34,35 @@ bool join_mcast(const int sock, const struct in6_addr addr, intercom_if_t *iface
 	if (mreq.ipv6mr_interface == 0)
 		goto error;
 
-	if (setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq)) == 0)
+	if (setsockopt(iface->mcast_recv_fd, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq)) == 0)
 		return true;
 	else if (errno == EADDRINUSE)
 		return true;
 
 error:
-	fprintf(stderr, "Could not join multicast group on %s: ", iface->ifname);
+	log_error("Could not join multicast group on %s: ", iface->ifname);
 	perror(NULL);
 	return false;
 }
+
+bool leave_mcast(const struct in6_addr addr, intercom_if_t *iface) {
+	struct ipv6_mreq mreq;
+
+	mreq.ipv6mr_multiaddr = addr;
+	mreq.ipv6mr_interface = iface->ifindex;
+
+	if (mreq.ipv6mr_interface == 0)
+		goto error;
+
+	if (setsockopt(iface->mcast_recv_fd, IPPROTO_IPV6, IPV6_LEAVE_GROUP, &mreq, sizeof(mreq)) == 0)
+		return true;
+
+error:
+	log_error("Could not leave multicast group on %s: ", iface->ifname);
+	perror(NULL);
+	return false;
+}
+
 
 void free_intercom_task(void *d) {
 	struct intercom_task *data = d;
@@ -62,7 +81,7 @@ void intercom_update_interfaces(intercom_ctx *ctx) {
 		if (!iface->ifindex)
 			continue;
 
-		iface->ok = join_mcast(VECTOR_INDEX(ctx->interfaces, i).mcast_recv_fd, ctx->groupaddr.sin6_addr, iface);
+		iface->ok = join_mcast(ctx->groupaddr.sin6_addr, iface);
 	}
 }
 
@@ -131,6 +150,10 @@ bool intercom_del_interface(intercom_ctx *ctx, char *ifname) {
 
 	if (!meshif)
 		return false;
+
+	log_verbose("removing mesh interface %s\n", ifname);
+
+	leave_mcast(ctx->groupaddr.sin6_addr, meshif);
 
 	close(meshif->mcast_recv_fd);
 
