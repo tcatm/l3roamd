@@ -139,8 +139,6 @@ int test_icmp_dest_unreachable4() {
 	l3ctx.clientif_set = true;
 	l3ctx.icmp6_ctx.clientif = strdupa("tst1");
 
-	l3ctx.icmp6_ctx.l3ctx = &l3ctx;
-
 	icmp6_init(&l3ctx.icmp6_ctx);
 
 	return icmp_send_dest_unreachable(&addr, &data);

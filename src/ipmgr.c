@@ -86,12 +86,12 @@ void ipmgr_seek_address(ipmgr_ctx *ctx, struct in6_addr *addr) {
 	    .tv_sec = SEEK_INTERVAL, .tv_nsec = 0,
 	};
 	struct ns_task *ns_data = create_ns_task(addr, interval, -1, false);
-	post_task(CTX(taskqueue), 0, 0, ipmgr_ns_task, free, ns_data);
+	post_task(&l3ctx.taskqueue_ctx, 0, 0, ipmgr_ns_task, free, ns_data);
 
 	// schedule an intercom-seek operation that in turn will only be
 	// executed if there is no local client known
 	struct ip_task *data = create_task(addr);
-	post_task(CTX(taskqueue), 0, 300, seek_task, free, data);
+	post_task(&l3ctx.taskqueue_ctx, 0, 300, seek_task, free, data);
 }
 
 static bool ismulticast(const struct in6_addr *addr) {
@@ -111,7 +111,7 @@ static void handle_packet(ipmgr_ctx *ctx, uint8_t packet[], ssize_t packet_len) 
 	if (ismulticast(&dst))
 		return;
 
-	if (!clientmgr_valid_address(CTX(clientmgr), &dst)) {
+	if (!clientmgr_valid_address(&l3ctx.clientmgr_ctx, &dst)) {
 		log_verbose(
 		    "The destination of the packet (%s) is not within the "
 		    "client prefixes. Ignoring packet\n",
@@ -309,28 +309,18 @@ void ipmgr_handle_out(ipmgr_ctx *ctx, int fd) {
 		// TODO: handle ipv4 packets correctly
 		if (write(fd, packet->data, packet->len) == -1) {
 			if (errno != EAGAIN)
-				perror(
-				    "Could not send packet to newly visible "
-				    "client, discarding this packet.");
+				perror("Could not send packet to newly visible client, discarding this packet.");
 			else {
 				clock_gettime(CLOCK_MONOTONIC, &now);
 				then = now;
 				then.tv_sec -= PACKET_TIMEOUT;
-				perror(
-				    "Could not send packet to newly visible "
-				    "client.");
+				perror("Could not send packet to newly visible client.");
 				if (timespec_cmp(packet->timestamp, then) <= 0) {
-					log_error(
-					    "could not send packet - packet is "
-					    "still young enough, requeueing\n");
-					// TODO: consider if output_queue
-					// really is the correct queue when
-					// requeueing
+					log_error("could not send packet - packet is still young enough, requeueing\n");
+					// TODO: consider if output_queue really is the correct queue when requeueing
 					VECTOR_ADD(ctx->output_queue, *packet);
 				} else {
-					log_error(
-					    "could not send packet - packet is "
-					    "too old, discarding.\n");
+					log_error("could not send packet - packet is too old, discarding.\n");
 				}
 			}
 

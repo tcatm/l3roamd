@@ -92,7 +92,7 @@ intercom_if_t *intercom_has_ifname(intercom_ctx *ctx, const char *ifname, int *e
 }
 
 bool intercom_add_interface(intercom_ctx *ctx, char *ifname) {
-	if (intercom_has_ifname(ctx, ifname, NULL))
+	if (!ifname || intercom_has_ifname(ctx, ifname, NULL))
 		return false;
 
 	int ifindex = if_nametoindex(ifname);
@@ -254,10 +254,7 @@ uint8_t assemble_basicinfo(uint8_t *packet, struct client *client) {
 		}
 	}
 
-	if (l3ctx.debug) {
-		log_debug("added %i addresses to info packet for client ", num_addresses);
-		print_client(client);
-	}
+	log_debug("added %i addresses to info packet for client \n%s\n", num_addresses, print_client(client));
 
 	// fill length field
 	packet[1] = num_addresses * sizeof(intercom_packet_info_entry) + sizeof(client->mac) + 2;
@@ -360,12 +357,9 @@ int parse_basic(const uint8_t *packet, struct client *client) {
 	uint8_t length = packet[1];
 	int num_addresses = (length - 2 - 6) / 16;
 
-	if (l3ctx.debug) {
-		log_debug("handling info segment with %i addresses for client ", num_addresses);
-		print_client(client);
-	}
+	log_debug("handling info segment with %i addresses for client %s\n", num_addresses, print_client(client));
 
-	struct client_ip ip = {0};
+	struct client_ip ip = {};
 	ip.state = IP_INACTIVE;
 
 	intercom_packet_info_entry *entry = (intercom_packet_info_entry *)(packet + 8);
@@ -398,9 +392,9 @@ bool intercom_handle_seek(intercom_ctx *ctx, intercom_packet_seek *packet, int p
 				printf("\x1b[36mSEEK: Looking for %s\x1b[0m\n", print_ip(&address));
 
 				if (address_is_ipv4(&address))
-					arp_send_request(CTX(arp), &address);
+					arp_send_request(&l3ctx.arp_ctx, &address);
 				else
-					icmp6_send_solicitation(CTX(icmp6), &address);
+					icmp6_send_solicitation(&l3ctx.icmp6_ctx, &address);
 				break;
 			default:
 				log_error(
@@ -447,7 +441,7 @@ bool intercom_handle_claim(intercom_ctx *ctx, intercom_packet_claim *packet, int
 		}
 	}
 
-	return !clientmgr_handle_claim(CTX(clientmgr), &sender, claim.mac);
+	return !clientmgr_handle_claim(&l3ctx.clientmgr_ctx, &sender, claim.mac);
 }
 
 /* find an entry in a vector containing elements of type client_t */
@@ -515,7 +509,7 @@ bool intercom_handle_ack(intercom_ctx *ctx, intercom_packet_ack *packet, int pac
 
 bool intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet, int packet_len) {
 	uint8_t type, *packetpointer;
-	struct client client = {0};
+	struct client client = {};
 	int currentoffset = sizeof(intercom_packet_info);
 	struct in6_addr sender;
 
@@ -545,7 +539,7 @@ bool intercom_handle_info(intercom_ctx *ctx, intercom_packet_info *packet, int p
 
 	intercom_remove_claim(ctx, &client);
 
-	bool acted_on_local_client = clientmgr_handle_info(CTX(clientmgr), &client);
+	bool acted_on_local_client = clientmgr_handle_info(&l3ctx.clientmgr_ctx, &client);
 	intercom_ack(ctx, &sender, &client);
 	VECTOR_FREE(client.addresses);
 	return !acted_on_local_client;
@@ -705,27 +699,19 @@ void claim_retry_task(void *d) {
 	int repeatable_claim_index;
 	if (!find_repeatable(&l3ctx.intercom_ctx.repeatable_claims, data->client, &repeatable_claim_index)) {
 		log_debug(
-		    "could not find repeatable claim for client [%s]. This "
-		    "happens when an INFO packet was received before all claim "
-		    "retry-cycles are spent OR when deleting the client. Returning.\n",
+		    "could not find repeatable claim for client [%s]. This happens when an INFO packet was received "
+		    "before all claim retry-cycles are spent OR when deleting the client. Returning.\n",
 		    print_mac(data->client->mac));
 		return;
 	}
 
 	if (data->recipient != NULL) {
-		log_debug(
-		    "sending unicast claim for client "
-		    "%02x:%02x:%02x:%02x:%02x:%02x to %s\n",
-		    data->client->mac[0], data->client->mac[1], data->client->mac[2], data->client->mac[3],
-		    data->client->mac[4], data->client->mac[5], print_ip(data->recipient));
+		log_debug("sending unicast claim for client %s to %s\n", print_mac(data->client->mac),
+			  print_ip(data->recipient));
 		unicast_packet_sent = intercom_send_packet_unicast(&l3ctx.intercom_ctx, data->recipient,
 								   (uint8_t *)data->packet, data->packet_len);
 	} else {
-		log_debug(
-		    "sending multicast claim for client "
-		    "%02x:%02x:%02x:%02x:%02x:%02x\n",
-		    data->client->mac[0], data->client->mac[1], data->client->mac[2], data->client->mac[3],
-		    data->client->mac[4], data->client->mac[5]);
+		log_debug("sending multicast claim for client %s\n", print_mac(data->client->mac));
 		intercom_recently_seen_add(&l3ctx.intercom_ctx, &((intercom_packet_claim *)data->packet)->hdr);
 		intercom_send_packet(&l3ctx.intercom_ctx, (uint8_t *)&data->packet, data->packet_len);
 	}
@@ -735,7 +721,7 @@ void claim_retry_task(void *d) {
 	else {
 		// we have not received an info message or sending a unicast
 		// claim was not successful
-		// the only valid business reason for this to happens is when
+		// the only valid reason for this to happen is when
 		// there is no route to the client, so it must be new to the
 		// network
 		// TODO: what about EINTR EWOULDBLOCK ENOBUFS ENOMEM

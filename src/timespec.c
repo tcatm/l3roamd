@@ -2,7 +2,7 @@
 
 #define BILLION 1000000000l
 struct timespec timeAdd(struct timespec *t1, struct timespec *t2) {
-	long sec = t2->tv_sec + t1->tv_sec;
+	time_t sec = t2->tv_sec + t1->tv_sec;
 	long nsec = t2->tv_nsec + t1->tv_nsec;
 	if (nsec >= BILLION) {
 		nsec -= BILLION;

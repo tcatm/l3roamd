@@ -31,43 +31,38 @@
 /* this will parse the string str and return a prefix struct
 */
 bool parse_prefix(struct prefix *prefix, const char *str) {
-	char *saveptr;
-	char *tmp = strdup(str);
+	char *saveptr = NULL;
+	char tmp[INET6_ADDRSTRLEN + 5]; // hold complete prefix + "/" + 3-digit prefix length + terminating null-byte
+	strncpy(tmp, str, INET6_ADDRSTRLEN + 5);
 
-	prefix->isv4 = true;
-	if (strchr(tmp, ':'))
-		prefix->isv4 = false;
+	prefix->isv4 = !strchr(tmp, ':');
 
-	log_debug("parsing prefix %s, ipv4-state: %i\n", str, prefix->isv4);
-
+	log_debug("parsing %s prefix: %s\n", prefix->isv4 ? "IPv4" : "IPv6", str);
 	char *ptr = strtok_r(tmp, "/", &saveptr);
+	if (!ptr)
+		return false;
 
 	if (prefix->isv4) {
 		struct in_addr v4;
 		if (inet_pton(AF_INET, ptr, &v4) != 1)
-			goto error;
+			return false;
 		mapv4_v6(&v4, &prefix->prefix);
 	} else {
 		if (inet_pton(AF_INET6, ptr, &prefix->prefix) != 1)
-			goto error;
+			return false;
 	}
 	ptr = strtok_r(NULL, "/", &saveptr);
-	if (ptr == NULL)
-		goto error;
+	if (!ptr)
+		return false;
 
 	prefix->plen = atoi(ptr);
 	if (prefix->isv4)
 		prefix->plen += 96;
 
 	if (prefix->plen < 0 || prefix->plen > 128)
-		goto error;
+		return false;
 
-	free(tmp);
 	return true;
-
-error:
-	free(tmp);
-	return false;
 }
 
 /* this will add a prefix to the prefix vector, causing l3roamd  to
@@ -96,7 +91,7 @@ bool del_prefix(void *prefixes, struct prefix _prefix) {
 }
 
 bool prefix_contains(const struct prefix *prefix, const struct in6_addr *addr) {
-	log_debug("checking if prefix %s contains address %s\n", print_ip(&prefix->prefix), print_ip(addr));
+//	log_debug("checking if prefix %s contains address %s\n", print_ip(&prefix->prefix), print_ip(addr));
 
 	int mask = 0xff;
 	for (int remaining_plen = prefix->plen, i = 0; remaining_plen > 0; remaining_plen -= 8) {

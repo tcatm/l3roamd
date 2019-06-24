@@ -101,7 +101,6 @@ struct intercom_task {
 typedef struct {
 	struct in6_addr ip;
 	struct sockaddr_in6 groupaddr;
-	struct l3ctx *l3ctx;
 	VECTOR(intercom_packet_hdr) recent_packets;
 	intercom_if_v interfaces;
 	client_v repeatable_claims;

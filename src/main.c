@@ -150,11 +150,11 @@ void loop() {
 	add_fd(efd, l3ctx.taskqueue_ctx.fd, EPOLLIN);
 
 	if (l3ctx.clientif_set) {
-		printf("adding icmp6-fd to epoll\n");
+		log_verbose("adding icmp6-fd to epoll\n");
 		add_fd(efd, l3ctx.icmp6_ctx.fd, EPOLLIN);
 		add_fd(efd, l3ctx.icmp6_ctx.nsfd, EPOLLIN);
 
-		printf("adding arp-fd to epoll\n");
+		log_verbose("adding arp-fd to epoll\n");
 		add_fd(efd, l3ctx.arp_ctx.fd, EPOLLIN);
 
 		if (l3ctx.wifistations_ctx.fd >= 0)
@@ -345,6 +345,7 @@ void usage() {
 	puts(
 	    "probe <addr> <mac>       This will start a neighbour discovery "
 	    "for a neighbour <mac> with address <addr>");
+	puts("verbosity <none|verbose|debug>	This will set the verbosity of the l3roamd process");
 }
 
 void catch_sigterm() {
@@ -361,16 +362,6 @@ int main(int argc, char *argv[]) {
 	char *socketpath = NULL;
 
 	signal(SIGPIPE, SIG_IGN);
-
-	l3ctx.wifistations_ctx.l3ctx = &l3ctx;
-	l3ctx.clientmgr_ctx.l3ctx = &l3ctx;
-	l3ctx.intercom_ctx.l3ctx = &l3ctx;
-	l3ctx.ipmgr_ctx.l3ctx = &l3ctx;
-	l3ctx.routemgr_ctx.l3ctx = &l3ctx;
-	l3ctx.socket_ctx.l3ctx = &l3ctx;
-	l3ctx.taskqueue_ctx.l3ctx = &l3ctx;
-	l3ctx.icmp6_ctx.l3ctx = &l3ctx;
-	l3ctx.arp_ctx.l3ctx = &l3ctx;
 
 	l3ctx.client_mtu = 1500;
 	l3ctx.intercom_ctx.mtu = 1500;
@@ -426,12 +417,10 @@ int main(int argc, char *argv[]) {
 				exit(EXIT_SUCCESS);
 			case 'a':
 				if (a_initialized)
-					exit_error(
-					    "-a must not be specified more "
-					    "than once");
+					exit_error("-a must not be specified more than once");
 
 				if (inet_pton(AF_INET6, optarg, &l3ctx.intercom_ctx.ip) != 1)
-					exit_error("Can not parse IP address");
+					exit_error("Can not parse IP address %s\n", optarg);
 				intercom_init_unicast(&l3ctx.intercom_ctx);
 				a_initialized = true;
 				break;
@@ -440,27 +429,22 @@ int main(int argc, char *argv[]) {
 				parse_config(optarg);
 				break;
 			case 'P':;
-				printf("parsing prefix %s\n", optarg);
 				struct prefix _ncprefix = {};
 				if (!parse_prefix(&_ncprefix, optarg))
-					exit_error(
-					    "Can not parse node-client-prefix "
-					    "that passed by -P");
+					exit_error("Can not parse node-client-prefix that passed by -P %s\n", optarg);
 				l3ctx.clientmgr_ctx.node_client_prefix = _ncprefix;
 				break;
 			case 'p': {
 				struct prefix _prefix = {};
-				if (!parse_prefix(&_prefix, optarg)) {
-					fprintf(stderr, "prefix: %s - ", optarg);
-					exit_error("Can not parse prefix");
-				}
+				if (!parse_prefix(&_prefix, optarg))
+					exit_error("Can not parse prefix %s\n", optarg);
 				add_prefix(&l3ctx.clientmgr_ctx.prefixes, _prefix);
 				p_initialized = true;
 			} break;
 			case 'e': {
 				struct prefix _prefix = {};
 				if (!parse_prefix(&_prefix, optarg))
-					exit_error("Can not parse PLAT-prefix");
+					exit_error("Can not parse PLAT-prefix %s\n", optarg);
 				if (_prefix.plen != 96)
 					exit_error("PLAT-prefix must be /96");
 
@@ -489,12 +473,8 @@ int main(int argc, char *argv[]) {
 					l3ctx.clientif_set = true;
 				} else {
 					fprintf(stderr,
-						"ignoring unknown "
-						"client-interface %s or "
-						"client-interface was already "
-						"set. Only the first "
-						"client-interface will be "
-						"considered.\n",
+						"ignoring unknown client-interface %s or client-interface was already "
+						"set. Only the first client-interface will be considered.\n",
 						optarg);
 				}
 				break;

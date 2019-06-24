@@ -43,4 +43,3 @@ void add_fd(int efd, int fd, uint32_t events);
 void del_fd(int efd, int fd);
 
 #define INTERCOM_PORT 5523
-#define CTX(tgt) (&ctx->l3ctx->tgt##_ctx)

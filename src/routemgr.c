@@ -1,6 +1,7 @@
 #include "routemgr.h"
 #include "error.h"
 #include "l3roamd.h"
+#include "alloc.h"
 
 #include <unistd.h>
 #include "clientmgr.h"
@@ -35,13 +36,43 @@ int parse_rtattr(struct rtattr *tb[], int max, struct rtattr *rta, int len) {
 	return parse_rtattr_flags(tb, max, rta, len, 0);
 }
 
+void rtmgr_client_probe_addresses(struct client *client) {
+	for (int i = 0; i < VECTOR_LEN(client->addresses); i++) {
+		routemgr_probe_neighbor(&l3ctx.routemgr_ctx, client->ifindex, &VECTOR_INDEX(client->addresses, i).addr,
+					client->mac);
+	}
+}
+
 void rtmgr_client_remove_address(struct in6_addr *dst_address) {
 	struct client *_client = NULL;
+	log_debug("removing address %s\n", print_ip(dst_address));
 	if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, dst_address, &_client)) {
+		log_debug("removing address %s from client [%s]\n", print_ip(dst_address), print_mac(_client->mac));
 		clientmgr_remove_address(&l3ctx.clientmgr_ctx, _client, dst_address);
-		for (int i = 0; i < VECTOR_LEN(_client->addresses); i++) {
-			routemgr_probe_neighbor(&l3ctx.routemgr_ctx, _client->ifindex,
-						&VECTOR_INDEX(_client->addresses, i).addr, _client->mac);
+		rtmgr_client_probe_addresses(_client);
+	} else {
+		log_debug("removal of address %s was scheduled but corresponding client could not be identified.\n",
+			  print_ip(dst_address));
+	}
+}
+
+void rtmgr_remove_addr_task(void *dst_address) {
+	rtmgr_client_remove_address((struct in6_addr*)dst_address);
+}
+
+void schedule_removal(struct in6_addr *dst_address) {
+	struct client *client  = NULL;
+	if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, dst_address, &client)) {
+		struct client_ip *ip = NULL;
+		ip = get_client_ip(client, dst_address);
+
+		if (ip && !ip->removal_task) {
+			log_debug("REMOVING (DELNEIGH/NUD_FAILED) %s [%s] in 2 Minutes.\n", print_ip(&ip->addr),
+				  print_mac(client->mac));
+			struct in6_addr *task_data_addr = l3roamd_alloc(sizeof(struct in6_addr));
+			memcpy(task_data_addr, dst_address, sizeof(struct in6_addr));
+			ip->removal_task =
+			    post_task(&l3ctx.taskqueue_ctx, 120, 0, rtmgr_remove_addr_task, free, task_data_addr);
 		}
 	}
 }
@@ -69,65 +100,49 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	if (tb[NDA_DST]) {
 		if (msg->ndm_family == AF_INET) {
 			mapv4_v6(RTA_DATA(tb[NDA_DST]), &dst_address);
-		} else
+		} else {
 			memcpy(&dst_address, RTA_DATA(tb[NDA_DST]), 16);
+		}
 
 		inet_ntop(AF_INET6, &dst_address, ip_str, INET6_ADDRSTRLEN);
 	}
 
-	if (nh->nlmsg_type == RTM_NEWNEIGH && msg->ndm_state & NUD_REACHABLE && tb[NDA_LLADDR]) {
-		log_debug(
-		    "Status-Change to NUD_REACHABLE, notifying change for "
-		    "client-mac [%s]\n",
-		    mac_str);
-		clientmgr_notify_mac(CTX(clientmgr), RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
-	}
-
 	char ifname[IFNAMSIZ + 1] = "";
-	log_debug(
-	    "neighbour [%s] (%s) changed on interface %s, type: %i, state: %i "
-	    "... (msgif: %i cif: %i brif: %i)\n",
-	    mac_str, ip_str, if_indextoname(msg->ndm_ifindex, ifname), nh->nlmsg_type, msg->ndm_state, msg->ndm_ifindex,
-	    ctx->clientif_index,
-	    ctx->client_bridge_index);  // see include/uapi/linux/neighbour.h
-					// NUD_REACHABLE for numeric values
+	log_debug("neighbour [%s] (%s) changed on interface %s, type: %i, state: %i ... (msgif: %i cif: %i brif: %i)\n",
+		  mac_str, ip_str, if_indextoname(msg->ndm_ifindex, ifname), nh->nlmsg_type, msg->ndm_state,
+		  msg->ndm_ifindex, ctx->clientif_index,
+		  ctx->client_bridge_index);  // see include/uapi/linux/neighbour.h NUD_REACHABLE for numeric values
 
-	if (msg->ndm_state & NUD_REACHABLE) {
-		if (nh->nlmsg_type == RTM_NEWNEIGH && tb[NDA_DST] && tb[NDA_LLADDR]) {
-			log_debug(
-			    "Status-Change to NUD_REACHABLE, ADDING address %s "
-			    "[%s]\n",
-			    ip_str, mac_str);
-			clientmgr_add_address(CTX(clientmgr), &dst_address, RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
+	if ((nh->nlmsg_type == RTM_NEWNEIGH) && (msg->ndm_state & NUD_REACHABLE)) {
+		log_debug("Status-Change to NUD_REACHABLE, notifying change for client-mac [%s]\n", mac_str);
+		clientmgr_notify_mac(&l3ctx.clientmgr_ctx, RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
+		if (tb[NDA_DST]) {
+			log_debug("Status-Change to NUD_REACHABLE, ADDING address %s [%s]\n", ip_str, mac_str);
+			clientmgr_add_address(&l3ctx.clientmgr_ctx, &dst_address, RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
 		}
-	} else if (msg->ndm_state & NUD_FAILED) {
-		if (nh->nlmsg_type == RTM_NEWNEIGH) {  // TODO: re-try sending
-						       // NS if no NA is
-						       // received
-			if (clientmgr_valid_address(&l3ctx.clientmgr_ctx, &dst_address)) {
-				log_debug(
-				    "NEWNEIGH & NUD_FAILED received - sending "
-				    "NS for ip %s [%s]\n",
-				    ip_str, mac_str);
+	} else if ((nh->nlmsg_type == RTM_NEWNEIGH) && (msg->ndm_state & NUD_FAILED)) {
+		// TODO: re-try sending NS if no NA is received
+		if (clientmgr_valid_address(&l3ctx.clientmgr_ctx, &dst_address)) {
+			log_debug("NEWNEIGH & NUD_FAILED received - sending NS for ip %s [%s]\n", ip_str, mac_str);
+			schedule_removal(&dst_address);
 
-				// we cannot directly use probe here because
-				// that would lead to an endless loop.
-				// TODO: let the kernel do the probing and
-				// remember how often we where in this state
-				// for each client. If that was >3 times,
-				// remove client.
-				if (msg->ndm_family == AF_INET) {
-					arp_send_request(CTX(arp), &dst_address);
-				} else {
-					icmp6_send_solicitation(CTX(icmp6), &dst_address);
-				}
+			// we cannot directly use probe here because that would lead to an endless loop.
+			// TODO: let the kernel do the probing and remember how often we were in this state
+			// for each client. If that was >3 times, remove client.
+			if (msg->ndm_family == AF_INET) {
+				arp_send_request(&l3ctx.arp_ctx, &dst_address);
+			} else {
+				icmp6_send_solicitation(&l3ctx.icmp6_ctx, &dst_address);
 			}
-		} else if (nh->nlmsg_type == RTM_DELNEIGH) {
-			log_debug("REMOVING (DELNEIGH) %s [%s]\n", ip_str, mac_str);
-			rtmgr_client_remove_address(&dst_address);
 		}
+	} else if (nh->nlmsg_type == RTM_DELNEIGH) {
+		schedule_removal(&dst_address);
+
+		struct client *client = get_client(RTA_DATA(tb[NDA_LLADDR]));
+		if (client)
+			rtmgr_client_probe_addresses(client);
 	} else if (msg->ndm_state & NUD_NOARP) {
-		log_debug("REMOVING (NOARP) %s [%s]\n", ip_str, mac_str);
+		log_debug("REMOVING (NOARP) %s [%s] now\n", ip_str, mac_str);
 		rtmgr_client_remove_address(&dst_address);
 	}
 }
@@ -160,10 +175,8 @@ void client_bridge_changed(const struct nlmsghdr *nh, const struct ifinfomsg *ms
 
 		switch (nh->nlmsg_type) {
 			case RTM_NEWLINK:
-				log_verbose(
-				    "new station [%s] found in fdb on "
-				    "interface %s\n",
-				    print_mac(RTA_DATA(tb[IFLA_ADDRESS])), ifname);
+				log_verbose("new station [%s] found in fdb on interface %s\n",
+					    print_mac(RTA_DATA(tb[IFLA_ADDRESS])), ifname);
 				clientmgr_notify_mac(&l3ctx.clientmgr_ctx, RTA_DATA(tb[IFLA_ADDRESS]), msg->ifi_index);
 				break;
 
@@ -172,10 +185,8 @@ void client_bridge_changed(const struct nlmsghdr *nh, const struct ifinfomsg *ms
 				break;
 
 			case RTM_DELLINK:
-				log_verbose(
-				    "del link on %i, fdb-entry was removed for "
-				    "[%s].\n",
-				    msg->ifi_index, print_mac(RTA_DATA(tb[IFLA_ADDRESS])));
+				log_verbose("del link on %i, fdb-entry was removed for [%s].\n", msg->ifi_index,
+					    print_mac(RTA_DATA(tb[IFLA_ADDRESS])));
 				clientmgr_delete_client(&l3ctx.clientmgr_ctx, RTA_DATA(tb[IFLA_ADDRESS]));
 				break;
 		}
@@ -215,12 +226,12 @@ void handle_kernel_routes(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 		return;
 
 	if (clientmgr_valid_address(&l3ctx.clientmgr_ctx, &route.prefix)) {
-		ipmgr_route_appeared(CTX(ipmgr), &route.prefix);
+		ipmgr_route_appeared(&l3ctx.ipmgr_ctx, &route.prefix);
 	}
 }
 
 void rtnl_handle_msg(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
-	if (ctx->nl_disabled)
+	if (!nh || ctx->nl_disabled)
 		return;
 
 	switch (nh->nlmsg_type) {
@@ -241,10 +252,7 @@ void rtnl_handle_msg(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 			rtnl_handle_link(nh);
 			break;
 		default:
-			log_debug(
-			    "not handling unknown netlink message with type: "
-			    "%i\n",
-			    nh->nlmsg_type);
+			log_debug("not handling unknown netlink message with type: %i\n", nh->nlmsg_type);
 			return;
 	}
 }
@@ -283,26 +291,23 @@ void routemgr_init(routemgr_ctx *ctx) {
 	if (bind(ctx->fd, (struct sockaddr *)&snl, sizeof(snl)) < 0)
 		exit_error("can't bind RTNL socket");
 
-	for (int i = 0; i < VECTOR_LEN(CTX(clientmgr)->prefixes); i++) {
-		struct prefix *prefix = &(VECTOR_INDEX(CTX(clientmgr)->prefixes, i));
-		log_verbose(
-		    "Activating route for prefix %s/%i on device %s(%i) in "
-		    "main routing-table\n",
-		    print_ip(&prefix->prefix), prefix->plen, CTX(ipmgr)->ifname, if_nametoindex(CTX(ipmgr)->ifname));
+	for (int i = 0; i < VECTOR_LEN(l3ctx.clientmgr_ctx.prefixes); i++) {
+		struct prefix *prefix = &(VECTOR_INDEX(l3ctx.clientmgr_ctx.prefixes, i));
+		log_verbose("Activating route for prefix %s/%i on device %s(%i) in main routing-table\n",
+			    print_ip(&prefix->prefix), prefix->plen, l3ctx.ipmgr_ctx.ifname,
+			    if_nametoindex(l3ctx.ipmgr_ctx.ifname));
 
 		if (prefix->isv4) {
 			struct in_addr ip4 = extractv4_v6(&prefix->prefix);
 			log_verbose("ipv4: %s\n", print_ip4(&ip4));
-			routemgr_insert_route4(ctx, 254, if_nametoindex(CTX(ipmgr)->ifname), &ip4, prefix->plen - 96);
+			routemgr_insert_route4(ctx, 254, if_nametoindex(l3ctx.ipmgr_ctx.ifname), &ip4, prefix->plen - 96);
 		} else
-			routemgr_insert_route(ctx, 254, if_nametoindex(CTX(ipmgr)->ifname),
+			routemgr_insert_route(ctx, 254, if_nametoindex(l3ctx.ipmgr_ctx.ifname),
 					      (struct in6_addr *)(prefix->prefix.s6_addr), prefix->plen);
 	}
 
 	if (!l3ctx.clientif_set) {
-		log_error(
-		    "warning: we were started without -i - not initializing "
-		    "any client interfaces.\n");
+		log_error("warning: we were started without -i - not initializing any client interfaces.\n");
 		return;
 	}
 	// determine mac address of client-bridge
@@ -330,19 +335,17 @@ int parse_kernel_route_rta(struct rtmsg *rtm, int len, struct kernel_route *rout
 	for (struct rtattr *rta = RTM_RTA(rtm); RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
 		switch (rta->rta_type) {
 			case RTA_DST:
-
 				if (rtm->rtm_family == AF_INET6) {
 					route->plen = rtm->rtm_dst_len;
 					memcpy(route->prefix.s6_addr, RTA_DATA(rta), 16);
-					log_debug("parsed route, found dst: %s\n", print_ip(&route->prefix));
 
 				} else if (rtm->rtm_family == AF_INET) {
 					struct in_addr ipv4;
 					memcpy(&ipv4.s_addr, RTA_DATA(rta), 4);
 					mapv4_v6(&ipv4, &route->prefix);
 					route->plen = rtm->rtm_dst_len + 96;
-					log_debug("parsed route, found dst: %s\n", print_ip(&route->prefix));
 				}
+				log_debug("parsed route, found dst: %s\n", print_ip(&route->prefix));
 				break;
 			case RTA_SRC:
 				if (rtm->rtm_family == AF_INET6) {
@@ -381,8 +384,7 @@ int parse_kernel_route_rta(struct rtmsg *rtm, int len, struct kernel_route *rout
 }
 
 void routemgr_handle_in(routemgr_ctx *ctx, int fd) {
-	if (l3ctx.debug)
-		printf("handling routemgr_in event ");
+	log_debug("handling routemgr_in event ");
 	ssize_t count;
 	uint8_t readbuffer[8192];
 
@@ -399,11 +401,8 @@ void routemgr_handle_in(routemgr_ctx *ctx, int fd) {
 			break;  // TODO: shouldn't we re-open the fd in this
 				// case?
 
-		if (l3ctx.debug)
-			printf(
-			    "read %zi Bytes from netlink socket, "
-			    "readbuffer-size is %zi, ... parsing data now.\n",
-			    count, sizeof(readbuffer));
+		log_debug("read %zi Bytes from netlink socket, readbuffer-size is %zi, ... parsing data now.\n", count,
+			  sizeof(readbuffer));
 
 		nh = (struct nlmsghdr *)readbuffer;
 		if (NLMSG_OK(nh, count)) {

@@ -44,7 +44,6 @@ struct kernel_route {
 };
 
 typedef struct {
-	struct l3ctx *l3ctx;
 	char *clientif;
 	char *client_bridge;
 	int fd;

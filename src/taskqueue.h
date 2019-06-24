@@ -6,7 +6,6 @@
 typedef struct taskqueue taskqueue_t;
 
 typedef struct {
-	struct l3ctx *l3ctx;
 	taskqueue_t *queue;
 	int fd;
 } taskqueue_ctx;
@@ -35,8 +34,9 @@ void taskqueue_remove(taskqueue_t *elem);
 void taskqueue_init(taskqueue_ctx *ctx);
 void taskqueue_run(taskqueue_ctx *ctx);
 void taskqueue_schedule(taskqueue_ctx *ctx);
-taskqueue_t *post_task(taskqueue_ctx *ctx, unsigned int timeout,
-		       unsigned int millisecs, void (*function)(void *),
+taskqueue_t *post_task(taskqueue_ctx *ctx, time_t timeout,
+		       long millisecs, void (*function)(void *),
 		       void (*cleanup)(void *), void *data);
+void drop_task(taskqueue_t *task);
 bool reschedule_task(taskqueue_ctx *ctx, taskqueue_t *task,
-		     unsigned int timeout, unsigned int millisecs);
+		     time_t timeout, long millisecs);

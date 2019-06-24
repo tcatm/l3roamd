@@ -19,11 +19,11 @@ enum socket_command {
 	DEL_PREFIX,
 	GET_PREFIX,
 	ADD_ADDRESS,
-	DEL_ADDRESS
+	DEL_ADDRESS,
+	SET_VERBOSITY
 };
 
 typedef struct {
-	struct l3ctx *l3ctx;
 	int fd;
 } socket_ctx;
 

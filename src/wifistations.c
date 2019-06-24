@@ -28,8 +28,7 @@ static int no_seq_check(struct nl_msg *msg, void *arg) { return NL_OK; }
 void wifistations_handle_in(wifistations_ctx *ctx) { nl_recvmsgs(ctx->nl_sock, ctx->cb); }
 
 int wifistations_handle_event(struct nl_msg *msg, void *arg) {
-	if (l3ctx.debug)
-		printf("handling wifistations event\n");
+	log_debug("handling wifistations event\n");
 	wifistations_ctx *ctx = arg;
 	if (ctx->nl80211_disabled)
 		return 0;
@@ -56,15 +55,15 @@ int wifistations_handle_event(struct nl_msg *msg, void *arg) {
 		case NL80211_CMD_NEW_STATION:
 			log_verbose("new wifi station [%s] found on interface %s\n",
 				    print_mac(nla_data(tb[NL80211_ATTR_MAC])), ifname);
-			ifindex = ctx->l3ctx->icmp6_ctx.ifindex;
-			clientmgr_notify_mac(CTX(clientmgr), nla_data(tb[NL80211_ATTR_MAC]), ifindex);
+			ifindex = l3ctx.icmp6_ctx.ifindex;
+			clientmgr_notify_mac(&l3ctx.clientmgr_ctx, nla_data(tb[NL80211_ATTR_MAC]), ifindex);
 			break;
 		case NL80211_CMD_DEL_STATION:
 			log_verbose(
 			    "NL80211_CMD_DEL_STATION for [%s] RECEIVED on "
 			    "interface %s.\n",
 			    print_mac(nla_data(tb[NL80211_ATTR_MAC])), ifname);
-			clientmgr_delete_client(CTX(clientmgr), nla_data(tb[NL80211_ATTR_MAC]));
+			clientmgr_delete_client(&l3ctx.clientmgr_ctx, nla_data(tb[NL80211_ATTR_MAC]));
 			break;
 	}
 

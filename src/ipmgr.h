@@ -44,7 +44,6 @@ struct unknown_address {
 };
 
 typedef struct {
-	struct l3ctx *l3ctx;
 	char *ifname;
 	VECTOR(struct unknown_address) addrs;
 	VECTOR(struct packet) output_queue;

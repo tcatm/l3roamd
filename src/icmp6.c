@@ -93,7 +93,7 @@ void icmp6_setup_interface(icmp6_ctx *ctx) {
 		return;
 
 	int rc = setsockopt(ctx->fd, SOL_SOCKET, SO_BINDTODEVICE, ctx->clientif, strnlen(ctx->clientif, IFNAMSIZ - 1));
-	log_verbose("Setting up icmp6 interface: %i\n", rc);
+	log_verbose("Setting up icmp6 interface: %s %i %i %i\n", ctx->clientif, strnlen(ctx->clientif, 12), IFNAMSIZ, rc);
 
 	if (rc < 0) {
 		perror("icmp6 - setsockopt fd:");
@@ -134,7 +134,7 @@ void icmp6_interface_changed(icmp6_ctx *ctx, int type, const struct ifinfomsg *m
 	if (if_indextoname(msg->ifi_index, ifname) == NULL)
 		return;
 
-	if (strcmp(ifname, ctx->clientif) != 0)
+	if (strncmp(ifname, ctx->clientif, IFNAMSIZ - 1) != 0)
 		return;
 
 	log_verbose("icmp6 interface change detected\n");
@@ -207,6 +207,7 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 		uint8_t *mac = lladdr.sll_addr;
 
 		if (packet.sol.hdr.nd_ns_hdr.icmp6_type == ND_NEIGHBOR_SOLICIT) {
+			struct  in6_addr ns_target = packet.sol.hdr.nd_ns_target;
 			if (memcmp(&packet.hdr.ip6_src,
 				   "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 				   "\x00\x00\x00\x00\x00\x00",
@@ -216,26 +217,23 @@ void icmp6_handle_ns_in(icmp6_ctx *ctx, int fd) {
 				// in a while to learn its address instead of
 				// flooding the network. If we do this, what
 				// effects will this have on privacy extensions?
-				log_verbose(
-				    "triggering local NS cycle after DAD for "
-				    "address %s\n",
-				    print_ip(&packet.sol.hdr.nd_ns_target));
-				struct ns_task *ns_data = create_ns_task(&packet.sol.hdr.nd_ns_target,
+				log_verbose("triggering local NS cycle after DAD for address %s\n",
+					    print_ip(&ns_target));
+				struct ns_task *ns_data = create_ns_task(&ns_target,
 									 (struct timespec){
 									     .tv_sec = 0, .tv_nsec = 300000000,
 									 },
 									 15, true);
-				post_task(CTX(taskqueue), 0, 0, ipmgr_ns_task, free, ns_data);
+				post_task(&l3ctx.taskqueue_ctx, 0, 0, ipmgr_ns_task, free, ns_data);
 			} else {
+				struct  in6_addr ip6_src = packet.hdr.ip6_src;
 				log_debug(
-				    "Received Neighbor Solicitation from %s "
-				    "[%s] for IP %s. Learning source-IP for "
+				    "Received Neighbor Solicitation from %s [%s] for IP %s. Learning source-IP for "
 				    "client.\n",
-				    print_ip(&packet.hdr.ip6_src), print_mac(mac),
-				    print_ip(&packet.sol.hdr.nd_ns_target));
+				    print_ip(&ip6_src), print_mac(mac), print_ip(&ns_target));
 
-				clientmgr_notify_mac(CTX(clientmgr), mac, ctx->ifindex);
-				clientmgr_add_address(CTX(clientmgr), &packet.hdr.ip6_src, mac, ctx->ifindex);
+				clientmgr_notify_mac(&l3ctx.clientmgr_ctx, mac, ctx->ifindex);
+				clientmgr_add_address(&l3ctx.clientmgr_ctx, &ip6_src, mac, ctx->ifindex);
 			}
 		}
 	}
@@ -279,16 +277,13 @@ void icmp6_handle_in(icmp6_ctx *ctx, int fd) {
 		if (memcmp(packet.hw_addr, "\x00\x00\x00\x00\x00\x00", 6) == 0)
 			continue;
 
-		log_debug(
-		    "Learning from Neighbour Advertisement that Client "
-		    "[%02x:%02x:%02x:%02x:%02x:%02x] is active on ip %s\n",
-		    packet.hw_addr[0], packet.hw_addr[1], packet.hw_addr[2], packet.hw_addr[3], packet.hw_addr[4],
-		    packet.hw_addr[5], print_ip(&packet.hdr.nd_na_target));
+		struct in6_addr addr = packet.hdr.nd_na_target;
+		log_debug("Learning from Neighbour Advertisement that Client [%s] is active on ip %s\n",
+			  print_mac(packet.hw_addr), print_ip(&addr));
 
-		// TODO: make sure to stop possibly previously started NS-cycles
-		// due to DAD,
+		// TODO: stop possibly previously started NS-cycles due to DAD,
 
-		clientmgr_add_address(CTX(clientmgr), &packet.hdr.nd_na_target, packet.hw_addr, ctx->ifindex);
+		clientmgr_add_address(&l3ctx.clientmgr_ctx, &addr, packet.hw_addr, ctx->ifindex);
 	}
 }
 
