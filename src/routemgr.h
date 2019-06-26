@@ -50,6 +50,12 @@ struct kernel_route {
 	unsigned int table;
 };
 
+struct rtmgr_task {
+	struct in6_addr address;
+	int retries_left;
+	int family;
+};
+
 typedef struct {
 	char *clientif;
 	char *client_bridge;
