@@ -1,13 +1,18 @@
 /*
+ * Copyright (c) 2015, Nils Schneider <nils@nilsschneider.net>
+ *
  * This file is part of project l3roamd. It's copyrighted by the contributors
  * recorded in the version control history of the file, available from
  * its original location https://github.com/freifunk-gluon/l3roamd.
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
-#pragma once
 
-#include <netlink/genl/genl.h>
+#ifndef VERSION_H
+#define VERSION_H
 
-int nl_get_multicast_id(struct nl_sock *sock, const char *family,
-			const char *group);
+#define SOURCE_VERSION "0.0.1"
+#define GIT_BRANCH "@GIT_BRANCH@"
+#define GIT_COMMIT_HASH "@GIT_COMMIT_HASH@"
+
+#endif

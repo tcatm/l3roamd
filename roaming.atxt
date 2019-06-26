@@ -1,0 +1,43 @@
+                     ,-.                                                                                          
+                     `-'                                                                                          
+                     /|\                                                                                          
+                      |             ,-----.                                      ,-----.                          
+                     / \            |Node2|                                      |Node1|                          
+                   Client           `--+--'                                      `--+--'                          
+  ,--------------------------------------!.                                         |                             
+  |Client was connected to Node1         |_\                                        |                             
+  |Clients routes point to Node1           |                                        |                             
+  |Client roams to Node2.                  |                                        |                             
+  |Node2 detects client and starts claim.  |                                        |                             
+  `----------------------------------------'                                        |                             
+                     |                 |    CLAIM for Client MAC (max 15 times)     |                             
+                     |                 |    via unicast on node-client-IP           |                             
+                     |                 |------------------------------------------->|                             
+                     |                 |                                            |                             
+                     |                 |                                            ----.                         
+                     |                 |                                                | Drop client based on MAC
+                     |                 |                                            <---' including its routes    
+                     |                 |                                                                          
+                     |                 |                                            |                             
+                     |                 |       INFO packet                          |                             
+                     |                 |       (unicast, stop on ACK or             |                             
+                     |                 |       after 15 retries every 500ms)        |                             
+                     |                 |<- - - - - - - - - - - - - - - - - - - - - -|                             
+                     |                 |                                            |                             
+                     |                 ----.                                        |                             
+                     |                     | set routes for all the                 |                             
+                     |                 <---' clients IP addresses                   |                             
+                     |                                                              |                             
+                     |                 |                                            |                             
+       ,--------------------------!.   |                                            |                             
+       |All routes point to Node2 |_\  |                                            |                             
+       |Client can use the network  |  |                                            |                             
+       `----------------------------'  |                                            |                             
+                     |                 |1 ACK for every received INFO to its sender |                             
+                     |                 |------------------------------------------->|                             
+                   Client           ,--+--.                                      ,--+--.                          
+                     ,-.            |Node2|                                      |Node1|                          
+                     `-'            `-----'                                      `-----'                          
+                     /|\                                                                                          
+                      |                                                                                           
+                     / \                                                                                          

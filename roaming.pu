@@ -1,0 +1,15 @@
+@startuml
+actor Client
+participant Node2
+participant Node1
+
+note over Client: Client was connected to Node1\nClients routes point to Node1\nClient roams to Node2.\nNode2 detects client and starts claim.
+
+Node2 -> Node1: CLAIM for Client MAC (max 15 times)\nvia unicast on node-client-IP
+Node1 -> Node1: Drop client based on MAC\nincluding its routes
+Node1 --> Node2: INFO packet\n(unicast, stop on ACK or\nafter 15 retries every 500ms)
+Node2 -> Node2: set routes for all the\nclients IP addresses
+note over Client: All routes point to Node2\nClient can use the network
+Node2 -> Node1: 1 ACK for every received INFO to its sender
+
+@enduml

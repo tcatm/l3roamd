@@ -1,3 +1,10 @@
+/*
+ * This file is part of project l3roamd. It's copyrighted by the contributors
+ * recorded in the version control history of the file, available from
+ * its original location https://github.com/freifunk-gluon/l3roamd.
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
 #include "config.h"
 void parse_line(char *line) {
 	char delimiter[] = " ";
@@ -22,8 +29,8 @@ void parse_line(char *line) {
 }
 
 bool parse_config(const char *filename) {
-	FILE * fp;
-	char * line = NULL;
+	FILE *fp;
+	char *line = NULL;
 	size_t len = 0;
 	ssize_t read;
 
@@ -31,8 +38,7 @@ bool parse_config(const char *filename) {
 	if (fp == NULL)
 		return false;
 
-	while ((read = getline(&line, &len, fp)) != -1)
-		parse_line(line);
+	while ((read = getline(&line, &len, fp)) != -1) parse_line(line);
 
 	fclose(fp);
 	free(line);

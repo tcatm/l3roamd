@@ -1,68 +1,77 @@
 /*
-  Copyright (c) 2012-2016, Matthias Schiffer <mschiffer@universe-factory.net>
-  Copyright (c) 2016, Nils Schneider <nils@nilsschneider.net>
-  All rights reserved.
-
-  Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions are met:
-
-    1. Redistributions of source code must retain the above copyright notice,
-       this list of conditions and the following disclaimer.
-    2. Redistributions in binary form must reproduce the above copyright notice,
-       this list of conditions and the following disclaimer in the documentation
-       and/or other materials provided with the distribution.
-
-  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
+ * Copyright (c) 2012-2016, Matthias Schiffer <mschiffer@universe-factory.net>
+ * Copyright (c) 2016, Nils Schneider <nils@nilsschneider.net>
+ * Copyright (c) 2017-2018, Christof Schulze <christof@christofschulze.com>
+ *
+ * This file is part of project l3roamd. It's copyrighted by the contributors
+ * recorded in the version control history of the file, available from
+ * its original location https://github.com/freifunk-gluon/l3roamd.
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
 
 #include <stdio.h>
-#include <unistd.h>
 #include <sys/timerfd.h>
+#include <unistd.h>
 
-#include "taskqueue.h"
+#include "alloc.h"
 #include "error.h"
+#include "l3roamd.h"
+#include "taskqueue.h"
 #include "timespec.h"
+#include "util.h"
 
 void taskqueue_init(taskqueue_ctx *ctx) {
 	ctx->fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
 	ctx->queue = NULL;
 }
 
-/** Enqueues a new task. A task with a timeout of zero is scheduled immediately. */
-taskqueue_t * post_task(taskqueue_ctx *ctx, unsigned int timeout, void (*function)(void*), void (*cleanup)(void*), void *data) {
-	taskqueue_t *task = calloc(1, sizeof(taskqueue_t));
+/** this will add timeout seconds and millisecs milliseconds to the current time
+ * to calculate at which time a task should run given an offset */
+struct timespec settime(time_t timeout, long millisecs) {
+	struct timespec due;
+	clock_gettime(CLOCK_MONOTONIC, &due);
 
-	clock_gettime(CLOCK_MONOTONIC, &task->due);
+	struct timespec t = {.tv_sec = timeout, .tv_nsec = millisecs * 1000000l};
 
-	task->due.tv_sec += timeout;
+	return timeAdd(&due, &t);
+}
+
+/** Enqueues a new task. A task with a timeout of zero is scheduled immediately.
+ */
+taskqueue_t *post_task(taskqueue_ctx *ctx, time_t timeout, long millisecs, void (*function)(void *),
+		       void (*cleanup)(void *), void *data) {
+	taskqueue_t *task = l3roamd_alloc(sizeof(taskqueue_t));
+	task->children = task->next = NULL;
+	task->pprev = NULL;
+
+	task->due = settime(timeout, millisecs);
+
 	task->function = function;
 	task->cleanup = cleanup;
 	task->data = data;
-
 	taskqueue_insert(&ctx->queue, task);
 	taskqueue_schedule(ctx);
 
 	return task;
 }
 
+void drop_task(taskqueue_t *task) {
+	taskqueue_remove(task);
+
+	if (task->cleanup != NULL)
+		task->cleanup(task->data);
+
+	free(task);
+}
+
 /** Changes the timeout of a task.
   */
-bool reschedule_task(taskqueue_ctx *ctx, taskqueue_t *task, unsigned int timeout) {
+bool reschedule_task(taskqueue_ctx *ctx, taskqueue_t *task, time_t timeout, long millisecs) {
 	if (task == NULL || !taskqueue_linked(task))
 		return false;
 
-	struct timespec due;
-	clock_gettime(CLOCK_MONOTONIC, &due);
-	due.tv_sec += timeout;
+	struct timespec due = settime(timeout, millisecs);
 
 	if (timespec_cmp(due, task->due)) {
 		task->due = due;
@@ -75,14 +84,21 @@ bool reschedule_task(taskqueue_ctx *ctx, taskqueue_t *task, unsigned int timeout
 }
 
 void taskqueue_schedule(taskqueue_ctx *ctx) {
-	if (ctx->queue == NULL)
+	if (ctx->queue == NULL) {
+		log_debug("Taskqueue is empty, not scheduling another task\n");
 		return;
+	}
 
-	struct itimerspec t = {
-		.it_value = ctx->queue->due
-	};
+	struct itimerspec t = {.it_value = ctx->queue->due};
+	struct timespec now;
+	clock_gettime(CLOCK_MONOTONIC, &now);
 
-	timerfd_settime(ctx->fd, TFD_TIMER_ABSTIME, &t, NULL);
+	if (timespec_cmp(ctx->queue->due, now) <= 0)
+		taskqueue_run(ctx);
+	else {
+		log_debug("It is now: %s, scheduling next task for %s\n", print_timespec(&now), print_timespec(&ctx->queue->due));
+		timerfd_settime(ctx->fd, TFD_TIMER_ABSTIME, &t, NULL);
+	}
 }
 
 void taskqueue_run(taskqueue_ctx *ctx) {
@@ -91,18 +107,20 @@ void taskqueue_run(taskqueue_ctx *ctx) {
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
 
-	read(ctx->fd, &nEvents, sizeof(nEvents));
+	size_t rsize = read(ctx->fd, &nEvents, sizeof(nEvents));
+	if ( ! rsize)
+		log_error("could not read from taskqueue fd\n");
 
 	if (ctx->queue == NULL)
 		return;
 
-	taskqueue_t *task = ctx->queue;
-
-	if (timespec_cmp(task->due, now) <= 0) {
+	while (ctx->queue && timespec_cmp(ctx->queue->due, now) <= 0) {
+		taskqueue_t *task = ctx->queue;
+		log_debug("The time is now: %s, running task that was due at %s\n", print_timespec(&now), print_timespec(&task->due));
 		taskqueue_remove(task);
 		task->function(task->data);
 
-		if (task->cleanup != NULL)
+		if (task->cleanup)
 			task->cleanup(task->data);
 
 		free(task);
@@ -138,7 +156,7 @@ static inline void taskqueue_unlink(taskqueue_t *elem) {
 
    \e queue2 may be empty (NULL)
 */
-static taskqueue_t * taskqueue_merge(taskqueue_t *queue1, taskqueue_t *queue2) {
+static taskqueue_t *taskqueue_merge(taskqueue_t *queue1, taskqueue_t *queue2) {
 	if (!queue1)
 		exit_bug("taskqueue_merge: queue1 unset");
 	if (queue1->next)
@@ -153,8 +171,7 @@ static taskqueue_t * taskqueue_merge(taskqueue_t *queue1, taskqueue_t *queue2) {
 	if (timespec_cmp(queue1->due, queue2->due) < 0) {
 		lo = queue1;
 		hi = queue2;
-	}
-	else {
+	} else {
 		lo = queue2;
 		hi = queue1;
 	}
@@ -165,7 +182,7 @@ static taskqueue_t * taskqueue_merge(taskqueue_t *queue1, taskqueue_t *queue2) {
 }
 
 /** Merges a list of priority queues */
-static taskqueue_t * taskqueue_merge_pairs(taskqueue_t *queue0) {
+static taskqueue_t *taskqueue_merge_pairs(taskqueue_t *queue0) {
 	if (!queue0)
 		return NULL;
 

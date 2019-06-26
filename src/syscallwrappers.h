@@ -7,7 +7,6 @@
  */
 #pragma once
 
-#include <netlink/genl/genl.h>
+#include <sys/types.h>
 
-int nl_get_multicast_id(struct nl_sock *sock, const char *family,
-			const char *group);
+int obtainrandom(void *buf, size_t buflen, unsigned int flags);

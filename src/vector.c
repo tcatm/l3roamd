@@ -1,27 +1,12 @@
 /*
-  Copyright (c) 2012-2015, Matthias Schiffer <mschiffer@universe-factory.net>
-  All rights reserved.
-
-  Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions are met:
-
-    1. Redistributions of source code must retain the above copyright notice,
-       this list of conditions and the following disclaimer.
-    2. Redistributions in binary form must reproduce the above copyright notice,
-       this list of conditions and the following disclaimer in the documentation
-       and/or other materials provided with the distribution.
-
-  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
+ * Copyright (c) 2012-2015, Matthias Schiffer <mschiffer@universe-factory.net>
+ *
+ * This file is part of project l3roamd. It's copyrighted by the contributors
+ * recorded in the version control history of the file, available from
+ * its original location https://github.com/freifunk-gluon/l3roamd.
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
 
 /**
    \file
@@ -29,16 +14,14 @@
    Typesafe dynamically sized arrays
 */
 
-
 #include "vector.h"
 #include "alloc.h"
 
 #include <string.h>
 
-
-/** The minimum number of elements to allocate even when less elements are used */
+/** The minimum number of elements to allocate even when less elements are used
+ */
 #define MIN_VECTOR_ALLOC 4
-
 
 /**
    Resizes a vector
@@ -54,11 +37,10 @@ void _l3roamd_vector_resize(l3roamd_vector_desc_t *desc, void **data, size_t n, 
 
 	if (!alloc) {
 		alloc = MIN_VECTOR_ALLOC;
-		n = n*3/2;
+		n = n * 3 / 2;
 	}
 
-	while (alloc < n)
-		alloc <<= 1;
+	while (alloc < n) alloc <<= 1;
 
 	if (alloc != desc->allocated) {
 		desc->allocated = alloc;
@@ -71,13 +53,14 @@ void _l3roamd_vector_resize(l3roamd_vector_desc_t *desc, void **data, size_t n, 
 
    Internal function, use VECTOR_INSERT() and VECTOR_ADD() instead.
 */
-void _l3roamd_vector_insert(l3roamd_vector_desc_t *desc, void **data, void *element, size_t pos, size_t elemsize) {
-	_l3roamd_vector_resize(desc, data, desc->length+1, elemsize);
+void *_l3roamd_vector_insert(l3roamd_vector_desc_t *desc, void **data, void *element, size_t pos, size_t elemsize) {
+	_l3roamd_vector_resize(desc, data, desc->length + 1, elemsize);
 
-	void *p = *data + pos*elemsize;
+	void *p = *data + pos * elemsize;
 
-	memmove(p+elemsize, p, (desc->length-pos-1)*elemsize);
+	memmove(p + elemsize, p, (desc->length - pos - 1) * elemsize);
 	memcpy(p, element, elemsize);
+	return (p);
 }
 
 /**
@@ -86,8 +69,8 @@ void _l3roamd_vector_insert(l3roamd_vector_desc_t *desc, void **data, void *elem
    Internal function, use VECTOR_DELETE() instead.
 */
 void _l3roamd_vector_delete(l3roamd_vector_desc_t *desc, void **data, size_t pos, size_t elemsize) {
-	void *p = *data + pos*elemsize;
-	memmove(p, p+elemsize, (desc->length-pos-1)*elemsize);
+	void *p = *data + pos * elemsize;
+	memmove(p, p + elemsize, (desc->length - pos - 1) * elemsize);
 
-	_l3roamd_vector_resize(desc, data, desc->length-1, elemsize);
+	_l3roamd_vector_resize(desc, data, desc->length - 1, elemsize);
 }
