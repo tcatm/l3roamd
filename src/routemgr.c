@@ -67,7 +67,45 @@ void rtmgr_remove_addr_task(void *dst_address) {
 	rtmgr_client_remove_address((struct in6_addr*)dst_address);
 }
 
-void schedule_removal(struct in6_addr *dst_address) {
+void copy_rtmgr_task(struct rtmgr_task *old, struct rtmgr_task *new) {
+	memcpy(&new->address, &old->address, sizeof(struct in6_addr));
+	new->retries_left = old->retries_left;
+	new->family = old->family;
+}
+
+void schedule_rtmgr_retries(struct rtmgr_task *data, int ms_timeout, void (*processor)(void *data)) {
+	struct rtmgr_task *ndata = l3roamd_alloc(sizeof(struct intercom_task));
+	copy_rtmgr_task(data, ndata);
+	ndata->retries_left--;
+
+	post_task(&l3ctx.taskqueue_ctx, 0, ms_timeout, processor, free, ndata);
+}
+
+void send_ns_task(void *d) {
+	struct rtmgr_task *td = d;
+
+	log_debug("sending scheduled ns to %s\n", print_ip(&td->address));
+
+	if (td->family == AF_INET) {
+		arp_send_request(&l3ctx.arp_ctx, &td->address);
+	} else {
+		icmp6_send_solicitation(&l3ctx.icmp6_ctx, &td->address);
+	}
+
+	if (td->retries_left > 0)
+		schedule_rtmgr_retries(td, 300, send_ns_task);
+}
+
+bool ns_retry(struct in6_addr *dst_address, int family) {
+	struct rtmgr_task task_data;
+	task_data.retries_left = 4;
+	task_data.family = family;
+	memcpy(&task_data.address, dst_address, sizeof(struct in6_addr));
+	send_ns_task(&task_data);
+	return true;
+}
+
+struct client *schedule_removal(struct in6_addr *dst_address) {
 	struct client *client  = NULL;
 	if (clientmgr_is_known_address(&l3ctx.clientmgr_ctx, dst_address, &client)) {
 		struct client_ip *ip = NULL;
@@ -81,7 +119,9 @@ void schedule_removal(struct in6_addr *dst_address) {
 			ip->removal_task =
 			    post_task(&l3ctx.taskqueue_ctx, 120, 0, rtmgr_remove_addr_task, free, task_data_addr);
 		}
+		return client;
 	}
+	return NULL;
 }
 
 void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
@@ -127,25 +167,19 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 			log_debug("Status-Change to NUD_REACHABLE, ADDING address %s [%s]\n", ip_str, mac_str);
 			clientmgr_add_address(&l3ctx.clientmgr_ctx, &dst_address, RTA_DATA(tb[NDA_LLADDR]), msg->ndm_ifindex);
 		}
-	} else if ((nh->nlmsg_type == RTM_NEWNEIGH) && (msg->ndm_state & NUD_FAILED)) {
-		// TODO: re-try sending NS if no NA is received
-		if (clientmgr_valid_address(&l3ctx.clientmgr_ctx, &dst_address)) {
-			log_debug("NEWNEIGH & NUD_FAILED received - sending NS for ip %s [%s]\n", ip_str, mac_str);
-			schedule_removal(&dst_address);
-
+	} else if ((nh->nlmsg_type == RTM_NEWNEIGH) && (msg->ndm_state & ( NUD_PROBE | NUD_FAILED))) {
+		log_debug("NEWNEIGH and NUD_PROBE or NUD_FAILED received - scheduling removal and attempting to re-activate %s [%s]\n",
+			  ip_str, mac_str);
+		if (schedule_removal(&dst_address)) {
 			// we cannot directly use probe here because that would lead to an endless loop.
-			// TODO: let the kernel do the probing and remember how often we were in this state
-			// for each client. If that was >3 times, remove client.
-			if (msg->ndm_family == AF_INET) {
-				arp_send_request(&l3ctx.arp_ctx, &dst_address);
-			} else {
-				icmp6_send_solicitation(&l3ctx.icmp6_ctx, &dst_address);
-			}
+			log_debug(
+			    "NEWNEIGH and either NUD_PROBE or NUD_FAILED received for one of our clients [%s] IPs (%s) - sending NS\n",
+			    mac_str, ip_str);
+			ns_retry(&dst_address, msg->ndm_family);
 		}
+		log_debug("ending handling of NUD_PROBE / NUD_FAILED\n");
 	} else if (nh->nlmsg_type == RTM_DELNEIGH) {
-		schedule_removal(&dst_address);
-
-		struct client *client = get_client(RTA_DATA(tb[NDA_LLADDR]));
+		struct client *client = schedule_removal(&dst_address);
 		if (client)
 			rtmgr_client_probe_addresses(client);
 	} else if (msg->ndm_state & NUD_NOARP) {
@@ -479,12 +513,12 @@ void routemgr_probe_neighbor(routemgr_ctx *ctx, const int ifindex, struct in6_ad
 	void *addr = address->s6_addr;
 
 	if (address_is_ipv4(address)) {
-		log_debug("probing for IPv4-address! %s\n", print_ip((struct in6_addr *)addr));
+		log_debug("probing for IPv4-address! %s\n", print_ip(addr));
 		addr = address->s6_addr + 12;
 		addr_len = 4;
 		family = AF_INET;
 	} else {
-		log_debug("probing for IPv6-address! %s\n", print_ip((struct in6_addr *)address));
+		log_debug("probing for IPv6-address! %s\n", print_ip(address));
 	}
 
 	struct nlneighreq req = {

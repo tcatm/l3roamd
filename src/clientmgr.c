@@ -493,9 +493,13 @@ void client_ip_set_state(clientmgr_ctx *ctx, struct client *client, struct clien
 bool clientmgr_valid_address(clientmgr_ctx *ctx, const struct in6_addr *address) {
 	for (int i = VECTOR_LEN(ctx->prefixes) - 1; i >= 0; i--) {
 		struct prefix *_prefix = &VECTOR_INDEX(ctx->prefixes, i);
-		if (prefix_contains(_prefix, address))
+		if (prefix_contains(_prefix, address)) {
+			log_debug("Address %s is in the client prefix %s\n", print_ip(address), print_ip(&_prefix->prefix));
 			return true;
+		}
 	}
+
+	log_debug("Address %s is not found to be in any of the client prefixes\n", print_ip(address));
 
 	return false;
 }
