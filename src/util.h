@@ -21,6 +21,7 @@ union buffer {
 
 struct in_addr extractv4_v6(const struct in6_addr *src);
 void mapv4_v6(const struct in_addr *src, struct in6_addr *dst);
+void obtain_mac_from_if(uint8_t dest[6], char ifname[]);
 const char *print_ip4(const struct in_addr *addr);
 const char *print_ip(const struct in6_addr *addr);
 const char *print_mac(const uint8_t *mac);

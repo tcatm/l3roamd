@@ -89,18 +89,13 @@ void arp_init(arp_ctx *ctx) {
 };
 
 void arp_setup_interface(arp_ctx *ctx) {
-	struct ifreq req = {};
-	strncpy(req.ifr_name, ctx->clientif, IFNAMSIZ - 1);
-	ioctl(ctx->fd, SIOCGIFHWADDR, &req);
-	memcpy(ctx->mac, req.ifr_hwaddr.sa_data, 6);
-
-	strncpy(req.ifr_name, ctx->clientif, IFNAMSIZ - 1);
-	ioctl(ctx->fd, SIOCGIFINDEX, &req);
+	obtain_mac_from_if(ctx->mac, ctx->clientif);
+	ctx->ifindex = if_nametoindex(ctx->clientif);
 
 	struct sockaddr_ll lladdr = {
 	    .sll_family = PF_PACKET,
 	    .sll_protocol = htons(ETH_P_ARP),
-	    .sll_ifindex = req.ifr_ifindex,
+	    .sll_ifindex = ctx->ifindex,
 	    .sll_hatype = 0,
 	    .sll_pkttype = PACKET_BROADCAST,
 	    .sll_halen = ETH_ALEN,
@@ -110,7 +105,6 @@ void arp_setup_interface(arp_ctx *ctx) {
 		perror("bind on arp fd failed, retrying");
 	}
 
-	ctx->ifindex = req.ifr_ifindex;
 	log_verbose("initialized arp-fd (%i) on interface with index: %i\n", ctx->fd, ctx->ifindex);
 }
 

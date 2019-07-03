@@ -350,8 +350,8 @@ int main(int argc, char *argv[]) {
 	l3ctx.client_mtu = 1500;
 	l3ctx.intercom_ctx.mtu = 1500;
 
-	l3ctx.routemgr_ctx.client_bridge = strdup("\0");
-	l3ctx.routemgr_ctx.clientif = strdup("\0");
+	l3ctx.routemgr_ctx.client_bridge.ifname[0] = '\0';
+	l3ctx.routemgr_ctx.clientif.ifname[0] = '\0';
 	l3ctx.icmp6_ctx.clientif = strdup("\0");
 	l3ctx.arp_ctx.clientif = strdup("\0");
 	l3ctx.clientmgr_ctx.export_table = 254;
@@ -393,8 +393,7 @@ int main(int argc, char *argv[]) {
 #endif
 				exit(EXIT_SUCCESS);
 			case 'b':
-				free(l3ctx.routemgr_ctx.client_bridge);
-				l3ctx.routemgr_ctx.client_bridge = strdupa(optarg);
+				strncpy(l3ctx.routemgr_ctx.client_bridge.ifname, optarg, IFNAMSIZ);
 				break;
 			case 'h':
 				usage();
@@ -448,10 +447,9 @@ int main(int argc, char *argv[]) {
 				break;
 			case 'i':
 				if (if_nametoindex(optarg) && !l3ctx.clientif_set) {
-					free(l3ctx.routemgr_ctx.clientif);
 					free(l3ctx.icmp6_ctx.clientif);
 					free(l3ctx.arp_ctx.clientif);
-					l3ctx.routemgr_ctx.clientif = strdupa(optarg);
+					strncpy(l3ctx.routemgr_ctx.clientif.ifname, optarg, IFNAMSIZ);
 					l3ctx.icmp6_ctx.clientif = strdupa(optarg);
 					l3ctx.arp_ctx.clientif = strdupa(optarg);
 					l3ctx.clientif_set = true;

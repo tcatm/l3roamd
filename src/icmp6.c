@@ -107,21 +107,14 @@ void icmp6_setup_interface(icmp6_ctx *ctx) {
 		return;
 	}
 
-	struct ifreq req = {};
-	strncpy(req.ifr_name, ctx->clientif, IFNAMSIZ - 1);
-	ioctl(ctx->fd, SIOCGIFHWADDR, &req);
-	memcpy(ctx->mac, req.ifr_hwaddr.sa_data, 6);
+	obtain_mac_from_if(ctx->mac, ctx->clientif);
+	ctx->ifindex = if_nametoindex(ctx->clientif);
 
-	struct ifreq req1 = {};
-	strncpy(req1.ifr_name, ctx->clientif, IFNAMSIZ - 1);
-	ioctl(ctx->fd, SIOCGIFINDEX, &req1);
 	struct sockaddr_ll lladdr;
-
-	// Bind the socket to the interface we're interested in
 	memset(&lladdr, 0, sizeof(lladdr));
 	lladdr.sll_family = PF_PACKET;
 	lladdr.sll_protocol = htons(ETH_P_IPV6);
-	lladdr.sll_ifindex = req1.ifr_ifindex;
+	lladdr.sll_ifindex = ctx->ifindex;
 	lladdr.sll_hatype = 0;
 	lladdr.sll_pkttype = 0;
 	lladdr.sll_halen = ETH_ALEN;
@@ -129,8 +122,6 @@ void icmp6_setup_interface(icmp6_ctx *ctx) {
 	while (bind(ctx->nsfd, (struct sockaddr *)&lladdr, sizeof(lladdr)) < 0) {
 		perror("bind on icmp6 ns fd failed, retrying");
 	}
-
-	ctx->ifindex = req1.ifr_ifindex;
 
 	ctx->ok = true;
 }
@@ -369,15 +360,10 @@ int icmp6_send_dest_unreachable(const struct in6_addr *addr, const struct packet
 			     sizeof(dst));
 
 		if (len > 0) {
-			log_debug(
-			    "sent %i bytes ICMP6 destination unreachable to "
-			    "%s\n",
-			    len, print_ip(addr));
+			log_debug("sent %i bytes ICMP6 destination unreachable to %s\n", len, print_ip(addr));
 			return 0;
 		} else if (len < 0) {
-			fprintf(stderr,
-				"Error while sending ICMP destination "
-				"unreachable, retrying %s\n",
+			fprintf(stderr, "Error while sending ICMP destination unreachable, retrying %s\n",
 				print_ip(addr));
 			perror("sendto");
 		}

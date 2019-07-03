@@ -17,7 +17,6 @@
 #include "util.h"
 
 #include <sys/epoll.h>
-#include <sys/ioctl.h>
 
 static void rtnl_change_address(routemgr_ctx *ctx, struct in6_addr *address, int type, int flags);
 static void rtnl_handle_link(const struct nlmsghdr *nh);
@@ -133,7 +132,7 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	struct ndmsg *msg = NLMSG_DATA(nh);
 	parse_rtattr(tb, NDA_MAX, NDA_RTA(msg), nh->nlmsg_len - NLMSG_LENGTH(sizeof(*msg)));
 
-	if (!(ctx->clientif_index == msg->ndm_ifindex || ctx->client_bridge_index == msg->ndm_ifindex))
+	if (!(ctx->clientif.index == msg->ndm_ifindex || ctx->client_bridge.index == msg->ndm_ifindex))
 		return;
 
 	if (tb[NDA_LLADDR])
@@ -157,8 +156,8 @@ void rtnl_handle_neighbour(routemgr_ctx *ctx, const struct nlmsghdr *nh) {
 	char ifname[IFNAMSIZ + 1] = "";
 	log_debug("neighbour [%s] (%s) changed on interface %s, type: %i, state: %i ... (msgif: %i cif: %i brif: %i)\n",
 		  mac_str, ip_str, if_indextoname(msg->ndm_ifindex, ifname), nh->nlmsg_type, msg->ndm_state,
-		  msg->ndm_ifindex, ctx->clientif_index,
-		  ctx->client_bridge_index);  // see include/uapi/linux/neighbour.h NUD_REACHABLE for numeric values
+		  msg->ndm_ifindex, ctx->clientif.index,
+		  ctx->client_bridge.index);  // see include/uapi/linux/neighbour.h NUD_REACHABLE for numeric values
 
 	if ((nh->nlmsg_type == RTM_NEWNEIGH) && (msg->ndm_state & NUD_REACHABLE)) {
 		log_debug("Status-Change to NUD_REACHABLE, notifying change for client-mac [%s]\n", mac_str);
@@ -195,7 +194,7 @@ void client_bridge_changed(const struct nlmsghdr *nh, const struct ifinfomsg *ms
 	if (if_indextoname(msg->ifi_index, ifname) == 0)
 		return;
 
-	if (!strncmp(ifname, l3ctx.routemgr_ctx.client_bridge, strlen(ifname))) {
+	if (!strncmp(ifname, l3ctx.routemgr_ctx.client_bridge.ifname, strlen(ifname))) {
 		parse_rtattr(tb, IFLA_MAX, IFLA_RTA(msg), nh->nlmsg_len - NLMSG_LENGTH(sizeof(*msg)));
 
 		if (!tb[IFLA_ADDRESS]) {
@@ -351,17 +350,12 @@ void routemgr_init(routemgr_ctx *ctx) {
 		log_error("warning: we were started without -i - not initializing any client interfaces.\n");
 		return;
 	}
-	// determine mac address of client-bridge
-	memset(ctx->bridge_mac, 0, 6);
-	struct ifreq req = {};
-	strncpy(req.ifr_name, ctx->client_bridge, IFNAMSIZ - 1);
-	ioctl(ctx->fd, SIOCGIFHWADDR, &req);
-	memcpy(ctx->bridge_mac, req.ifr_hwaddr.sa_data, 6);
 
-	log_debug("extracted mac of client-bridge: %s\n", print_mac(ctx->bridge_mac));
 
-	ctx->clientif_index = if_nametoindex(ctx->clientif);
-	ctx->client_bridge_index = if_nametoindex(ctx->client_bridge);
+	obtain_mac_from_if(ctx->client_bridge.mac, ctx->client_bridge.ifname);
+
+	ctx->clientif.index = if_nametoindex(ctx->clientif.ifname);
+	ctx->client_bridge.index = if_nametoindex(ctx->client_bridge.ifname);
 
 	routemgr_initial_neighbours(ctx, AF_INET);
 	routemgr_initial_neighbours(ctx, AF_INET6);

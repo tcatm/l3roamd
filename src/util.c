@@ -7,11 +7,14 @@
  */
 
 #include "util.h"
+#include "error.h"
+#include "l3roamd.h"
+
 #include <arpa/inet.h>
 #include <stdio.h>
 #include <sys/epoll.h>
-#include "error.h"
-#include "l3roamd.h"
+#include <sys/unistd.h>
+#include <sys/ioctl.h>
 
 
 union buffer strbuffer;
@@ -35,6 +38,26 @@ const char *print_timespec(const struct timespec *t) {
 const char *print_ip(const struct in6_addr *addr) {
 	str_bufferoffset = (str_bufferoffset + 1) % STRBUFELEMENTS;
 	return inet_ntop(AF_INET6, &(addr->s6_addr), strbuffer.element[str_bufferoffset], STRBUFELEMENTLEN);
+}
+
+void obtain_mac_from_if(uint8_t dest[6], char *ifname){
+	struct ifreq req = {};
+	int fd=socket(AF_UNIX,SOCK_DGRAM,0);
+
+	if (fd==-1)
+		    exit_error("%s",strerror(errno));
+
+	strncpy(req.ifr_name, ifname, IFNAMSIZ - 1);
+	if (ioctl(fd,SIOCGIFHWADDR,&req)==-1) {
+		int temp_errno=errno;
+		close(fd);
+		exit_error("%s",strerror(temp_errno));
+	}
+	close(fd);
+
+	memcpy(dest, req.ifr_hwaddr.sa_data, 6);
+
+	log_debug("extracted mac of interface %s: %s\n", ifname, print_mac(dest));
 }
 
 const char *print_mac(const uint8_t *mac) {

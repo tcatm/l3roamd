@@ -197,7 +197,7 @@ void socket_handle_in(socket_ctx *ctx) {
 			sscanf(str_mac, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx", &mac[0], &mac[1], &mac[2], &mac[3],
 			       &mac[4], &mac[5]);
 			if (inet_pton(AF_INET6, str_address, &address) == 1) {
-				routemgr_probe_neighbor(&l3ctx.routemgr_ctx, l3ctx.routemgr_ctx.clientif_index,
+				routemgr_probe_neighbor(&l3ctx.routemgr_ctx, l3ctx.routemgr_ctx.clientif.index,
 							&address, mac);
 			}
 			break;
@@ -235,14 +235,14 @@ void socket_handle_in(socket_ctx *ctx) {
 			       &mac[4], &mac[5]);
 			if (inet_pton(AF_INET6, str_address, &address) == 1) {
 				clientmgr_add_address(&l3ctx.clientmgr_ctx, &address, mac,
-						      l3ctx.routemgr_ctx.clientif_index);
+						      l3ctx.routemgr_ctx.clientif.index);
 				dprintf(fd, "OK");
 			} else {
 				struct in_addr ip4;
 				if (inet_pton(AF_INET, str_address, &ip4) == 1) {
 					mapv4_v6(&ip4, &address);
 					clientmgr_add_address(&l3ctx.clientmgr_ctx, &address, mac,
-							      l3ctx.routemgr_ctx.clientif_index);
+							      l3ctx.routemgr_ctx.clientif.index);
 					dprintf(fd, "OK");
 				} else
 					dprintf(fd, "NOT OK");

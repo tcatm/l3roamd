@@ -57,11 +57,15 @@ struct rtmgr_task {
 };
 
 typedef struct {
-	char *clientif;
-	char *client_bridge;
+	int index;
+	uint8_t mac[6];
+	char ifname[IFNAMSIZ];
+} device;
+
+typedef struct {
 	int fd;
-	int clientif_index;
-	int client_bridge_index;
+	device clientif;
+	device client_bridge;
 	bool nl_disabled;
 	uint8_t bridge_mac[ETH_ALEN];
 } routemgr_ctx;
