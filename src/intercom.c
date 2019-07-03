@@ -170,31 +170,6 @@ bool intercom_del_interface(intercom_ctx *ctx, char *ifname) {
 	return true;
 }
 
-void obtainll(const char *ifname, struct in6_addr *ret) {
-	struct ifaddrs *ifap, *ifa;
-	struct sockaddr_in6 *sa;
-	struct in6_addr ll = {};
-
-	inet_pton(AF_INET6, "fe80::", &ll);
-
-	getifaddrs(&ifap);
-	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
-		if (ifa->ifa_addr && ifa->ifa_addr->sa_family == AF_INET6) {
-			if (!memcmp(ifname, ifa->ifa_name, strlen(ifname))) {
-				sa = (struct sockaddr_in6 *)ifa->ifa_addr;
-				struct prefix p = {.plen = 64, .prefix = ll};
-				if (prefix_contains(&p, &sa->sin6_addr)) {
-					memcpy(ret, &sa->sin6_addr, sizeof(struct in6_addr));
-					goto end;
-				}
-			}
-		}
-	}
-
-end:
-	freeifaddrs(ifap);
-}
-
 void intercom_init_unicast(intercom_ctx *ctx) {
 	struct sockaddr_in6 server_addr = {
 	    .sin6_family = AF_INET6, .sin6_port = htons(INTERCOM_PORT),
